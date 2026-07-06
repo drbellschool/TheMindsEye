@@ -20,6 +20,8 @@ class WebViewTests(unittest.TestCase):
         self.assertGreaterEqual(len(model["locations"]), 1)
         self.assertGreaterEqual(len(model["claims"]), 1)
         self.assertGreaterEqual(len(model["mission"]["teacher_source_notes"]), 1)
+        self.assertEqual(model["readiness"]["mission_id"], "mission_texarkana_1885_001")
+        self.assertFalse(model["readiness"]["classroom_ready"])
 
     def test_rendered_page_contains_read_only_town_data(self):
         package = load_town_package(ROOT, "texarkana")
@@ -36,6 +38,20 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("fictional_gameplay", html)
         self.assertIn("Teacher Source Notes", html)
         self.assertIn("Library of Congress", html)
+
+    def test_rendered_page_contains_classroom_readiness_report(self):
+        package = load_town_package(ROOT, "texarkana")
+        html = render_town_package_page(package)
+
+        self.assertIn("Classroom Readiness", html)
+        self.assertIn("Needs teacher review", html)
+        self.assertIn("Current Blockers", html)
+        self.assertIn("Readiness Checks", html)
+        self.assertIn("placeholder_locations", html)
+        self.assertIn("Placeholder map/location records require teacher review", html)
+        self.assertIn("loc_texarkana_1885_001", html)
+        self.assertIn("historical_source_notes", html)
+        self.assertIn("pass", html)
 
     def test_rendered_page_escapes_dynamic_text(self):
         package = load_town_package(ROOT, "texarkana")

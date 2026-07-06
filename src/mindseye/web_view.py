@@ -5,6 +5,7 @@ from typing import Any
 
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, SourceRecord, TownPackage
+from .readiness import build_classroom_readiness_report
 
 
 def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
@@ -22,6 +23,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "locations": [_location_summary(location) for location in package.locations],
         "claims": [_claim_summary(claim) for claim in package.claims],
         "mission": build_mission_seed_packet(package),
+        "readiness": build_classroom_readiness_report(package),
     }
 
 
@@ -53,6 +55,7 @@ def render_town_package_page(package: TownPackage) -> str:
             "</header>",
             '<main class="layout">',
             _overview_section(model),
+            _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
             _sources_section(model["sources"]),
@@ -124,6 +127,36 @@ def _overview_section(model: dict[str, object]) -> str:
     <div><dt>Locations</dt><dd>{len(locations)}</dd></div>
     <div><dt>Claims</dt><dd>{len(claims)}</dd></div>
   </dl>
+</section>"""
+
+
+def _readiness_section(raw_readiness: object) -> str:
+    readiness = _expect_dict(raw_readiness)
+    checks = _expect_list(readiness["checks"])
+    blockers = _expect_list(readiness["blockers"])
+    status_text = "Classroom ready" if readiness["classroom_ready"] else "Needs teacher review"
+
+    return f"""
+<section class="band" aria-labelledby="readiness-title">
+  <div class="section-heading">
+    <p class="eyebrow">Classroom Readiness</p>
+    <h2 id="readiness-title">Teacher Review Status</h2>
+    <div class="badge-row">
+      {_badge(status_text)}
+      {_badge(f"{len(blockers)} blocker(s)")}
+    </div>
+    <p>{_text(readiness["summary"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Current Blockers</h3>
+      {_blocker_list(blockers)}
+    </article>
+    <article class="panel">
+      <h3>Readiness Checks</h3>
+      {_readiness_check_list(checks)}
+    </article>
+  </div>
 </section>"""
 
 
@@ -286,6 +319,57 @@ def _source_citation_list(sources: list[object]) -> str:
     return f"<ul class=\"citations\">{''.join(items)}</ul>"
 
 
+def _blocker_list(blockers: list[object]) -> str:
+    if not blockers:
+        return '<p class="note">No blockers reported.</p>'
+
+    items = []
+    for raw_blocker in blockers:
+        blocker = _expect_dict(raw_blocker)
+        items.append(
+            f"""
+<li>
+  <strong>{_text(blocker["check_id"])}</strong>
+  <p>{_text(blocker["summary"])}</p>
+  {_details_list(_expect_dict(blocker["details"]))}
+</li>"""
+        )
+    return '<ul class="check-list">' + "".join(items) + "</ul>"
+
+
+def _readiness_check_list(checks: list[object]) -> str:
+    items = []
+    for raw_check in checks:
+        check = _expect_dict(raw_check)
+        status = "pass" if check["passed"] else "fail"
+        items.append(
+            f"""
+<li>
+  <div class="record-title">
+    <strong>{_text(check["check_id"])}</strong>
+    <span class="badge badge-{_attr(status)}">{_text(status)}</span>
+  </div>
+  <p>{_text(check["summary"])}</p>
+</li>"""
+        )
+    return '<ul class="check-list">' + "".join(items) + "</ul>"
+
+
+def _details_list(details: dict[str, object]) -> str:
+    rows = []
+    for key, value in details.items():
+        if isinstance(value, list):
+            rendered_value = _joined_ids(value)
+        else:
+            rendered_value = _text(value)
+        if rendered_value == "None":
+            continue
+        rows.append(f"<li><strong>{_text(key)}:</strong> {rendered_value}</li>")
+    if not rows:
+        return ""
+    return '<ul class="details-list">' + "".join(rows) + "</ul>"
+
+
 def _label_badges(labels: list[object]) -> str:
     return "".join(
         _badge(f"{_expect_dict(label)['claim_type']} / {_expect_dict(label)['confidence']}")
@@ -439,8 +523,12 @@ h4 { font-size: 15px; margin-bottom: 8px; }
 .badge-verified-fact, .badge-high, .badge-public-domain { border-color: #8cc5b8; color: var(--teal); }
 .badge-source-based-inference, .badge-low, .badge-placeholder { border-color: #e4b46f; color: var(--amber); }
 .badge-fictional-gameplay, .badge-fictional { border-color: #f0a5a5; color: var(--red); }
+.badge-classroom-ready, .badge-pass { border-color: #8cc5b8; color: var(--teal); }
+.badge-needs-teacher-review, .badge-fail, .badge-1-blocker-s { border-color: #f0a5a5; color: var(--red); }
 .note, .citation, .readiness { color: var(--muted); }
 .citations { margin-bottom: 0; padding-left: 20px; }
+.check-list, .details-list { margin-bottom: 0; padding-left: 20px; }
+.check-list li + li { margin-top: 10px; }
 @media (max-width: 760px) {
   .topbar, .overview, .split { grid-template-columns: 1fr; }
   .topbar { display: grid; }
