@@ -23,6 +23,12 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["readiness"]["mission_id"], "mission_texarkana_1885_001")
         self.assertFalse(model["readiness"]["classroom_ready"])
         self.assertEqual(model["sanborn_manifest"]["sheet_count"], 5)
+        self.assertEqual(model["sanborn_manifest"]["image_intake"]["present_file_count"], 0)
+        self.assertEqual(model["sanborn_manifest"]["image_intake"]["expected_file_count"], 5)
+        self.assertIn(
+            "sheet_texarkana_1885_sanborn_001",
+            model["sanborn_manifest"]["image_intake"]["missing_sheet_ids"],
+        )
 
     def test_rendered_page_contains_read_only_town_data(self):
         package = load_town_package(ROOT, "texarkana")
@@ -47,6 +53,11 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Sanborn Asset Manifest", html)
         self.assertIn("download_page_recorded_direct_binary_url_unresolved", html)
         self.assertIn("no binaries committed", html)
+        self.assertIn("Sanborn Image Intake", html)
+        self.assertIn("sheet_texarkana_1885_sanborn_001.jpg", html)
+        self.assertIn("Missing sheet IDs", html)
+        self.assertIn("0 present", html)
+        self.assertIn("5 expected", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")

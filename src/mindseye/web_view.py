@@ -9,6 +9,7 @@ from .readiness import build_classroom_readiness_report
 from .sanborn import (
     SanbornAssetManifest,
     SanbornSheetManifest,
+    build_sanborn_image_intake_report,
     load_sanborn_asset_manifest,
     load_sanborn_sheet_manifest,
 )
@@ -141,6 +142,7 @@ def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, objec
         "location_extraction_status": manifest.location_extraction_status,
         "claim_boundary": manifest.claim_boundary,
         "asset_manifest": _optional_sanborn_asset_manifest_summary(manifest),
+        "image_intake": _optional_sanborn_image_intake_summary(manifest),
         "sheets": [
             {
                 "sheet_id": sheet.sheet_id,
@@ -163,6 +165,33 @@ def _optional_sanborn_asset_manifest_summary(manifest: SanbornSheetManifest) -> 
     if asset_manifest.sheet_manifest_id != manifest.manifest_id:
         return None
     return _sanborn_asset_manifest_summary(asset_manifest)
+
+
+def _optional_sanborn_image_intake_summary(manifest: SanbornSheetManifest) -> dict[str, object] | None:
+    try:
+        intake_report = build_sanborn_image_intake_report()
+    except MindseyeDataError:
+        return None
+    expected_files = intake_report.get("expected_files")
+    present_files = intake_report.get("present_files")
+    if not isinstance(expected_files, list) or not isinstance(present_files, list):
+        return None
+
+    return {
+        "cache_dir": str(intake_report["cache_dir"]),
+        "cache_is_ignored": bool(intake_report["cache_is_ignored"]),
+        "present_file_count": len(present_files),
+        "expected_file_count": len(expected_files),
+        "missing_sheet_ids": list(intake_report["missing_sheet_ids"]),
+        "expected_files": [
+            {
+                "sheet_id": str(item["sheet_id"]),
+                "filename": str(item["filename"]),
+            }
+            for item in expected_files
+            if isinstance(item, dict)
+        ],
+    }
 
 
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
@@ -248,6 +277,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
     sheets = _expect_list(manifest["sheets"])
     boundary = _expect_dict(manifest["claim_boundary"])
     asset_manifest = manifest.get("asset_manifest")
+    image_intake = manifest.get("image_intake")
     sheet_rows = []
     for raw_sheet in sheets:
         sheet = _expect_dict(raw_sheet)
@@ -293,6 +323,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
     </article>
   </div>
   {_sanborn_asset_manifest_block(asset_manifest)}
+  {_sanborn_image_intake_block(image_intake)}
   <div class="records">{''.join(sheet_rows)}</div>
 </section>"""
 
@@ -325,6 +356,40 @@ def _sanborn_asset_manifest_block(raw_asset_manifest: object) -> str:
     <p class="note">{_text(asset_manifest["automated_fetch_status"])}</p>
     <p>{_text(asset_manifest["large_binary_policy"])}</p>
     <ul class="check-list">{''.join(asset_rows)}</ul>
+  </div>"""
+
+
+def _sanborn_image_intake_block(raw_image_intake: object) -> str:
+    if raw_image_intake is None:
+        return ""
+
+    image_intake = _expect_dict(raw_image_intake)
+    expected_files = _expect_list(image_intake["expected_files"])
+    missing_sheet_ids = _expect_list(image_intake["missing_sheet_ids"])
+    expected_rows = []
+    for raw_expected in expected_files:
+        expected = _expect_dict(raw_expected)
+        expected_rows.append(
+            f"""
+<li>
+  <strong>{_text(expected["sheet_id"])}</strong>
+  <span>{_text(expected["filename"])}</span>
+</li>"""
+        )
+
+    missing_text = _joined_ids(missing_sheet_ids)
+    ignored_status = "ignored cache path" if image_intake["cache_is_ignored"] else "tracked cache path"
+    return f"""
+  <div class="panel asset-panel">
+    <h3>Sanborn Image Intake</h3>
+    <div class="badge-row">
+      {_badge(f"{image_intake['present_file_count']} present")}
+      {_badge(f"{image_intake['expected_file_count']} expected")}
+      {_badge(ignored_status)}
+    </div>
+    <p><strong>Cache:</strong> {_text(image_intake["cache_dir"])}</p>
+    <p><strong>Missing sheet IDs:</strong> {missing_text}</p>
+    <ul class="check-list">{''.join(expected_rows)}</ul>
   </div>"""
 
 

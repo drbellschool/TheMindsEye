@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[#################...] 86%
+[##################..] 87%
 ```
 
 Current active gates:
 
-1. Complete issue #30: Add Sanborn image intake workflow for Texarkana 1885.
+1. Complete issue #33: Show Sanborn image intake status in the local web view.
 2. Keep issue #4 aligned whenever progress changes.
-3. Defer Sanborn stitching, georeferencing, and building-level extraction until assets are reviewed.
+3. Keep Sanborn stitching, georeferencing, and building-level extraction deferred until actual sheet images exist locally.
 
 Open tracking pages:
 
@@ -38,9 +38,11 @@ Open tracking pages:
 - Read-only web visibility task, closed: https://github.com/drbellschool/TheMindsEye/issues/20
 - Classroom readiness report task, closed: https://github.com/drbellschool/TheMindsEye/issues/22
 - Readiness web view task, closed: https://github.com/drbellschool/TheMindsEye/issues/24
-- Sanborn sheet manifest task: https://github.com/drbellschool/TheMindsEye/issues/26
-- Sanborn asset acquisition task: https://github.com/drbellschool/TheMindsEye/issues/28
-- Sanborn image intake task: https://github.com/drbellschool/TheMindsEye/issues/30
+- Sanborn sheet manifest task, closed: https://github.com/drbellschool/TheMindsEye/issues/26
+- Sanborn asset acquisition task, closed: https://github.com/drbellschool/TheMindsEye/issues/28
+- Sanborn image intake task, closed: https://github.com/drbellschool/TheMindsEye/issues/30
+- Human-assisted Sanborn image placement task: https://github.com/drbellschool/TheMindsEye/issues/32
+- Sanborn intake web view task: https://github.com/drbellschool/TheMindsEye/issues/33
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -54,6 +56,7 @@ Open tracking pages:
 - Readiness web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/25
 - Sanborn sheet manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/27
 - Sanborn asset manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/29
+- Sanborn image intake PR, merged: https://github.com/drbellschool/TheMindsEye/pull/31
 
 ## Agent Operating Rules
 
@@ -130,6 +133,7 @@ available on that branch.
 - [x] Add verified LOC Sanborn sheet manifest for the October 1885 five-sheet item.
 - [x] Add Sanborn asset acquisition manifest documenting LOC download pages and current binary-fetch blocker.
 - [x] Add ignored local image intake workflow with checksum validation for downloaded Sanborn sheets.
+- [x] Show current Sanborn image intake status and missing files in the local web view.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -206,11 +210,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #30:
+The current unblocked task is issue #33:
 
 ```text
-Add Sanborn image intake workflow for Texarkana 1885.
+Show Sanborn image intake status in the local web view.
 ```
 
-After issue #30 merges, agents should create or continue the next narrow
-Sanborn image-review task unless a newer dashboard update or open PR blocks that work.
+After issue #33 merges, agents should wait on issue #32 or continue the next narrow
+Sanborn image-review task only if the sheet images are present locally.
