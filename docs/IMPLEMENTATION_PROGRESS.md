@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[##########..........] 50%
+[############........] 60%
 ```
 
 Current active gates:
 
-1. Complete issue #11: Replace placeholder Texarkana source metadata.
+1. Complete issue #18: Add mission seed builder using existing claims only.
 2. Keep issue #4 aligned whenever progress changes.
-3. Create or continue the next Phase 4 mission-seed task after issue #11 merges.
+3. Create or continue the next Phase 5 read-only web visibility task after issue #18 merges.
 
 Open tracking pages:
 
@@ -33,13 +33,15 @@ Open tracking pages:
 - JSON schema validation task, closed: https://github.com/drbellschool/TheMindsEye/issues/8
 - Town-package loader task, closed: https://github.com/drbellschool/TheMindsEye/issues/9
 - Provenance query task, closed: https://github.com/drbellschool/TheMindsEye/issues/10
-- Texarkana source metadata task: https://github.com/drbellschool/TheMindsEye/issues/11
+- Texarkana source metadata task, closed: https://github.com/drbellschool/TheMindsEye/issues/11
+- Mission seed builder task: https://github.com/drbellschool/TheMindsEye/issues/18
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
 - JSON schema validation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/14
 - Town-package loader PR, merged: https://github.com/drbellschool/TheMindsEye/pull/15
 - Provenance query PR, merged: https://github.com/drbellschool/TheMindsEye/pull/16
+- Texarkana source metadata PR, merged: https://github.com/drbellschool/TheMindsEye/pull/17
 
 ## Agent Operating Rules
 
@@ -137,14 +139,14 @@ available on that branch.
 ### Phase 4: Mission Seed and Teacher Notes
 
 ```text
-[....................] 0%
+[####################] 100%
 ```
 
-- [ ] Add a narrow mission seed builder that uses existing claims only.
-- [ ] Add teacher-facing source note output.
-- [ ] Add student-facing mission hook output.
-- [ ] Keep provenance labels visible in mission output.
-- [ ] Add tests proving unsupported historical claims do not appear in mission output.
+- [x] Add a narrow mission seed builder that uses existing claims only.
+- [x] Add teacher-facing source note output.
+- [x] Add student-facing mission hook output.
+- [x] Keep provenance labels visible in mission output.
+- [x] Add tests proving unsupported historical claims do not appear in mission output.
 
 ### Phase 5: Minimal Read-Only Web Visibility
 
@@ -189,12 +191,12 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #11:
+The current unblocked task is issue #18:
 
 ```text
-Replace placeholder Texarkana source metadata with a verified public source record.
+Add mission seed builder using existing claims only.
 ```
 
-After issue #11 merges, agents should create or continue the next narrow
-Phase 4 mission-seed task unless a newer dashboard update or open PR blocks
-that work.
+After issue #18 merges, agents should create or continue the next narrow
+Phase 5 read-only web visibility task unless a newer dashboard update or open
+PR blocks that work.
