@@ -10,12 +10,12 @@
   "source_manifest": "sources.json",
   "map_layers": [
     {
-      "map_id": "map_texarkana_1885_sanborn_placeholder",
-      "title": "1885 Sanborn Fire Insurance Map, Texarkana placeholder layer",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
       "year": 1885,
-      "source_ids": ["source_texarkana_1885_sanborn_placeholder"]
+      "source_ids": ["source_texarkana_1885_sanborn_loc"]
     }
   ],
   "status": "draft",
-  "notes": "Prototype package. Placeholder records must be replaced with verified source data before classroom use."
+  "notes": "Prototype package. The Sanborn source metadata is verified from the Library of Congress; example locations and mission content still require building-level verification before classroom use."
 }

@@ -37,10 +37,42 @@ class TownLoaderTests(unittest.TestCase):
     def test_lists_sources_locations_claims_and_mission_seeds(self):
         package = load_town_package(ROOT, "texarkana")
 
-        self.assertIn("source_texarkana_1885_sanborn_placeholder", [source.source_id for source in package.sources])
+        self.assertIn("source_texarkana_1885_sanborn_loc", [source.source_id for source in package.sources])
         self.assertIn("loc_texarkana_1885_001", [location.location_id for location in package.locations])
         self.assertIn("claim_texarkana_1885_001", [claim.claim_id for claim in package.claims])
         self.assertEqual([seed.mission_id for seed in package.mission_seeds], ["mission_texarkana_1885_001"])
+
+    def test_texarkana_source_and_location_ids_are_stable(self):
+        package = load_town_package(ROOT, "texarkana")
+
+        self.assertEqual(
+            [source.source_id for source in package.sources],
+            ["source_texarkana_1885_sanborn_loc", "source_texarkana_1885_newspaper_placeholder"],
+        )
+        self.assertEqual(
+            [location.location_id for location in package.locations],
+            ["loc_texarkana_1885_001", "loc_texarkana_1885_002"],
+        )
+
+    def test_sanborn_source_metadata_is_verified(self):
+        package = load_town_package(ROOT, "texarkana")
+        sanborn_source = package.sources[0]
+
+        self.assertEqual(sanborn_source.source_id, "source_texarkana_1885_sanborn_loc")
+        self.assertEqual(sanborn_source.rights_status, "public_domain")
+        self.assertEqual(sanborn_source.access_level, "digital_image")
+        self.assertEqual(sanborn_source.url, "https://www.loc.gov/item/sanborn08781_001/")
+        self.assertIn("Library of Congress", sanborn_source.repository)
+        self.assertIn("Oct. 1885", sanborn_source.citation)
+
+    def test_verified_sanborn_metadata_claim_is_loaded(self):
+        package = load_town_package(ROOT, "texarkana")
+        claims_by_id = {claim.claim_id: claim for claim in package.claims}
+
+        verified_claim = claims_by_id["claim_texarkana_1885_003"]
+        self.assertEqual(verified_claim.claim_type, ClaimType.VERIFIED_FACT)
+        self.assertEqual(verified_claim.confidence, Confidence.HIGH)
+        self.assertEqual(verified_claim.source_ids, ("source_texarkana_1885_sanborn_loc",))
 
     def test_claim_confidence_survives_loading(self):
         package = load_town_package(ROOT, "texarkana")
