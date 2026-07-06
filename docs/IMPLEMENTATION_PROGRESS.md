@@ -15,12 +15,12 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[#################...] 84%
+[#################...] 86%
 ```
 
 Current active gates:
 
-1. Complete issue #28: Acquire or document LOC Sanborn sheet assets for Texarkana 1885.
+1. Complete issue #30: Add Sanborn image intake workflow for Texarkana 1885.
 2. Keep issue #4 aligned whenever progress changes.
 3. Defer Sanborn stitching, georeferencing, and building-level extraction until assets are reviewed.
 
@@ -40,6 +40,7 @@ Open tracking pages:
 - Readiness web view task, closed: https://github.com/drbellschool/TheMindsEye/issues/24
 - Sanborn sheet manifest task: https://github.com/drbellschool/TheMindsEye/issues/26
 - Sanborn asset acquisition task: https://github.com/drbellschool/TheMindsEye/issues/28
+- Sanborn image intake task: https://github.com/drbellschool/TheMindsEye/issues/30
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -52,6 +53,7 @@ Open tracking pages:
 - Classroom readiness report PR, merged: https://github.com/drbellschool/TheMindsEye/pull/23
 - Readiness web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/25
 - Sanborn sheet manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/27
+- Sanborn asset manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/29
 
 ## Agent Operating Rules
 
@@ -127,6 +129,7 @@ available on that branch.
 - [x] Replace placeholder Sanborn source record with real metadata.
 - [x] Add verified LOC Sanborn sheet manifest for the October 1885 five-sheet item.
 - [x] Add Sanborn asset acquisition manifest documenting LOC download pages and current binary-fetch blocker.
+- [x] Add ignored local image intake workflow with checksum validation for downloaded Sanborn sheets.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -203,11 +206,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #28:
+The current unblocked task is issue #30:
 
 ```text
-Acquire LOC Sanborn sheet assets for Texarkana 1885.
+Add Sanborn image intake workflow for Texarkana 1885.
 ```
 
-After issue #28 merges, agents should create or continue the next narrow
+After issue #30 merges, agents should create or continue the next narrow
 Sanborn image-review task unless a newer dashboard update or open PR blocks that work.
