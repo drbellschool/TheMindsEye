@@ -7,7 +7,7 @@ is already implemented.
 
 from .game_loop import MissionRun
 from .map_engine import MapEngine
-from .mission_seed import build_teacher_review_packet
+from .mission_seed import build_mission_seed_packet, build_teacher_review_packet
 from .models import (
     ClaimRecord,
     ClaimType,
@@ -31,6 +31,7 @@ __all__ = [
     "TownPackage",
     "MapEngine",
     "MissionRun",
+    "build_mission_seed_packet",
     "build_teacher_review_packet",
     "load_town_package",
 ]
