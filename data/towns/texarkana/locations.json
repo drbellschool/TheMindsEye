@@ -1,0 +1,12 @@
+[
+  {
+    "location_id": "loc_texarkana_1885_001",
+    "map_id": "map_texarkana_1885_sanborn_placeholder",
+    "label": "Example livery stable location",
+    "street": "Fifth Street",
+    "location_type": "building",
+    "source_ids": ["source_texarkana_1885_sanborn_placeholder"],
+    "certainty": "placeholder",
+    "notes": "Placeholder location for validating map-linked mission structure. Replace with verified Sanborn location data."
+  }
+]
