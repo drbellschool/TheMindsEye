@@ -40,6 +40,13 @@ The-Minds-Eye/
   tests/
 ```
 
+## Project Tracking
+
+The implementation sequence and progress dashboard are tracked in:
+
+- `docs/IMPLEMENTATION_PROGRESS.md`
+- https://github.com/drbellschool/TheMindsEye/issues/4
+
 ## Historical Integrity Rule
 
 Every generated mission must label its claims:
