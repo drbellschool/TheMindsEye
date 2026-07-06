@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "the-minds-eye"
+version = "0.1.0"
+description = "Historically grounded classroom RPG engine for source-linked local history missions."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+
+[project.urls]
+Repository = "https://github.com/drbellschool/TheMindsEye"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"mindseye.db" = ["schema.sql"]

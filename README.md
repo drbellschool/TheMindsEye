@@ -47,6 +47,21 @@ The implementation sequence and progress dashboard are tracked in:
 - `docs/IMPLEMENTATION_PROGRESS.md`
 - https://github.com/drbellschool/TheMindsEye/issues/4
 
+## Development Setup
+
+Install the local package in editable mode:
+
+```bash
+python -m pip install -e .
+```
+
+The core package has no runtime dependencies. To run live PostgreSQL imports,
+install the optional database dependency:
+
+```bash
+python -m pip install -e ".[postgres]"
+```
+
 ## Historical Integrity Rule
 
 Every generated mission must label its claims:
