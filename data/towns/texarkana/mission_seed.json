@@ -1,0 +1,14 @@
+{
+  "mission_id": "mission_texarkana_1885_001",
+  "town_package_id": "texarkana_1885",
+  "title": "The Ledger on Fifth Street",
+  "teacher_goal": "Students practice historical inquiry by distinguishing verified evidence, source-based inference, and fictional gameplay framing.",
+  "location_ids": ["loc_texarkana_1885_001", "loc_texarkana_1885_002"],
+  "claim_ids": ["claim_texarkana_1885_001", "claim_texarkana_1885_002"],
+  "fictional_elements": [
+    "A missing ledger creates the classroom mystery.",
+    "Students interview fictionalized witnesses created for gameplay."
+  ],
+  "student_hook": "A rumor moves through town: a ledger has gone missing, and the clues may point students toward the difference between what history proves, what it suggests, and what a story invents.",
+  "teacher_notes": "This is a placeholder mission seed for validation only. Replace placeholder claims and sources with verified Texarkana 1885 evidence before classroom use."
+}
