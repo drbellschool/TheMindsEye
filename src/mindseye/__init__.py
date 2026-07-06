@@ -19,6 +19,7 @@ from .models import (
     TownPackage,
 )
 from .town_loader import load_town_package
+from .web_view import build_town_package_view_model, render_town_package_page
 
 __all__ = [
     "ClaimType",
@@ -33,5 +34,7 @@ __all__ = [
     "MissionRun",
     "build_mission_seed_packet",
     "build_teacher_review_packet",
+    "build_town_package_view_model",
     "load_town_package",
+    "render_town_package_page",
 ]
