@@ -1,22 +1,22 @@
 [
   {
     "location_id": "loc_texarkana_1885_001",
-    "map_id": "map_texarkana_1885_sanborn_placeholder",
+    "map_id": "map_texarkana_1885_sanborn_loc",
     "label": "Example livery stable location",
     "street": "Fifth Street",
     "location_type": "building",
-    "source_ids": ["source_texarkana_1885_sanborn_placeholder"],
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
     "certainty": "placeholder",
-    "notes": "Placeholder location for validating map-linked mission structure. Replace with verified Sanborn location data."
+    "notes": "Stable placeholder location for validating map-linked mission structure. Building identity and exact sheet position still require Sanborn sheet extraction."
   },
   {
     "location_id": "loc_texarkana_1885_002",
-    "map_id": "map_texarkana_1885_sanborn_placeholder",
+    "map_id": "map_texarkana_1885_sanborn_loc",
     "label": "Example newspaper office location",
     "street": "Unknown",
     "location_type": "building",
-    "source_ids": ["source_texarkana_1885_sanborn_placeholder"],
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
     "certainty": "placeholder",
-    "notes": "Placeholder location for validating classroom mission flow."
+    "notes": "Stable placeholder location for validating classroom mission flow. Building identity and exact sheet position still require Sanborn sheet extraction."
   }
 ]

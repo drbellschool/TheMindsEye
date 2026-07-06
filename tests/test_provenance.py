@@ -46,7 +46,7 @@ class ProvenanceTests(unittest.TestCase):
     def test_lookup_helpers_resolve_package_records(self):
         package = load_town_package(ROOT, "texarkana")
 
-        self.assertEqual(lookup_source(package, "source_texarkana_1885_sanborn_placeholder").source_type, "sanborn_map")
+        self.assertEqual(lookup_source(package, "source_texarkana_1885_sanborn_loc").source_type, "sanborn_map")
         self.assertEqual(lookup_location(package, "loc_texarkana_1885_001").label, "Example livery stable location")
         self.assertEqual(lookup_claim(package, "claim_texarkana_1885_001").claim_type, ClaimType.SOURCE_BASED_INFERENCE)
         self.assertEqual(lookup_mission_seed(package, "mission_texarkana_1885_001").title, "The Ledger on Fifth Street")
@@ -68,8 +68,8 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(first_claim["claim_id"], "claim_texarkana_1885_001")
         self.assertEqual(first_claim["claim_type"], "source_based_inference")
         self.assertEqual(first_claim["confidence"], "low")
-        self.assertEqual(first_claim["source_ids"], ["source_texarkana_1885_sanborn_placeholder"])
-        self.assertEqual(first_claim["sources"][0]["source_id"], "source_texarkana_1885_sanborn_placeholder")
+        self.assertEqual(first_claim["source_ids"], ["source_texarkana_1885_sanborn_loc"])
+        self.assertEqual(first_claim["sources"][0]["source_id"], "source_texarkana_1885_sanborn_loc")
 
     def test_mission_map_trail_resolves_claim_locations(self):
         package = load_town_package(ROOT, "texarkana")

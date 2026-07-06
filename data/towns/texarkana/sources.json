@@ -1,15 +1,15 @@
 [
   {
-    "source_id": "source_texarkana_1885_sanborn_placeholder",
-    "title": "1885 Sanborn Fire Insurance Map, Texarkana placeholder record",
+    "source_id": "source_texarkana_1885_sanborn_loc",
+    "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas",
     "source_type": "sanborn_map",
-    "repository": "To be verified",
-    "url": "",
-    "citation": "Placeholder citation. Replace with verified archive citation before classroom use.",
-    "rights_status": "unknown",
-    "access_level": "metadata",
-    "accessed_date": "2026-07-05",
-    "notes": "Used only to validate the town-package structure. Not a classroom-ready source record."
+    "repository": "Library of Congress Geography and Map Division",
+    "url": "https://www.loc.gov/item/sanborn08781_001/",
+    "citation": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas. Sanborn Map Company, Oct. 1885. Map. Library of Congress, Geography and Map Division. https://www.loc.gov/item/sanborn08781_001/.",
+    "rights_status": "public_domain",
+    "access_level": "digital_image",
+    "accessed_date": "2026-07-06",
+    "notes": "LOC item sanborn08781_001. Digitized Sanborn Maps Collection record with 5 sheets. LOC rights statement says the online Sanborn Maps Collection is in the public domain and free to use and reuse. Credit line: Library of Congress, Geography and Map Division, Sanborn Maps Collection."
   },
   {
     "source_id": "source_texarkana_1885_newspaper_placeholder",

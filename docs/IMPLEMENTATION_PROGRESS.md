@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[########............] 40%
+[##########..........] 50%
 ```
 
 Current active gates:
 
-1. Complete issue #10: Add provenance query layer.
+1. Complete issue #11: Replace placeholder Texarkana source metadata.
 2. Keep issue #4 aligned whenever progress changes.
-3. Continue with issue #11 after issue #10 merges.
+3. Create or continue the next Phase 4 mission-seed task after issue #11 merges.
 
 Open tracking pages:
 
@@ -32,13 +32,14 @@ Open tracking pages:
 - Python packaging task, closed: https://github.com/drbellschool/TheMindsEye/issues/7
 - JSON schema validation task, closed: https://github.com/drbellschool/TheMindsEye/issues/8
 - Town-package loader task, closed: https://github.com/drbellschool/TheMindsEye/issues/9
-- Provenance query task: https://github.com/drbellschool/TheMindsEye/issues/10
-- Next source metadata task: https://github.com/drbellschool/TheMindsEye/issues/11
+- Provenance query task, closed: https://github.com/drbellschool/TheMindsEye/issues/10
+- Texarkana source metadata task: https://github.com/drbellschool/TheMindsEye/issues/11
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
 - JSON schema validation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/14
 - Town-package loader PR, merged: https://github.com/drbellschool/TheMindsEye/pull/15
+- Provenance query PR, merged: https://github.com/drbellschool/TheMindsEye/pull/16
 
 ## Agent Operating Rules
 
@@ -108,16 +109,16 @@ available on that branch.
 ### Phase 2: Real Texarkana 1885 Source Data
 
 ```text
-[....................] 0%
+[####################] 100%
 ```
 
-- [ ] Replace placeholder Sanborn source record with real metadata.
-- [ ] Add verified source URLs and rights notes.
-- [ ] Add first stable map/location IDs.
-- [ ] Add first verified historical claims.
-- [ ] Add first source-based inferences with reasoning notes.
-- [ ] Preserve fictional gameplay records separately.
-- [ ] Add tests proving source IDs and location IDs remain stable.
+- [x] Replace placeholder Sanborn source record with real metadata.
+- [x] Add verified source URLs and rights notes.
+- [x] Add first stable map/location IDs.
+- [x] Add first verified historical claims.
+- [x] Add first source-based inferences with reasoning notes.
+- [x] Preserve fictional gameplay records separately.
+- [x] Add tests proving source IDs and location IDs remain stable.
 
 ### Phase 3: Provenance Query Layer
 
@@ -188,11 +189,12 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #10:
+The current unblocked task is issue #11:
 
 ```text
-Add provenance query helpers and mission evidence trails.
+Replace placeholder Texarkana source metadata with a verified public source record.
 ```
 
-After issue #10 merges, agents should continue with issue #11 unless a newer
-dashboard update or open PR blocks that work.
+After issue #11 merges, agents should create or continue the next narrow
+Phase 4 mission-seed task unless a newer dashboard update or open PR blocks
+that work.
