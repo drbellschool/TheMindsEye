@@ -1,0 +1,15 @@
+{
+  "title": "Town Package",
+  "type": "object",
+  "required": ["package_id", "town_name", "state_region", "time_window", "source_manifest", "map_layers", "status"],
+  "properties": {
+    "package_id": { "type": "string" },
+    "town_name": { "type": "string" },
+    "state_region": { "type": "string" },
+    "time_window": { "type": "object" },
+    "source_manifest": { "type": "string" },
+    "map_layers": { "type": "array" },
+    "status": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}
