@@ -1,0 +1,21 @@
+{
+  "package_id": "texarkana_1885",
+  "town_name": "Texarkana",
+  "state_region": "Texas / Arkansas",
+  "time_window": {
+    "start_year": 1885,
+    "end_year": 1885,
+    "label": "Texarkana 1885 prototype"
+  },
+  "source_manifest": "sources.json",
+  "map_layers": [
+    {
+      "map_id": "map_texarkana_1885_sanborn_placeholder",
+      "title": "1885 Sanborn Fire Insurance Map, Texarkana placeholder layer",
+      "year": 1885,
+      "source_ids": ["source_texarkana_1885_sanborn_placeholder"]
+    }
+  ],
+  "status": "draft",
+  "notes": "Prototype package. Placeholder records must be replaced with verified source data before classroom use."
+}
