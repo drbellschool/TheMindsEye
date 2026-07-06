@@ -15,20 +15,20 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[####................] 20%
+[#####...............] 25%
 ```
 
 Current active gates:
 
-1. Complete issue #6 by confirming the foundation PR gates are resolved.
-2. Continue with issue #7: Python project packaging and dependencies.
-3. Keep issue #4 aligned whenever progress changes.
+1. Complete issue #7: Python project packaging and dependencies.
+2. Keep issue #4 aligned whenever progress changes.
+3. Continue with the next data-validation foundation task after issue #7 merges.
 
 Open tracking pages:
 
 - Agent command center: https://github.com/drbellschool/TheMindsEye/issues/3
 - Implementation dashboard: https://github.com/drbellschool/TheMindsEye/issues/4
-- Foundation gate issue: https://github.com/drbellschool/TheMindsEye/issues/6
+- Foundation gate issue, closed: https://github.com/drbellschool/TheMindsEye/issues/6
 - Python packaging task: https://github.com/drbellschool/TheMindsEye/issues/7
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
@@ -76,12 +76,12 @@ available on that branch.
 - [x] Repo-hosted implementation progress document exists.
 - [x] First implementation PR merged.
 - [x] Open foundation PR sequence resolved into `main`.
-- [ ] Foundation gate issue closed after dashboard/doc confirmation.
+- [x] Foundation gate issue closed after dashboard/doc confirmation.
 
 ### Phase 1: Data, Provenance, and Database Foundation
 
 ```text
-[#########...........] 45%
+[###########.........] 55%
 ```
 
 - [x] Initial town package folder exists.
@@ -92,8 +92,8 @@ available on that branch.
 - [x] Town-package loader API added.
 - [x] Provenance integrity tests added.
 - [x] Mission teacher-review packet scaffold added.
-- [ ] Python project packaging added.
-- [ ] Dependency declaration added.
+- [x] Python project packaging added.
+- [x] Dependency declaration added.
 - [ ] Stricter JSON schema validation tests added.
 - [ ] Missing source, location, claim type, confidence label, and mission-link rejection tests added.
 
@@ -180,12 +180,12 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next unblocked task is issue #7:
+The current unblocked task is issue #7:
 
 ```text
 Add Python project packaging and dependency declaration, including optional
 PostgreSQL import dependency.
 ```
 
-Agents should start from issue #7 unless a newer dashboard update or open PR
-blocks that work.
+After issue #7 merges, agents should continue with the next data-validation
+foundation task from the dashboard issue.
