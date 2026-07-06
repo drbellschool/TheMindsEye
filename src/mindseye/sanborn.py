@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -209,6 +210,100 @@ class SanbornImageIntakeFile:
     height_px: int | None
 
 
+@dataclass(frozen=True)
+class SanbornImageMetadataRecord:
+    image_record_id: str
+    asset_record_id: str
+    sheet_id: str
+    sheet_number: int
+    filename: str
+    local_cache_relpath: str
+    byte_size: int
+    checksum_sha256: str
+    width_px: int
+    height_px: int
+    source_id: str
+    map_id: str
+    download_page_url: str
+    rights_status: str
+    origin_repository: str
+    capture_status: str
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornImageMetadataRecord":
+        checksum = require_text(raw, "checksum_sha256", "sanborn image metadata")
+        if len(checksum) != 64 or any(character not in "0123456789abcdef" for character in checksum.lower()):
+            raise MindseyeDataError("sanborn image metadata checksum must be 64 lowercase hex characters")
+        return cls(
+            image_record_id=require_text(raw, "image_record_id", "sanborn image metadata"),
+            asset_record_id=require_text(raw, "asset_record_id", "sanborn image metadata"),
+            sheet_id=require_text(raw, "sheet_id", "sanborn image metadata"),
+            sheet_number=require_int(raw, "sheet_number", "sanborn image metadata"),
+            filename=require_text(raw, "filename", "sanborn image metadata"),
+            local_cache_relpath=require_text(raw, "local_cache_relpath", "sanborn image metadata"),
+            byte_size=require_positive_int(raw, "byte_size", "sanborn image metadata"),
+            checksum_sha256=checksum.lower(),
+            width_px=require_positive_int(raw, "width_px", "sanborn image metadata"),
+            height_px=require_positive_int(raw, "height_px", "sanborn image metadata"),
+            source_id=require_text(raw, "source_id", "sanborn image metadata"),
+            map_id=require_text(raw, "map_id", "sanborn image metadata"),
+            download_page_url=require_text(raw, "download_page_url", "sanborn image metadata"),
+            rights_status=require_text(raw, "rights_status", "sanborn image metadata"),
+            origin_repository=require_text(raw, "origin_repository", "sanborn image metadata"),
+            capture_status=require_text(raw, "capture_status", "sanborn image metadata"),
+        )
+
+
+@dataclass(frozen=True)
+class SanbornImageMetadataManifest:
+    image_metadata_manifest_id: str
+    manifest_type: str
+    town_package_id: str
+    map_id: str
+    source_id: str
+    sheet_manifest_id: str
+    asset_manifest_id: str
+    title: str
+    captured_date: str
+    capture_method: str
+    rights_status: str
+    origin_repository: str
+    binary_files_committed: bool
+    stitching_status: str
+    georeferencing_status: str
+    location_extraction_status: str
+    image_count: int
+    images: tuple[SanbornImageMetadataRecord, ...]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornImageMetadataManifest":
+        images = require_object_list(raw, "images", "sanborn image metadata manifest")
+        return cls(
+            image_metadata_manifest_id=require_text(
+                raw, "image_metadata_manifest_id", "sanborn image metadata manifest"
+            ),
+            manifest_type=require_text(raw, "manifest_type", "sanborn image metadata manifest"),
+            town_package_id=require_text(raw, "town_package_id", "sanborn image metadata manifest"),
+            map_id=require_text(raw, "map_id", "sanborn image metadata manifest"),
+            source_id=require_text(raw, "source_id", "sanborn image metadata manifest"),
+            sheet_manifest_id=require_text(raw, "sheet_manifest_id", "sanborn image metadata manifest"),
+            asset_manifest_id=require_text(raw, "asset_manifest_id", "sanborn image metadata manifest"),
+            title=require_text(raw, "title", "sanborn image metadata manifest"),
+            captured_date=require_text(raw, "captured_date", "sanborn image metadata manifest"),
+            capture_method=require_text(raw, "capture_method", "sanborn image metadata manifest"),
+            rights_status=require_text(raw, "rights_status", "sanborn image metadata manifest"),
+            origin_repository=require_text(raw, "origin_repository", "sanborn image metadata manifest"),
+            binary_files_committed=require_bool(raw, "binary_files_committed", "sanborn image metadata manifest"),
+            stitching_status=require_text(raw, "stitching_status", "sanborn image metadata manifest"),
+            georeferencing_status=require_text(raw, "georeferencing_status", "sanborn image metadata manifest"),
+            location_extraction_status=require_text(
+                raw, "location_extraction_status", "sanborn image metadata manifest"
+            ),
+            image_count=require_int(raw, "image_count", "sanborn image metadata manifest"),
+            images=tuple(SanbornImageMetadataRecord.from_dict(item) for item in images),
+        )
+
+
 def load_sanborn_sheet_manifest(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
@@ -249,6 +344,24 @@ def load_sanborn_asset_manifest(
     return asset_manifest
 
 
+def load_sanborn_image_metadata_manifest(
+    repo_root: Path | None = None,
+    town_slug: str = "texarkana",
+    filename: str = "sanborn_1885_image_metadata.json",
+) -> SanbornImageMetadataManifest:
+    """Load and validate committed metadata for locally validated Sanborn images."""
+    root = repo_root_from(repo_root)
+    manifest_path = root / "data" / "towns" / town_slug / filename
+    raw_manifest = load_json(manifest_path)
+    if not isinstance(raw_manifest, dict):
+        raise MindseyeDataError("sanborn image metadata manifest must be a JSON object")
+
+    image_metadata_manifest = SanbornImageMetadataManifest.from_dict(raw_manifest)
+    asset_manifest = load_sanborn_asset_manifest(root, town_slug)
+    assert_sanborn_image_metadata_manifest_links(image_metadata_manifest, asset_manifest)
+    return image_metadata_manifest
+
+
 def build_sanborn_image_intake_report(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
@@ -279,6 +392,82 @@ def build_sanborn_image_intake_report(
         "missing_sheet_ids": [
             sheet.sheet_id for sheet in sheet_manifest.sheets if sheet.sheet_id not in present_sheet_ids
         ],
+    }
+
+
+def build_sanborn_image_metadata_manifest(
+    repo_root: Path | None = None,
+    town_slug: str = "texarkana",
+    cache_dir: Path | None = None,
+    captured_date: str | None = None,
+) -> dict[str, object]:
+    """Build a metadata-only manifest for validated local Sanborn sheet images."""
+    root = repo_root_from(repo_root)
+    asset_manifest = load_sanborn_asset_manifest(root, town_slug)
+    intake_report = build_sanborn_image_intake_report(root, town_slug, cache_dir)
+    present_files = intake_report.get("present_files")
+    if not isinstance(present_files, list):
+        raise MindseyeDataError("sanborn image intake report returned invalid present_files")
+    if len(present_files) != asset_manifest.asset_count:
+        raise MindseyeDataError("sanborn image metadata manifest requires all expected images to be present")
+
+    assets_by_sheet_id = {asset.sheet_id: asset for asset in asset_manifest.assets}
+    images: list[dict[str, object]] = []
+    for present_file in present_files:
+        if not isinstance(present_file, dict):
+            raise MindseyeDataError("sanborn image intake report returned invalid present file record")
+        sheet_id = require_text(present_file, "sheet_id", "sanborn image intake report")
+        asset = assets_by_sheet_id.get(sheet_id)
+        if asset is None:
+            raise MindseyeDataError(f"sanborn image intake file references unknown sheet: {sheet_id}")
+        width_px = present_file.get("width_px")
+        height_px = present_file.get("height_px")
+        if not isinstance(width_px, int) or not isinstance(height_px, int) or width_px <= 0 or height_px <= 0:
+            raise MindseyeDataError(f"sanborn image {sheet_id} must have positive dimensions")
+
+        images.append(
+            {
+                "image_record_id": asset.asset_record_id.replace("asset_", "image_", 1),
+                "asset_record_id": asset.asset_record_id,
+                "sheet_id": sheet_id,
+                "sheet_number": asset.sheet_number,
+                "filename": require_text(present_file, "filename", "sanborn image intake report"),
+                "local_cache_relpath": relpath_within_repo(root, Path(require_text(present_file, "path", "sanborn image intake report"))),
+                "byte_size": require_positive_int(present_file, "byte_size", "sanborn image intake report"),
+                "checksum_sha256": require_text(
+                    present_file, "checksum_sha256", "sanborn image intake report"
+                ).lower(),
+                "width_px": width_px,
+                "height_px": height_px,
+                "source_id": asset.source_id,
+                "map_id": asset.map_id,
+                "download_page_url": asset.download_page_url,
+                "rights_status": asset_manifest.rights_status,
+                "origin_repository": asset_manifest.repository,
+                "capture_status": "validated_local_derivative",
+            }
+        )
+
+    normalized_date = captured_date or date.today().isoformat()
+    return {
+        "image_metadata_manifest_id": "sanborn_texarkana_1885_loc_image_metadata_manifest",
+        "manifest_type": "loc_sanborn_image_metadata_manifest",
+        "town_package_id": asset_manifest.town_package_id,
+        "map_id": asset_manifest.map_id,
+        "source_id": asset_manifest.source_id,
+        "sheet_manifest_id": asset_manifest.sheet_manifest_id,
+        "asset_manifest_id": asset_manifest.asset_manifest_id,
+        "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885 image metadata manifest",
+        "captured_date": normalized_date,
+        "capture_method": "manual_loc_download_then_local_validation",
+        "rights_status": asset_manifest.rights_status,
+        "origin_repository": asset_manifest.repository,
+        "binary_files_committed": False,
+        "stitching_status": asset_manifest.stitching_status,
+        "georeferencing_status": asset_manifest.georeferencing_status,
+        "location_extraction_status": asset_manifest.location_extraction_status,
+        "image_count": len(images),
+        "images": images,
     }
 
 
@@ -423,10 +612,72 @@ def assert_sanborn_asset_manifest_links(
             raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} must not claim a local cache yet")
 
 
+def assert_sanborn_image_metadata_manifest_links(
+    image_metadata_manifest: SanbornImageMetadataManifest,
+    asset_manifest: SanbornAssetManifest,
+) -> None:
+    if image_metadata_manifest.manifest_type != "loc_sanborn_image_metadata_manifest":
+        raise MindseyeDataError("sanborn image metadata manifest has unsupported manifest_type")
+    if image_metadata_manifest.town_package_id != asset_manifest.town_package_id:
+        raise MindseyeDataError("sanborn image metadata manifest town_package_id does not match asset manifest")
+    if image_metadata_manifest.map_id != asset_manifest.map_id:
+        raise MindseyeDataError("sanborn image metadata manifest map_id does not match asset manifest")
+    if image_metadata_manifest.source_id != asset_manifest.source_id:
+        raise MindseyeDataError("sanborn image metadata manifest source_id does not match asset manifest")
+    if image_metadata_manifest.sheet_manifest_id != asset_manifest.sheet_manifest_id:
+        raise MindseyeDataError("sanborn image metadata manifest sheet_manifest_id mismatch")
+    if image_metadata_manifest.asset_manifest_id != asset_manifest.asset_manifest_id:
+        raise MindseyeDataError("sanborn image metadata manifest asset_manifest_id mismatch")
+    if image_metadata_manifest.image_count != len(image_metadata_manifest.images):
+        raise MindseyeDataError("sanborn image metadata manifest image_count does not match images")
+    if image_metadata_manifest.binary_files_committed:
+        raise MindseyeDataError("sanborn image metadata manifest must not commit binaries")
+    if image_metadata_manifest.stitching_status != "not_started":
+        raise MindseyeDataError("sanborn image metadata manifest must not mark stitching as complete")
+    if image_metadata_manifest.georeferencing_status != "deferred":
+        raise MindseyeDataError("sanborn image metadata manifest must defer georeferencing")
+    if image_metadata_manifest.location_extraction_status != "deferred":
+        raise MindseyeDataError("sanborn image metadata manifest must defer location extraction")
+
+    assets_by_id = {asset.asset_record_id: asset for asset in asset_manifest.assets}
+    images_by_sheet_id: set[str] = set()
+    for image in image_metadata_manifest.images:
+        if image.sheet_id in images_by_sheet_id:
+            raise MindseyeDataError(f"duplicate sanborn image metadata sheet: {image.sheet_id}")
+        images_by_sheet_id.add(image.sheet_id)
+
+        asset = assets_by_id.get(image.asset_record_id)
+        if asset is None:
+            raise MindseyeDataError(f"sanborn image metadata references unknown asset: {image.asset_record_id}")
+        if image.sheet_id != asset.sheet_id:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} sheet_id mismatch")
+        if image.sheet_number != asset.sheet_number:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} sheet_number mismatch")
+        if image.source_id != asset.source_id:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} source_id mismatch")
+        if image.map_id != asset.map_id:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} map_id mismatch")
+        if image.download_page_url != asset.download_page_url:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} download_page_url mismatch")
+        if image.rights_status != image_metadata_manifest.rights_status:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} rights_status mismatch")
+        if image.origin_repository != image_metadata_manifest.origin_repository:
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} origin_repository mismatch")
+        if image.capture_status != "validated_local_derivative":
+            raise MindseyeDataError(f"sanborn image metadata {image.image_record_id} capture_status mismatch")
+
+
 def require_int(raw: dict[str, Any], key: str, label: str) -> int:
     value = raw.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         raise MindseyeDataError(f"{label} missing required integer field: {key}")
+    return value
+
+
+def require_positive_int(raw: dict[str, Any], key: str, label: str) -> int:
+    value = require_int(raw, key, label)
+    if value <= 0:
+        raise MindseyeDataError(f"{label} must have positive integer field: {key}")
     return value
 
 
@@ -521,3 +772,10 @@ def read_jpeg_dimensions(handle: Any) -> tuple[int | None, int | None]:
         if segment_length < 2:
             return None, None
         handle.seek(segment_length - 2, 1)
+
+
+def relpath_within_repo(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise MindseyeDataError(f"sanborn image path is outside the repository: {path}") from exc
