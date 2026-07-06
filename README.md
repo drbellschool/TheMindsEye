@@ -64,3 +64,14 @@ The first successful demo should produce:
 3. A student newspaper-style mission hook
 4. A D&D-style mission brief
 5. A teacher note showing the source evidence
+
+## Development Checks
+
+Run these before accepting agent-generated changes:
+
+```bash
+python scripts/validate_mindseye.py
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Codex and other agents should keep implementation work bounded to the Texarkana 1885 vertical slice until the town-package, provenance, map/location, and teacher-review loop are proven.

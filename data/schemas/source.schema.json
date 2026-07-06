@@ -1,4 +1,23 @@
 {
-  "title": "Source Manifest",
-  "type": "array"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source.schema.json",
+  "title": "The Mind's Eye Source Manifest",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["source_id", "title", "source_type", "citation", "rights_status", "access_level"],
+    "additionalProperties": false,
+    "properties": {
+      "source_id": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "source_type": { "type": "string", "minLength": 1 },
+      "repository": { "type": "string" },
+      "url": { "type": "string" },
+      "citation": { "type": "string", "minLength": 1 },
+      "rights_status": { "type": "string", "minLength": 1 },
+      "access_level": { "type": "string", "minLength": 1 },
+      "accessed_date": { "type": "string" },
+      "notes": { "type": "string" }
+    }
+  }
 }

@@ -1,4 +1,21 @@
 {
-  "title": "Claim Records",
-  "type": "array"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claim.schema.json",
+  "title": "The Mind's Eye Claim Records",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["claim_id", "claim_text", "claim_type", "confidence", "source_ids", "reasoning_note"],
+    "additionalProperties": true,
+    "properties": {
+      "claim_id": { "type": "string", "minLength": 1 },
+      "claim_text": { "type": "string", "minLength": 1 },
+      "claim_type": { "type": "string", "enum": ["verified_fact", "source_based_inference", "fictional_gameplay"] },
+      "confidence": { "type": "string", "enum": ["high", "medium", "low", "placeholder", "fictional"] },
+      "source_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "related_location_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "related_entity_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "reasoning_note": { "type": "string", "minLength": 1 }
+    }
+  }
 }
