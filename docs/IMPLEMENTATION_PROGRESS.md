@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[############........] 60%
+[##############......] 70%
 ```
 
 Current active gates:
 
-1. Complete issue #18: Add mission seed builder using existing claims only.
+1. Complete issue #20: Add minimal read-only town package web view.
 2. Keep issue #4 aligned whenever progress changes.
-3. Create or continue the next Phase 5 read-only web visibility task after issue #18 merges.
+3. Create or continue the next narrow classroom-readiness task after issue #20 merges.
 
 Open tracking pages:
 
@@ -34,7 +34,8 @@ Open tracking pages:
 - Town-package loader task, closed: https://github.com/drbellschool/TheMindsEye/issues/9
 - Provenance query task, closed: https://github.com/drbellschool/TheMindsEye/issues/10
 - Texarkana source metadata task, closed: https://github.com/drbellschool/TheMindsEye/issues/11
-- Mission seed builder task: https://github.com/drbellschool/TheMindsEye/issues/18
+- Mission seed builder task, closed: https://github.com/drbellschool/TheMindsEye/issues/18
+- Read-only web visibility task: https://github.com/drbellschool/TheMindsEye/issues/20
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -42,6 +43,7 @@ Open tracking pages:
 - Town-package loader PR, merged: https://github.com/drbellschool/TheMindsEye/pull/15
 - Provenance query PR, merged: https://github.com/drbellschool/TheMindsEye/pull/16
 - Texarkana source metadata PR, merged: https://github.com/drbellschool/TheMindsEye/pull/17
+- Mission seed builder PR, merged: https://github.com/drbellschool/TheMindsEye/pull/19
 
 ## Agent Operating Rules
 
@@ -151,17 +153,15 @@ available on that branch.
 ### Phase 5: Minimal Read-Only Web Visibility
 
 ```text
-[....................] 0%
+[####################] 100%
 ```
 
-Do not start this phase until the data/provenance layer is stable enough to show.
-
-- [ ] Add a minimal read-only webpage or app route showing town package status.
-- [ ] Show sources.
-- [ ] Show locations.
-- [ ] Show claims with provenance labels.
-- [ ] Show mission seed links.
-- [ ] Show teacher-facing source notes.
+- [x] Add a minimal read-only webpage or app route showing town package status.
+- [x] Show sources.
+- [x] Show locations.
+- [x] Show claims with provenance labels.
+- [x] Show mission seed links.
+- [x] Show teacher-facing source notes.
 
 ### Phase 6: Later Classroom Product
 
@@ -191,12 +191,12 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #18:
+The current unblocked task is issue #20:
 
 ```text
-Add mission seed builder using existing claims only.
+Add minimal read-only town package web view.
 ```
 
-After issue #18 merges, agents should create or continue the next narrow
-Phase 5 read-only web visibility task unless a newer dashboard update or open
-PR blocks that work.
+After issue #20 merges, agents should create or continue the next narrow
+classroom-readiness task unless a newer dashboard update or open PR blocks that
+work.

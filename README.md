@@ -89,4 +89,22 @@ python scripts/validate_mindseye.py
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
+## Local Read-Only Web View
+
+Run the local town package page:
+
+```bash
+python scripts/serve_town_view.py --port 8765
+```
+
+Open:
+
+```text
+http://127.0.0.1:8765/
+```
+
+The page is read-only. It shows the Texarkana package status, sources,
+locations, provenance-labeled claims, mission seed output, and teacher-facing
+source notes.
+
 Codex and other agents should keep implementation work bounded to the Texarkana 1885 vertical slice until the town-package, provenance, map/location, and teacher-review loop are proven.
