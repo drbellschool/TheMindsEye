@@ -1,0 +1,112 @@
+{
+  "asset_manifest_id": "sanborn_texarkana_1885_loc_asset_manifest",
+  "manifest_type": "loc_sanborn_asset_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_id": "source_texarkana_1885_sanborn_loc",
+  "sheet_manifest_id": "sanborn_texarkana_1885_loc_sheet_manifest",
+  "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885 asset acquisition manifest",
+  "repository": "Library of Congress Geography and Map Division",
+  "rights_status": "public_domain",
+  "binary_files_committed": false,
+  "stitching_status": "not_started",
+  "georeferencing_status": "deferred",
+  "location_extraction_status": "deferred",
+  "automated_fetch_status": "blocked_by_loc_browser_challenge_for_www_loc_gov_json_and_resource_html",
+  "large_binary_policy": "Do not commit large TIFF, JPEG2000, or other downloaded map binaries until a repository storage policy is explicit.",
+  "runtime_notes": [
+    "The LOC item and gallery pages are visible through browser-like access, but raw JSON/resource fetches from this runtime returned a Cloudflare browser challenge.",
+    "Candidate tile.loc.gov storage and IIIF patterns tested during this task returned 404, so no direct binary URLs are recorded as verified.",
+    "This manifest records durable LOC sheet pages and observed download menu metadata only."
+  ],
+  "asset_count": 5,
+  "assets": [
+    {
+      "asset_record_id": "asset_texarkana_1885_sanborn_001",
+      "sheet_id": "sheet_texarkana_1885_sanborn_001",
+      "sheet_number": 1,
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "download_page_url": "https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=1",
+      "direct_binary_url": "",
+      "asset_url_status": "download_page_recorded_direct_binary_url_unresolved",
+      "preferred_review_format": "JPEG 1612x1912 px when acquired from the LOC download menu",
+      "local_cache_path": "",
+      "checksum_sha256": "",
+      "observed_download_options": [
+        "JPEG 806x956 px",
+        "JPEG 1612x1912 px",
+        "GIF 14.0 KB",
+        "JPEG2000 7.4 MB",
+        "TIFF 141.2 MB"
+      ],
+      "notes": "Download options observed on the LOC sheet 1 page. No binary was downloaded or committed."
+    },
+    {
+      "asset_record_id": "asset_texarkana_1885_sanborn_002",
+      "sheet_id": "sheet_texarkana_1885_sanborn_002",
+      "sheet_number": 2,
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "download_page_url": "https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=2",
+      "direct_binary_url": "",
+      "asset_url_status": "download_page_recorded_direct_binary_url_unresolved",
+      "preferred_review_format": "JPEG derivative when acquired from the LOC download menu",
+      "local_cache_path": "",
+      "checksum_sha256": "",
+      "observed_download_options": [],
+      "notes": "The LOC gallery verifies sheet 2 exists and is dated 1885-10. Direct resource-page fetch for this sheet was blocked in the current runtime, so download menu sizes were not recorded."
+    },
+    {
+      "asset_record_id": "asset_texarkana_1885_sanborn_003",
+      "sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "sheet_number": 3,
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "download_page_url": "https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=3",
+      "direct_binary_url": "",
+      "asset_url_status": "download_page_recorded_direct_binary_url_unresolved",
+      "preferred_review_format": "JPEG derivative when acquired from the LOC download menu",
+      "local_cache_path": "",
+      "checksum_sha256": "",
+      "observed_download_options": [],
+      "notes": "The LOC gallery verifies sheet 3 exists and is dated 1885-10. Direct resource-page fetch for this sheet timed out in the current runtime, so download menu sizes were not recorded."
+    },
+    {
+      "asset_record_id": "asset_texarkana_1885_sanborn_004",
+      "sheet_id": "sheet_texarkana_1885_sanborn_004",
+      "sheet_number": 4,
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "download_page_url": "https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=4",
+      "direct_binary_url": "",
+      "asset_url_status": "download_page_recorded_direct_binary_url_unresolved",
+      "preferred_review_format": "JPEG derivative when acquired from the LOC download menu",
+      "local_cache_path": "",
+      "checksum_sha256": "",
+      "observed_download_options": [],
+      "notes": "The LOC gallery verifies sheet 4 exists and is dated 1885-10. Direct resource-page fetch was not safely available in the current runtime, so download menu sizes were not recorded."
+    },
+    {
+      "asset_record_id": "asset_texarkana_1885_sanborn_005",
+      "sheet_id": "sheet_texarkana_1885_sanborn_005",
+      "sheet_number": 5,
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "download_page_url": "https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=5",
+      "direct_binary_url": "",
+      "asset_url_status": "download_page_recorded_direct_binary_url_unresolved",
+      "preferred_review_format": "JPEG 1612x1912 px when acquired from the LOC download menu",
+      "local_cache_path": "",
+      "checksum_sha256": "",
+      "observed_download_options": [
+        "JPEG 806x956 px",
+        "JPEG 1612x1912 px",
+        "GIF 14.6 KB",
+        "JPEG2000 8.4 MB",
+        "TIFF 141.2 MB"
+      ],
+      "notes": "Download options observed on the LOC sheet 5 page. No binary was downloaded or committed."
+    }
+  ]
+}

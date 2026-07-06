@@ -44,6 +44,9 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=5", html)
         self.assertIn("not_started", html)
         self.assertIn("deferred", html)
+        self.assertIn("Sanborn Asset Manifest", html)
+        self.assertIn("download_page_recorded_direct_binary_url_unresolved", html)
+        self.assertIn("no binaries committed", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")

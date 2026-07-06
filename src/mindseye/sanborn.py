@@ -114,6 +114,89 @@ class SanbornSheetManifest:
         )
 
 
+@dataclass(frozen=True)
+class SanbornAssetRecord:
+    asset_record_id: str
+    sheet_id: str
+    sheet_number: int
+    source_id: str
+    map_id: str
+    download_page_url: str
+    direct_binary_url: str
+    asset_url_status: str
+    preferred_review_format: str
+    local_cache_path: str
+    checksum_sha256: str
+    observed_download_options: tuple[str, ...]
+    notes: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornAssetRecord":
+        return cls(
+            asset_record_id=require_text(raw, "asset_record_id", "sanborn asset"),
+            sheet_id=require_text(raw, "sheet_id", "sanborn asset"),
+            sheet_number=require_int(raw, "sheet_number", "sanborn asset"),
+            source_id=require_text(raw, "source_id", "sanborn asset"),
+            map_id=require_text(raw, "map_id", "sanborn asset"),
+            download_page_url=require_text(raw, "download_page_url", "sanborn asset"),
+            direct_binary_url=str(raw.get("direct_binary_url", "")),
+            asset_url_status=require_text(raw, "asset_url_status", "sanborn asset"),
+            preferred_review_format=require_text(raw, "preferred_review_format", "sanborn asset"),
+            local_cache_path=str(raw.get("local_cache_path", "")),
+            checksum_sha256=str(raw.get("checksum_sha256", "")),
+            observed_download_options=require_text_tuple(
+                raw, "observed_download_options", "sanborn asset", allow_empty=True
+            ),
+            notes=str(raw.get("notes", "")),
+        )
+
+
+@dataclass(frozen=True)
+class SanbornAssetManifest:
+    asset_manifest_id: str
+    manifest_type: str
+    town_package_id: str
+    map_id: str
+    source_id: str
+    sheet_manifest_id: str
+    title: str
+    repository: str
+    rights_status: str
+    binary_files_committed: bool
+    stitching_status: str
+    georeferencing_status: str
+    location_extraction_status: str
+    automated_fetch_status: str
+    large_binary_policy: str
+    runtime_notes: tuple[str, ...]
+    asset_count: int
+    assets: tuple[SanbornAssetRecord, ...]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornAssetManifest":
+        assets = require_object_list(raw, "assets", "sanborn asset manifest")
+        return cls(
+            asset_manifest_id=require_text(raw, "asset_manifest_id", "sanborn asset manifest"),
+            manifest_type=require_text(raw, "manifest_type", "sanborn asset manifest"),
+            town_package_id=require_text(raw, "town_package_id", "sanborn asset manifest"),
+            map_id=require_text(raw, "map_id", "sanborn asset manifest"),
+            source_id=require_text(raw, "source_id", "sanborn asset manifest"),
+            sheet_manifest_id=require_text(raw, "sheet_manifest_id", "sanborn asset manifest"),
+            title=require_text(raw, "title", "sanborn asset manifest"),
+            repository=require_text(raw, "repository", "sanborn asset manifest"),
+            rights_status=require_text(raw, "rights_status", "sanborn asset manifest"),
+            binary_files_committed=require_bool(raw, "binary_files_committed", "sanborn asset manifest"),
+            stitching_status=require_text(raw, "stitching_status", "sanborn asset manifest"),
+            georeferencing_status=require_text(raw, "georeferencing_status", "sanborn asset manifest"),
+            location_extraction_status=require_text(raw, "location_extraction_status", "sanborn asset manifest"),
+            automated_fetch_status=require_text(raw, "automated_fetch_status", "sanborn asset manifest"),
+            large_binary_policy=require_text(raw, "large_binary_policy", "sanborn asset manifest"),
+            runtime_notes=require_text_tuple(raw, "runtime_notes", "sanborn asset manifest"),
+            asset_count=require_int(raw, "asset_count", "sanborn asset manifest"),
+            assets=tuple(SanbornAssetRecord.from_dict(asset) for asset in assets),
+        )
+
+
 def load_sanborn_sheet_manifest(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
@@ -134,6 +217,24 @@ def load_sanborn_sheet_manifest(
     package = load_town_package(root, town_slug)
     assert_sanborn_manifest_links(manifest, package)
     return manifest
+
+
+def load_sanborn_asset_manifest(
+    repo_root: Path | None = None,
+    town_slug: str = "texarkana",
+    filename: str = "sanborn_1885_asset_manifest.json",
+) -> SanbornAssetManifest:
+    """Load and validate the LOC Sanborn asset acquisition manifest."""
+    root = repo_root_from(repo_root)
+    manifest_path = root / "data" / "towns" / town_slug / filename
+    raw_manifest = load_json(manifest_path)
+    if not isinstance(raw_manifest, dict):
+        raise MindseyeDataError("sanborn asset manifest must be a JSON object")
+
+    asset_manifest = SanbornAssetManifest.from_dict(raw_manifest)
+    sheet_manifest = load_sanborn_sheet_manifest(root, town_slug)
+    assert_sanborn_asset_manifest_links(asset_manifest, sheet_manifest)
+    return asset_manifest
 
 
 def assert_sanborn_manifest_links(manifest: SanbornSheetManifest, package: TownPackage) -> None:
@@ -176,10 +277,66 @@ def assert_sanborn_manifest_links(manifest: SanbornSheetManifest, package: TownP
             raise MindseyeDataError(f"sanborn sheet {sheet.sheet_id} must not create derived records")
 
 
+def assert_sanborn_asset_manifest_links(
+    asset_manifest: SanbornAssetManifest,
+    sheet_manifest: SanbornSheetManifest,
+) -> None:
+    if asset_manifest.manifest_type != "loc_sanborn_asset_manifest":
+        raise MindseyeDataError("sanborn asset manifest has unsupported manifest_type")
+    if asset_manifest.town_package_id != sheet_manifest.town_package_id:
+        raise MindseyeDataError("sanborn asset manifest town_package_id does not match sheet manifest")
+    if asset_manifest.source_id != sheet_manifest.source_id:
+        raise MindseyeDataError("sanborn asset manifest source_id does not match sheet manifest")
+    if asset_manifest.map_id != sheet_manifest.map_id:
+        raise MindseyeDataError("sanborn asset manifest map_id does not match sheet manifest")
+    if asset_manifest.sheet_manifest_id != sheet_manifest.manifest_id:
+        raise MindseyeDataError("sanborn asset manifest references the wrong sheet manifest")
+    if asset_manifest.asset_count != len(asset_manifest.assets):
+        raise MindseyeDataError("sanborn asset manifest asset_count does not match assets")
+    if asset_manifest.binary_files_committed:
+        raise MindseyeDataError("sanborn asset manifest must not commit binary map assets yet")
+    if asset_manifest.stitching_status != "not_started":
+        raise MindseyeDataError("sanborn asset manifest must not mark stitching as complete")
+    if asset_manifest.georeferencing_status != "deferred":
+        raise MindseyeDataError("sanborn asset manifest must defer georeferencing")
+    if asset_manifest.location_extraction_status != "deferred":
+        raise MindseyeDataError("sanborn asset manifest must defer location extraction")
+
+    sheets_by_id = {sheet.sheet_id: sheet for sheet in sheet_manifest.sheets}
+    asset_sheet_ids = [asset.sheet_id for asset in asset_manifest.assets]
+    if asset_sheet_ids != [sheet.sheet_id for sheet in sheet_manifest.sheets]:
+        raise MindseyeDataError("sanborn asset manifest must preserve sheet order")
+
+    seen_asset_ids: set[str] = set()
+    for asset in asset_manifest.assets:
+        if asset.asset_record_id in seen_asset_ids:
+            raise MindseyeDataError(f"duplicate sanborn asset id: {asset.asset_record_id}")
+        seen_asset_ids.add(asset.asset_record_id)
+
+        sheet = sheets_by_id[asset.sheet_id]
+        if asset.sheet_number != sheet.sheet_number:
+            raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} sheet_number mismatch")
+        if asset.source_id != sheet.source_id:
+            raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} source_id mismatch")
+        if asset.map_id != sheet.map_id:
+            raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} map_id mismatch")
+        if asset.download_page_url != sheet.loc_resource_url:
+            raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} download_page_url mismatch")
+        if asset.local_cache_path or asset.checksum_sha256:
+            raise MindseyeDataError(f"sanborn asset {asset.asset_record_id} must not claim a local cache yet")
+
+
 def require_int(raw: dict[str, Any], key: str, label: str) -> int:
     value = raw.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         raise MindseyeDataError(f"{label} missing required integer field: {key}")
+    return value
+
+
+def require_bool(raw: dict[str, Any], key: str, label: str) -> bool:
+    value = raw.get(key)
+    if not isinstance(value, bool):
+        raise MindseyeDataError(f"{label} missing required boolean field: {key}")
     return value
 
 
