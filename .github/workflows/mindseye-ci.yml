@@ -1,0 +1,27 @@
+name: Mind's Eye Validation
+
+on:
+  push:
+    paths:
+      - '**'
+      - '.github/workflows/mindseye-ci.yml'
+  pull_request:
+    paths:
+      - '**'
+      - '.github/workflows/mindseye-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate-mindseye:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate Mind's Eye town package
+        run: python scripts/validate_mindseye.py
