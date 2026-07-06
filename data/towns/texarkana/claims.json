@@ -1,0 +1,26 @@
+[
+  {
+    "claim_id": "claim_texarkana_1885_001",
+    "claim_text": "The prototype includes a Sanborn-linked livery stable location as a placeholder map feature.",
+    "claim_type": "source_based_inference",
+    "confidence": "low",
+    "source_ids": ["source_texarkana_1885_sanborn_placeholder"],
+    "related_location_ids": ["loc_texarkana_1885_001"],
+    "related_entity_ids": [],
+    "reasoning_note": "This is a placeholder inference used to test the provenance system. It is not yet a verified classroom-ready historical claim.",
+    "student_visible": true,
+    "teacher_visible": true
+  },
+  {
+    "claim_id": "claim_texarkana_1885_002",
+    "claim_text": "Students are asked to investigate a fictional missing ledger as the classroom mission frame.",
+    "claim_type": "fictional_gameplay",
+    "confidence": "fictional",
+    "source_ids": [],
+    "related_location_ids": ["loc_texarkana_1885_002"],
+    "related_entity_ids": [],
+    "reasoning_note": "The missing ledger is invented for gameplay and must never be presented as historical fact.",
+    "student_visible": true,
+    "teacher_visible": true
+  }
+]
