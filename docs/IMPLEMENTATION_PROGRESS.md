@@ -15,21 +15,23 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[##..................] 10%
+[####................] 20%
 ```
 
 Current active gates:
 
-1. Review and merge PR #1: structured Codex readiness foundation.
-2. Review and merge PR #2: PostgreSQL database foundation.
-3. Continue with the next foundation task from issue #3 after open PRs are resolved.
+1. Complete issue #6 by confirming the foundation PR gates are resolved.
+2. Continue with issue #7: Python project packaging and dependencies.
+3. Keep issue #4 aligned whenever progress changes.
 
 Open tracking pages:
 
 - Agent command center: https://github.com/drbellschool/TheMindsEye/issues/3
 - Implementation dashboard: https://github.com/drbellschool/TheMindsEye/issues/4
-- Readiness foundation PR: https://github.com/drbellschool/TheMindsEye/pull/1
-- PostgreSQL foundation PR: https://github.com/drbellschool/TheMindsEye/pull/2
+- Foundation gate issue: https://github.com/drbellschool/TheMindsEye/issues/6
+- Python packaging task: https://github.com/drbellschool/TheMindsEye/issues/7
+- Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
+- PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 
 ## Agent Operating Rules
 
@@ -60,7 +62,7 @@ available on that branch.
 ### Phase 0: Project and Agent Operating System
 
 ```text
-[###############.....] 75%
+[###################.] 95%
 ```
 
 - [x] Product goal documented.
@@ -72,24 +74,27 @@ available on that branch.
 - [x] Agent command center issue exists.
 - [x] GitHub progress dashboard issue exists.
 - [x] Repo-hosted implementation progress document exists.
-- [ ] First implementation PR merged.
-- [ ] Open PR sequence resolved into `main`.
+- [x] First implementation PR merged.
+- [x] Open foundation PR sequence resolved into `main`.
+- [ ] Foundation gate issue closed after dashboard/doc confirmation.
 
 ### Phase 1: Data, Provenance, and Database Foundation
 
 ```text
-[####................] 20%
+[#########...........] 45%
 ```
 
 - [x] Initial town package folder exists.
 - [x] Initial source, location, claim, and mission seed JSON exists.
 - [x] Basic validation script exists.
-- [ ] Structured Codex readiness foundation merged.
-- [ ] PostgreSQL database foundation merged.
+- [x] Structured Codex readiness foundation merged.
+- [x] PostgreSQL database foundation merged.
+- [x] Town-package loader API added.
+- [x] Provenance integrity tests added.
+- [x] Mission teacher-review packet scaffold added.
 - [ ] Python project packaging added.
 - [ ] Dependency declaration added.
 - [ ] Stricter JSON schema validation tests added.
-- [ ] Town-package loader API added.
 - [ ] Missing source, location, claim type, confidence label, and mission-link rejection tests added.
 
 ### Phase 2: Real Texarkana 1885 Source Data
@@ -175,12 +180,12 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-After PR #1 and PR #2 are reviewed and merged, the next task is:
+The next unblocked task is issue #7:
 
 ```text
 Add Python project packaging and dependency declaration, including optional
 PostgreSQL import dependency.
 ```
 
-If those PRs are not merged, agents should inspect them first instead of
-starting conflicting foundation work.
+Agents should start from issue #7 unless a newer dashboard update or open PR
+blocks that work.
