@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[##############......] 70%
+[###############.....] 75%
 ```
 
 Current active gates:
 
-1. Complete issue #20: Add minimal read-only town package web view.
+1. Complete issue #22: Add teacher-facing classroom readiness report.
 2. Keep issue #4 aligned whenever progress changes.
-3. Create or continue the next narrow classroom-readiness task after issue #20 merges.
+3. Create or continue the next narrow Phase 6 task after issue #22 merges.
 
 Open tracking pages:
 
@@ -35,7 +35,8 @@ Open tracking pages:
 - Provenance query task, closed: https://github.com/drbellschool/TheMindsEye/issues/10
 - Texarkana source metadata task, closed: https://github.com/drbellschool/TheMindsEye/issues/11
 - Mission seed builder task, closed: https://github.com/drbellschool/TheMindsEye/issues/18
-- Read-only web visibility task: https://github.com/drbellschool/TheMindsEye/issues/20
+- Read-only web visibility task, closed: https://github.com/drbellschool/TheMindsEye/issues/20
+- Classroom readiness report task: https://github.com/drbellschool/TheMindsEye/issues/22
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -44,6 +45,7 @@ Open tracking pages:
 - Provenance query PR, merged: https://github.com/drbellschool/TheMindsEye/pull/16
 - Texarkana source metadata PR, merged: https://github.com/drbellschool/TheMindsEye/pull/17
 - Mission seed builder PR, merged: https://github.com/drbellschool/TheMindsEye/pull/19
+- Read-only web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/21
 
 ## Agent Operating Rules
 
@@ -166,11 +168,12 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[....................] 0%
+[###.................] 15%
 ```
 
-This phase is intentionally deferred.
+Do not build student accounts, multiplayer, district deployment, or broad AI generation.
 
+- [x] Teacher-facing classroom readiness report.
 - [ ] Student mission flow.
 - [ ] Teacher review flow.
 - [ ] Standards alignment workflow.
@@ -191,12 +194,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #20:
+The current unblocked task is issue #22:
 
 ```text
-Add minimal read-only town package web view.
+Add teacher-facing classroom readiness report.
 ```
 
-After issue #20 merges, agents should create or continue the next narrow
-classroom-readiness task unless a newer dashboard update or open PR blocks that
-work.
+After issue #22 merges, agents should create or continue the next narrow
+Phase 6 task unless a newer dashboard update or open PR blocks that work.

@@ -19,6 +19,7 @@ from .models import (
     TownPackage,
 )
 from .town_loader import load_town_package
+from .readiness import build_classroom_readiness_report
 from .web_view import build_town_package_view_model, render_town_package_page
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "TownPackage",
     "MapEngine",
     "MissionRun",
+    "build_classroom_readiness_report",
     "build_mission_seed_packet",
     "build_teacher_review_packet",
     "build_town_package_view_model",
