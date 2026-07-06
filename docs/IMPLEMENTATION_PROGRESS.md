@@ -15,23 +15,26 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[#####...............] 25%
+[######..............] 30%
 ```
 
 Current active gates:
 
-1. Complete issue #7: Python project packaging and dependencies.
+1. Complete issue #8: Strengthen town-package JSON schema validation.
 2. Keep issue #4 aligned whenever progress changes.
-3. Continue with the next data-validation foundation task after issue #7 merges.
+3. Continue with issue #9 after issue #8 merges.
 
 Open tracking pages:
 
 - Agent command center: https://github.com/drbellschool/TheMindsEye/issues/3
 - Implementation dashboard: https://github.com/drbellschool/TheMindsEye/issues/4
 - Foundation gate issue, closed: https://github.com/drbellschool/TheMindsEye/issues/6
-- Python packaging task: https://github.com/drbellschool/TheMindsEye/issues/7
+- Python packaging task, closed: https://github.com/drbellschool/TheMindsEye/issues/7
+- JSON schema validation task: https://github.com/drbellschool/TheMindsEye/issues/8
+- Next loader task: https://github.com/drbellschool/TheMindsEye/issues/9
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
+- Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
 
 ## Agent Operating Rules
 
@@ -62,7 +65,7 @@ available on that branch.
 ### Phase 0: Project and Agent Operating System
 
 ```text
-[###################.] 95%
+[####################] 100%
 ```
 
 - [x] Product goal documented.
@@ -81,7 +84,7 @@ available on that branch.
 ### Phase 1: Data, Provenance, and Database Foundation
 
 ```text
-[###########.........] 55%
+[#############.......] 65%
 ```
 
 - [x] Initial town package folder exists.
@@ -94,8 +97,8 @@ available on that branch.
 - [x] Mission teacher-review packet scaffold added.
 - [x] Python project packaging added.
 - [x] Dependency declaration added.
-- [ ] Stricter JSON schema validation tests added.
-- [ ] Missing source, location, claim type, confidence label, and mission-link rejection tests added.
+- [x] Stricter JSON schema validation tests added.
+- [x] Missing source, location, claim type, confidence label, and mission-link rejection tests added.
 
 ### Phase 2: Real Texarkana 1885 Source Data
 
@@ -180,12 +183,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #7:
+The current unblocked task is issue #8:
 
 ```text
-Add Python project packaging and dependency declaration, including optional
-PostgreSQL import dependency.
+Strengthen town-package JSON schema validation and rejection tests.
 ```
 
-After issue #7 merges, agents should continue with the next data-validation
-foundation task from the dashboard issue.
+After issue #8 merges, agents should continue with issue #9 unless a newer
+dashboard update or open PR blocks that work.
