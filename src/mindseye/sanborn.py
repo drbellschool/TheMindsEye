@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -197,6 +198,17 @@ class SanbornAssetManifest:
         )
 
 
+@dataclass(frozen=True)
+class SanbornImageIntakeFile:
+    sheet_id: str
+    filename: str
+    path: str
+    byte_size: int
+    checksum_sha256: str
+    width_px: int | None
+    height_px: int | None
+
+
 def load_sanborn_sheet_manifest(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
@@ -235,6 +247,91 @@ def load_sanborn_asset_manifest(
     sheet_manifest = load_sanborn_sheet_manifest(root, town_slug)
     assert_sanborn_asset_manifest_links(asset_manifest, sheet_manifest)
     return asset_manifest
+
+
+def build_sanborn_image_intake_report(
+    repo_root: Path | None = None,
+    town_slug: str = "texarkana",
+    cache_dir: Path | None = None,
+) -> dict[str, object]:
+    """Return a local image intake report without creating claims or locations."""
+    root = repo_root_from(repo_root)
+    sheet_manifest = load_sanborn_sheet_manifest(root, town_slug)
+    asset_manifest = load_sanborn_asset_manifest(root, town_slug)
+    resolved_cache_dir = (
+        cache_dir
+        if cache_dir is not None
+        else root / "data" / "towns" / town_slug / "local_cache" / "sanborn_1885"
+    )
+    expected = expected_sanborn_image_files(sheet_manifest)
+    present = scan_sanborn_image_cache(resolved_cache_dir, sheet_manifest)
+    present_sheet_ids = {record.sheet_id for record in present}
+
+    return {
+        "cache_dir": str(resolved_cache_dir),
+        "cache_is_ignored": True,
+        "binary_files_committed": asset_manifest.binary_files_committed,
+        "stitching_status": asset_manifest.stitching_status,
+        "georeferencing_status": asset_manifest.georeferencing_status,
+        "location_extraction_status": asset_manifest.location_extraction_status,
+        "expected_files": expected,
+        "present_files": [intake_file_to_dict(record) for record in present],
+        "missing_sheet_ids": [
+            sheet.sheet_id for sheet in sheet_manifest.sheets if sheet.sheet_id not in present_sheet_ids
+        ],
+    }
+
+
+def expected_sanborn_image_files(manifest: SanbornSheetManifest) -> list[dict[str, object]]:
+    return [
+        {
+            "sheet_id": sheet.sheet_id,
+            "sheet_number": sheet.sheet_number,
+            "filename": f"{sheet.sheet_id}.jpg",
+            "download_page_url": sheet.loc_resource_url,
+        }
+        for sheet in manifest.sheets
+    ]
+
+
+def scan_sanborn_image_cache(
+    cache_dir: Path,
+    manifest: SanbornSheetManifest,
+) -> tuple[SanbornImageIntakeFile, ...]:
+    sheet_ids = {sheet.sheet_id for sheet in manifest.sheets}
+    if not cache_dir.exists():
+        return ()
+    if not cache_dir.is_dir():
+        raise MindseyeDataError(f"sanborn image cache is not a directory: {cache_dir}")
+
+    unknown_files: list[str] = []
+    records: list[SanbornImageIntakeFile] = []
+    for path in sorted(item for item in cache_dir.iterdir() if item.is_file()):
+        if path.name.startswith("."):
+            continue
+        if path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            unknown_files.append(path.name)
+            continue
+        if path.stem not in sheet_ids:
+            unknown_files.append(path.name)
+            continue
+
+        dimensions = read_image_dimensions(path)
+        records.append(
+            SanbornImageIntakeFile(
+                sheet_id=path.stem,
+                filename=path.name,
+                path=str(path),
+                byte_size=path.stat().st_size,
+                checksum_sha256=sha256_file(path),
+                width_px=dimensions[0],
+                height_px=dimensions[1],
+            )
+        )
+
+    if unknown_files:
+        raise MindseyeDataError("unknown Sanborn intake file(s): " + ", ".join(unknown_files))
+    return tuple(records)
 
 
 def assert_sanborn_manifest_links(manifest: SanbornSheetManifest, package: TownPackage) -> None:
@@ -362,3 +459,65 @@ def require_text_mapping(raw: dict[str, Any], key: str, label: str) -> dict[str,
             raise MindseyeDataError(f"{label} contains invalid mapping value: {key}")
         result[map_key] = map_value
     return result
+
+
+def intake_file_to_dict(record: SanbornImageIntakeFile) -> dict[str, object]:
+    return {
+        "sheet_id": record.sheet_id,
+        "filename": record.filename,
+        "path": record.path,
+        "byte_size": record.byte_size,
+        "checksum_sha256": record.checksum_sha256,
+        "width_px": record.width_px,
+        "height_px": record.height_px,
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def read_image_dimensions(path: Path) -> tuple[int | None, int | None]:
+    with path.open("rb") as handle:
+        header = handle.read(24)
+        if header.startswith(b"\x89PNG\r\n\x1a\n") and len(header) >= 24:
+            width = int.from_bytes(header[16:20], "big")
+            height = int.from_bytes(header[20:24], "big")
+            return width, height
+        if header.startswith(b"\xff\xd8"):
+            handle.seek(2)
+            return read_jpeg_dimensions(handle)
+    return None, None
+
+
+def read_jpeg_dimensions(handle: Any) -> tuple[int | None, int | None]:
+    while True:
+        marker_prefix = handle.read(1)
+        if not marker_prefix:
+            return None, None
+        if marker_prefix != b"\xff":
+            continue
+        marker = handle.read(1)
+        while marker == b"\xff":
+            marker = handle.read(1)
+        if marker in {b"\xc0", b"\xc1", b"\xc2", b"\xc3"}:
+            segment_length = int.from_bytes(handle.read(2), "big")
+            if segment_length < 7:
+                return None, None
+            handle.read(1)
+            height = int.from_bytes(handle.read(2), "big")
+            width = int.from_bytes(handle.read(2), "big")
+            return width, height
+        if marker in {b"\xd8", b"\xd9"}:
+            continue
+        segment_length_bytes = handle.read(2)
+        if len(segment_length_bytes) != 2:
+            return None, None
+        segment_length = int.from_bytes(segment_length_bytes, "big")
+        if segment_length < 2:
+            return None, None
+        handle.seek(segment_length - 2, 1)
