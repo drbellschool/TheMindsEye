@@ -18,7 +18,14 @@ from .models import (
     SourceRecord,
     TownPackage,
 )
-from .sanborn import SanbornSheetManifest, SanbornSheetRecord, load_sanborn_sheet_manifest
+from .sanborn import (
+    SanbornAssetManifest,
+    SanbornAssetRecord,
+    SanbornSheetManifest,
+    SanbornSheetRecord,
+    load_sanborn_asset_manifest,
+    load_sanborn_sheet_manifest,
+)
 from .town_loader import load_town_package
 from .readiness import build_classroom_readiness_report
 from .web_view import build_town_package_view_model, render_town_package_page
@@ -31,6 +38,8 @@ __all__ = [
     "LocationRecord",
     "ClaimRecord",
     "MissionSeed",
+    "SanbornAssetManifest",
+    "SanbornAssetRecord",
     "SanbornSheetManifest",
     "SanbornSheetRecord",
     "TownPackage",
@@ -40,6 +49,7 @@ __all__ = [
     "build_mission_seed_packet",
     "build_teacher_review_packet",
     "build_town_package_view_model",
+    "load_sanborn_asset_manifest",
     "load_sanborn_sheet_manifest",
     "load_town_package",
     "render_town_package_page",

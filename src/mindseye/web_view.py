@@ -6,7 +6,12 @@ from typing import Any
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
-from .sanborn import SanbornSheetManifest, load_sanborn_sheet_manifest
+from .sanborn import (
+    SanbornAssetManifest,
+    SanbornSheetManifest,
+    load_sanborn_asset_manifest,
+    load_sanborn_sheet_manifest,
+)
 
 
 def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
@@ -135,6 +140,7 @@ def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, objec
         "stitching_status": manifest.stitching_status,
         "location_extraction_status": manifest.location_extraction_status,
         "claim_boundary": manifest.claim_boundary,
+        "asset_manifest": _optional_sanborn_asset_manifest_summary(manifest),
         "sheets": [
             {
                 "sheet_id": sheet.sheet_id,
@@ -145,6 +151,37 @@ def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, objec
                 "status": sheet.status,
             }
             for sheet in manifest.sheets
+        ],
+    }
+
+
+def _optional_sanborn_asset_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, object] | None:
+    try:
+        asset_manifest = load_sanborn_asset_manifest()
+    except MindseyeDataError:
+        return None
+    if asset_manifest.sheet_manifest_id != manifest.manifest_id:
+        return None
+    return _sanborn_asset_manifest_summary(asset_manifest)
+
+
+def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
+    return {
+        "asset_manifest_id": manifest.asset_manifest_id,
+        "asset_count": manifest.asset_count,
+        "binary_files_committed": manifest.binary_files_committed,
+        "automated_fetch_status": manifest.automated_fetch_status,
+        "large_binary_policy": manifest.large_binary_policy,
+        "assets": [
+            {
+                "asset_record_id": asset.asset_record_id,
+                "sheet_id": asset.sheet_id,
+                "download_page_url": asset.download_page_url,
+                "asset_url_status": asset.asset_url_status,
+                "preferred_review_format": asset.preferred_review_format,
+                "local_cache_path": asset.local_cache_path,
+            }
+            for asset in manifest.assets
         ],
     }
 
@@ -210,6 +247,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
     manifest = _expect_dict(raw_manifest)
     sheets = _expect_list(manifest["sheets"])
     boundary = _expect_dict(manifest["claim_boundary"])
+    asset_manifest = manifest.get("asset_manifest")
     sheet_rows = []
     for raw_sheet in sheets:
         sheet = _expect_dict(raw_sheet)
@@ -254,8 +292,40 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
       <p>No stitching, georeferencing, building extraction, derived locations, or derived claims have been created from these sheets yet.</p>
     </article>
   </div>
+  {_sanborn_asset_manifest_block(asset_manifest)}
   <div class="records">{''.join(sheet_rows)}</div>
 </section>"""
+
+
+def _sanborn_asset_manifest_block(raw_asset_manifest: object) -> str:
+    if raw_asset_manifest is None:
+        return ""
+
+    asset_manifest = _expect_dict(raw_asset_manifest)
+    assets = _expect_list(asset_manifest["assets"])
+    asset_rows = []
+    for raw_asset in assets:
+        asset = _expect_dict(raw_asset)
+        asset_rows.append(
+            f"""
+<li>
+  <strong>{_text(asset["sheet_id"])}</strong>
+  <span>{_text(asset["asset_url_status"])}</span>
+</li>"""
+        )
+
+    binary_status = "binary files committed" if asset_manifest["binary_files_committed"] else "no binaries committed"
+    return f"""
+  <div class="panel asset-panel">
+    <h3>Sanborn Asset Manifest</h3>
+    <div class="badge-row">
+      {_badge(f"{asset_manifest['asset_count']} asset records")}
+      {_badge(binary_status)}
+    </div>
+    <p class="note">{_text(asset_manifest["automated_fetch_status"])}</p>
+    <p>{_text(asset_manifest["large_binary_policy"])}</p>
+    <ul class="check-list">{''.join(asset_rows)}</ul>
+  </div>"""
 
 
 def _mission_section(raw_mission: object) -> str:
