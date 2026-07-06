@@ -1,11 +1,20 @@
+import json
+import shutil
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mindseye import ClaimType, load_town_package
+from mindseye import ClaimType, Confidence, MindseyeDataError, load_town_package
+
+SCHEMAS = ROOT / "data" / "schemas"
+TEXARKANA = ROOT / "data" / "towns" / "texarkana"
 
 
 class TownLoaderTests(unittest.TestCase):
@@ -24,6 +33,96 @@ class TownLoaderTests(unittest.TestCase):
 
         self.assertIn(ClaimType.SOURCE_BASED_INFERENCE, claim_types)
         self.assertIn(ClaimType.FICTIONAL_GAMEPLAY, claim_types)
+
+    def test_lists_sources_locations_claims_and_mission_seeds(self):
+        package = load_town_package(ROOT, "texarkana")
+
+        self.assertIn("source_texarkana_1885_sanborn_placeholder", [source.source_id for source in package.sources])
+        self.assertIn("loc_texarkana_1885_001", [location.location_id for location in package.locations])
+        self.assertIn("claim_texarkana_1885_001", [claim.claim_id for claim in package.claims])
+        self.assertEqual([seed.mission_id for seed in package.mission_seeds], ["mission_texarkana_1885_001"])
+
+    def test_claim_confidence_survives_loading(self):
+        package = load_town_package(ROOT, "texarkana")
+        confidence_by_claim_id = {claim.claim_id: claim.confidence for claim in package.claims}
+
+        self.assertEqual(confidence_by_claim_id["claim_texarkana_1885_001"], Confidence.LOW)
+        self.assertEqual(confidence_by_claim_id["claim_texarkana_1885_002"], Confidence.FICTIONAL)
+
+    def test_raw_source_records_are_preserved_separately(self):
+        package = load_town_package(ROOT, "texarkana")
+
+        self.assertEqual(len(package.raw_source_records), len(package.sources))
+        self.assertIsInstance(package.raw_source_records[0], dict)
+        self.assertEqual(package.raw_source_records[0]["source_id"], package.sources[0].source_id)
+        self.assertNotIsInstance(package.raw_source_records[0], type(package.sources[0]))
+
+    def test_rejects_location_link_to_missing_source(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "locations.json",
+                lambda locations: locations[0].__setitem__("source_ids", ["source_texarkana_missing"]),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "missing source"):
+                load_town_package(repo_root, "texarkana")
+
+    def test_rejects_claim_link_to_missing_source(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "claims.json",
+                lambda claims: claims[0].__setitem__("source_ids", ["source_texarkana_missing"]),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "missing source"):
+                load_town_package(repo_root, "texarkana")
+
+    def test_rejects_claim_link_to_missing_location(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "claims.json",
+                lambda claims: claims[0].__setitem__("related_location_ids", ["loc_texarkana_missing"]),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "missing location"):
+                load_town_package(repo_root, "texarkana")
+
+    def test_rejects_mission_link_to_missing_claim(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "mission_seed.json",
+                lambda mission: mission.__setitem__("claim_ids", ["claim_texarkana_missing"]),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "mission references missing claim"):
+                load_town_package(repo_root, "texarkana")
+
+    def test_rejects_mission_link_to_missing_location(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "mission_seed.json",
+                lambda mission: mission.__setitem__("location_ids", ["loc_texarkana_missing"]),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "mission references missing location"):
+                load_town_package(repo_root, "texarkana")
+
+
+@contextmanager
+def copied_repo() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        repo_root = Path(temp_dir)
+        data_dir = repo_root / "data"
+        (data_dir / "towns").mkdir(parents=True)
+        shutil.copytree(SCHEMAS, data_dir / "schemas")
+        shutil.copytree(TEXARKANA, data_dir / "towns" / "texarkana")
+        yield repo_root
+
+
+def mutate_json(path: Path, mutation: Callable[[Any], None]) -> None:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    mutation(data)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

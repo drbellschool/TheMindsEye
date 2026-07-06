@@ -13,6 +13,7 @@ from .models import (
     TownPackage,
 )
 from .provenance import assert_provenance_integrity
+from .town_validation import validate_town_package
 
 
 def repo_root_from(start: Path | None = None) -> Path:
@@ -36,9 +37,16 @@ def load_town_package(repo_root: Path | None = None, town_slug: str = "texarkana
     """
     root = repo_root_from(repo_root)
     town_dir = root / "data" / "towns" / town_slug
+    schemas_dir = root / "data" / "schemas"
+
+    try:
+        validate_town_package(town_dir, schemas_dir)
+    except ValueError as exc:
+        raise MindseyeDataError(str(exc)) from exc
 
     metadata = load_json(town_dir / "metadata.json")
-    sources = tuple(SourceRecord.from_dict(item) for item in load_json(town_dir / "sources.json"))
+    raw_sources = load_json(town_dir / "sources.json")
+    sources = tuple(SourceRecord.from_dict(item) for item in raw_sources)
     locations = tuple(LocationRecord.from_dict(item) for item in load_json(town_dir / "locations.json"))
     claims = tuple(ClaimRecord.from_dict(item) for item in load_json(town_dir / "claims.json"))
     mission_seed = MissionSeed.from_dict(load_json(town_dir / "mission_seed.json"))
@@ -55,6 +63,7 @@ def load_town_package(repo_root: Path | None = None, town_slug: str = "texarkana
         locations=locations,
         claims=claims,
         mission_seed=mission_seed,
+        raw_source_records=tuple(dict(item) for item in raw_sources),
     )
 
     assert_package_links(package)
