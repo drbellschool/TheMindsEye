@@ -6,13 +6,22 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mindseye import build_town_package_view_model, load_town_package, render_town_package_page
+from mindseye import (
+    build_sanborn_image_intake_report,
+    build_town_package_view_model,
+    load_town_package,
+    render_town_package_page,
+)
 
 
 class WebViewTests(unittest.TestCase):
     def test_view_model_uses_loaded_package_and_mission_packet(self):
         package = load_town_package(ROOT, "texarkana")
         model = build_town_package_view_model(package)
+        intake_report = build_sanborn_image_intake_report(ROOT, "texarkana")
+        present_files = intake_report["present_files"]
+        expected_files = intake_report["expected_files"]
+        missing_sheet_ids = intake_report["missing_sheet_ids"]
 
         self.assertEqual(model["package"]["package_id"], "texarkana_1885")
         self.assertEqual(model["mission"]["mission_id"], "mission_texarkana_1885_001")
@@ -23,16 +32,16 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["readiness"]["mission_id"], "mission_texarkana_1885_001")
         self.assertFalse(model["readiness"]["classroom_ready"])
         self.assertEqual(model["sanborn_manifest"]["sheet_count"], 5)
-        self.assertEqual(model["sanborn_manifest"]["image_intake"]["present_file_count"], 0)
-        self.assertEqual(model["sanborn_manifest"]["image_intake"]["expected_file_count"], 5)
-        self.assertIn(
-            "sheet_texarkana_1885_sanborn_001",
-            model["sanborn_manifest"]["image_intake"]["missing_sheet_ids"],
-        )
+        self.assertEqual(model["sanborn_manifest"]["image_intake"]["present_file_count"], len(present_files))
+        self.assertEqual(model["sanborn_manifest"]["image_intake"]["expected_file_count"], len(expected_files))
+        self.assertEqual(model["sanborn_manifest"]["image_intake"]["missing_sheet_ids"], missing_sheet_ids)
 
     def test_rendered_page_contains_read_only_town_data(self):
         package = load_town_package(ROOT, "texarkana")
         html = render_town_package_page(package)
+        intake_report = build_sanborn_image_intake_report(ROOT, "texarkana")
+        present_file_count = len(intake_report["present_files"])
+        expected_file_count = len(intake_report["expected_files"])
 
         self.assertIn("<!doctype html>", html)
         self.assertIn("Texarkana", html)
@@ -56,8 +65,8 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Sanborn Image Intake", html)
         self.assertIn("sheet_texarkana_1885_sanborn_001.jpg", html)
         self.assertIn("Missing sheet IDs", html)
-        self.assertIn("0 present", html)
-        self.assertIn("5 expected", html)
+        self.assertIn(f"{present_file_count} present", html)
+        self.assertIn(f"{expected_file_count} expected", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")

@@ -52,6 +52,15 @@ The validator maps local files back to known sheet IDs, records byte size,
 SHA-256 checksum, and image dimensions when it can read them. Unknown filenames
 are rejected.
 
+After all five files are present and validated, export committed metadata:
+
+```bash
+python scripts/export_sanborn_image_metadata.py
+```
+
+This writes a metadata-only manifest to `data/towns/texarkana/` without
+committing the image binaries.
+
 ## Boundary
 
 This workflow does not stitch, georeference, or extract building-level claims
