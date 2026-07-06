@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[######..............] 30%
+[#######.............] 35%
 ```
 
 Current active gates:
 
-1. Complete issue #8: Strengthen town-package JSON schema validation.
+1. Complete issue #9: Add town-package loader API.
 2. Keep issue #4 aligned whenever progress changes.
-3. Continue with issue #9 after issue #8 merges.
+3. Continue with issue #10 after issue #9 merges.
 
 Open tracking pages:
 
@@ -30,11 +30,13 @@ Open tracking pages:
 - Implementation dashboard: https://github.com/drbellschool/TheMindsEye/issues/4
 - Foundation gate issue, closed: https://github.com/drbellschool/TheMindsEye/issues/6
 - Python packaging task, closed: https://github.com/drbellschool/TheMindsEye/issues/7
-- JSON schema validation task: https://github.com/drbellschool/TheMindsEye/issues/8
-- Next loader task: https://github.com/drbellschool/TheMindsEye/issues/9
+- JSON schema validation task, closed: https://github.com/drbellschool/TheMindsEye/issues/8
+- Town-package loader task: https://github.com/drbellschool/TheMindsEye/issues/9
+- Next provenance task: https://github.com/drbellschool/TheMindsEye/issues/10
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
+- JSON schema validation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/14
 
 ## Agent Operating Rules
 
@@ -84,7 +86,7 @@ available on that branch.
 ### Phase 1: Data, Provenance, and Database Foundation
 
 ```text
-[#############.......] 65%
+[##############......] 70%
 ```
 
 - [x] Initial town package folder exists.
@@ -99,6 +101,7 @@ available on that branch.
 - [x] Dependency declaration added.
 - [x] Stricter JSON schema validation tests added.
 - [x] Missing source, location, claim type, confidence label, and mission-link rejection tests added.
+- [x] Town-package loader API hardened with schema validation and broken-link tests.
 
 ### Phase 2: Real Texarkana 1885 Source Data
 
@@ -183,11 +186,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #8:
+The current unblocked task is issue #9:
 
 ```text
-Strengthen town-package JSON schema validation and rejection tests.
+Add and harden the town-package loader API.
 ```
 
-After issue #8 merges, agents should continue with issue #9 unless a newer
+After issue #9 merges, agents should continue with issue #10 unless a newer
 dashboard update or open PR blocks that work.

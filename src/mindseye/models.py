@@ -148,6 +148,7 @@ class TownPackage:
     claims: tuple[ClaimRecord, ...]
     mission_seed: MissionSeed
     notes: str = ""
+    raw_source_records: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     @property
     def source_ids(self) -> set[str]:
@@ -160,6 +161,10 @@ class TownPackage:
     @property
     def claim_ids(self) -> set[str]:
         return {claim.claim_id for claim in self.claims}
+
+    @property
+    def mission_seeds(self) -> tuple[MissionSeed, ...]:
+        return (self.mission_seed,)
 
 
 def require_text(raw: dict[str, Any], key: str, label: str) -> str:
