@@ -1,5 +1,8 @@
+from contextlib import contextmanager
+import shutil
 import sys
 from pathlib import Path
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,6 +12,18 @@ from mindseye import (
     build_sanborn_image_metadata_manifest,
     load_sanborn_asset_manifest,
     load_sanborn_image_metadata_manifest,
+)
+
+SCHEMAS = ROOT / "data" / "schemas"
+TEXARKANA = ROOT / "data" / "towns" / "texarkana"
+PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR"
+    b"\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00"
+    b"\x90wS\xde"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
 
@@ -59,17 +74,47 @@ class SanbornImageMetadataManifestTests(unittest.TestCase):
             self.assertTrue(image.local_cache_relpath.startswith("data/towns/texarkana/local_cache/"))
             self.assertTrue(image.filename.endswith(".jpg"))
 
-    def test_builder_matches_committed_manifest_shape(self):
-        built = build_sanborn_image_metadata_manifest(ROOT, "texarkana", captured_date="2026-07-06")
-        loaded = load_sanborn_image_metadata_manifest(ROOT, "texarkana")
+    def test_builder_creates_manifest_from_temp_repo_cache(self):
+        with copied_repo() as repo_root:
+            cache_dir = repo_root / "data" / "towns" / "texarkana" / "local_cache" / "sanborn_test"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            for sheet_number in range(1, 6):
+                image_path = cache_dir / f"sheet_texarkana_1885_sanborn_{sheet_number:03d}.png"
+                image_path.write_bytes(PNG_1X1)
 
-        self.assertEqual(built["image_metadata_manifest_id"], loaded.image_metadata_manifest_id)
-        self.assertEqual(built["image_count"], loaded.image_count)
-        self.assertEqual([item["sheet_id"] for item in built["images"]], [image.sheet_id for image in loaded.images])
-        self.assertEqual(
-            [item["checksum_sha256"] for item in built["images"]],
-            [image.checksum_sha256 for image in loaded.images],
+            built = build_sanborn_image_metadata_manifest(
+                repo_root,
+                "texarkana",
+                cache_dir=cache_dir,
+                captured_date="2026-07-06",
+            )
+
+        self.assertEqual(built["image_metadata_manifest_id"], "sanborn_texarkana_1885_loc_image_metadata_manifest")
+        self.assertEqual(built["image_count"], 5)
+        self.assertEqual([item["sheet_id"] for item in built["images"]], [
+            "sheet_texarkana_1885_sanborn_001",
+            "sheet_texarkana_1885_sanborn_002",
+            "sheet_texarkana_1885_sanborn_003",
+            "sheet_texarkana_1885_sanborn_004",
+            "sheet_texarkana_1885_sanborn_005",
+        ])
+        self.assertTrue(all(item["filename"].endswith(".png") for item in built["images"]))
+        self.assertTrue(all(item["width_px"] == 1 for item in built["images"]))
+        self.assertTrue(all(item["height_px"] == 1 for item in built["images"]))
+        self.assertTrue(
+            all(item["local_cache_relpath"].startswith("data/towns/texarkana/local_cache/") for item in built["images"])
         )
+
+
+@contextmanager
+def copied_repo() -> Path:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        repo_root = Path(temp_dir)
+        data_dir = repo_root / "data"
+        (data_dir / "towns").mkdir(parents=True)
+        shutil.copytree(SCHEMAS, data_dir / "schemas")
+        shutil.copytree(TEXARKANA, data_dir / "towns" / "texarkana")
+        yield repo_root
 
 
 if __name__ == "__main__":
