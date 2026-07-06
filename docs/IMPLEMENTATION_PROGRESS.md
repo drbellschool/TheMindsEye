@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[################....] 80%
+[################....] 82%
 ```
 
 Current active gates:
 
-1. Complete issue #24: Show classroom readiness report in the local web view.
+1. Complete issue #26: Create LOC Sanborn sheet manifest for Texarkana 1885.
 2. Keep issue #4 aligned whenever progress changes.
-3. Create or continue the next narrow Phase 6 task after issue #24 merges.
+3. Defer Sanborn stitching, georeferencing, and building-level extraction until the manifest is reviewed.
 
 Open tracking pages:
 
@@ -37,7 +37,8 @@ Open tracking pages:
 - Mission seed builder task, closed: https://github.com/drbellschool/TheMindsEye/issues/18
 - Read-only web visibility task, closed: https://github.com/drbellschool/TheMindsEye/issues/20
 - Classroom readiness report task, closed: https://github.com/drbellschool/TheMindsEye/issues/22
-- Readiness web view task: https://github.com/drbellschool/TheMindsEye/issues/24
+- Readiness web view task, closed: https://github.com/drbellschool/TheMindsEye/issues/24
+- Sanborn sheet manifest task: https://github.com/drbellschool/TheMindsEye/issues/26
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -48,6 +49,7 @@ Open tracking pages:
 - Mission seed builder PR, merged: https://github.com/drbellschool/TheMindsEye/pull/19
 - Read-only web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/21
 - Classroom readiness report PR, merged: https://github.com/drbellschool/TheMindsEye/pull/23
+- Readiness web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/25
 
 ## Agent Operating Rules
 
@@ -121,6 +123,7 @@ available on that branch.
 ```
 
 - [x] Replace placeholder Sanborn source record with real metadata.
+- [x] Add verified LOC Sanborn sheet manifest for the October 1885 five-sheet item.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -200,8 +203,8 @@ Do not start these until earlier phases explicitly allow them:
 The current unblocked task is issue #24:
 
 ```text
-Show classroom readiness report in the local web view.
+Create LOC Sanborn sheet manifest for Texarkana 1885.
 ```
 
-After issue #24 merges, agents should create or continue the next narrow
-Phase 6 task unless a newer dashboard update or open PR blocks that work.
+After issue #26 merges, agents should create or continue the next narrow
+Sanborn asset task unless a newer dashboard update or open PR blocks that work.

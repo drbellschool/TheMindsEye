@@ -4,8 +4,9 @@ from html import escape
 from typing import Any
 
 from .mission_seed import build_mission_seed_packet
-from .models import ClaimRecord, LocationRecord, SourceRecord, TownPackage
+from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
+from .sanborn import SanbornSheetManifest, load_sanborn_sheet_manifest
 
 
 def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
@@ -24,6 +25,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "claims": [_claim_summary(claim) for claim in package.claims],
         "mission": build_mission_seed_packet(package),
         "readiness": build_classroom_readiness_report(package),
+        "sanborn_manifest": _optional_sanborn_manifest_summary(package),
     }
 
 
@@ -55,6 +57,7 @@ def render_town_package_page(package: TownPackage) -> str:
             "</header>",
             '<main class="layout">',
             _overview_section(model),
+            _sanborn_manifest_section(model["sanborn_manifest"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -103,6 +106,46 @@ def _claim_summary(claim: ClaimRecord) -> dict[str, object]:
         "source_ids": list(claim.source_ids),
         "related_location_ids": list(claim.related_location_ids),
         "reasoning_note": claim.reasoning_note,
+    }
+
+
+def _optional_sanborn_manifest_summary(package: TownPackage) -> dict[str, object] | None:
+    if "source_texarkana_1885_sanborn_loc" not in package.source_ids:
+        return None
+
+    try:
+        manifest = load_sanborn_sheet_manifest()
+    except MindseyeDataError:
+        return None
+    if manifest.town_package_id != package.package_id:
+        return None
+    return _sanborn_manifest_summary(manifest)
+
+
+def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, object]:
+    return {
+        "manifest_id": manifest.manifest_id,
+        "title": manifest.title,
+        "source_id": manifest.source_id,
+        "map_id": manifest.map_id,
+        "loc_item_url": manifest.loc_item_url,
+        "loc_gallery_url": manifest.loc_gallery_url,
+        "iiif_manifest_status": manifest.iiif_manifest_status,
+        "sheet_count": manifest.sheet_count,
+        "stitching_status": manifest.stitching_status,
+        "location_extraction_status": manifest.location_extraction_status,
+        "claim_boundary": manifest.claim_boundary,
+        "sheets": [
+            {
+                "sheet_id": sheet.sheet_id,
+                "sheet_number": sheet.sheet_number,
+                "title": sheet.title,
+                "date": sheet.date,
+                "loc_resource_url": sheet.loc_resource_url,
+                "status": sheet.status,
+            }
+            for sheet in manifest.sheets
+        ],
     }
 
 
@@ -157,6 +200,61 @@ def _readiness_section(raw_readiness: object) -> str:
       {_readiness_check_list(checks)}
     </article>
   </div>
+</section>"""
+
+
+def _sanborn_manifest_section(raw_manifest: object) -> str:
+    if raw_manifest is None:
+        return ""
+
+    manifest = _expect_dict(raw_manifest)
+    sheets = _expect_list(manifest["sheets"])
+    boundary = _expect_dict(manifest["claim_boundary"])
+    sheet_rows = []
+    for raw_sheet in sheets:
+        sheet = _expect_dict(raw_sheet)
+        sheet_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h3>{_text(sheet["sheet_id"])}</h3>
+    <div class="badge-row">
+      {_badge(f"sheet {sheet['sheet_number']}")}
+      {_badge(sheet["status"])}
+    </div>
+  </div>
+  <p>{_text(sheet["title"])}</p>
+  <p><strong>Date:</strong> {_text(sheet["date"])}</p>
+  <p><strong>LOC:</strong> <a href="{_attr(sheet["loc_resource_url"])}">{_text(sheet["loc_resource_url"])}</a></p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="sanborn-title">
+  <div class="section-heading">
+    <p class="eyebrow">Sanborn Sheet Manifest</p>
+    <h2 id="sanborn-title">LOC Texarkana 1885 Sheets</h2>
+    <div class="badge-row">
+      {_badge(f"{manifest['sheet_count']} sheets")}
+      {_badge(manifest["stitching_status"])}
+      {_badge(manifest["location_extraction_status"])}
+    </div>
+    <p>{_text(manifest["title"])}</p>
+    <p><strong>Item:</strong> <a href="{_attr(manifest["loc_item_url"])}">{_text(manifest["loc_item_url"])}</a></p>
+    <p><strong>Gallery:</strong> <a href="{_attr(manifest["loc_gallery_url"])}">{_text(manifest["loc_gallery_url"])}</a></p>
+    <p class="note">IIIF status: {_text(manifest["iiif_manifest_status"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Boundary</h3>
+      {_details_list(boundary)}
+    </article>
+    <article class="panel">
+      <h3>Current Status</h3>
+      <p>No stitching, georeferencing, building extraction, derived locations, or derived claims have been created from these sheets yet.</p>
+    </article>
+  </div>
+  <div class="records">{''.join(sheet_rows)}</div>
 </section>"""
 
 

@@ -22,6 +22,7 @@ class WebViewTests(unittest.TestCase):
         self.assertGreaterEqual(len(model["mission"]["teacher_source_notes"]), 1)
         self.assertEqual(model["readiness"]["mission_id"], "mission_texarkana_1885_001")
         self.assertFalse(model["readiness"]["classroom_ready"])
+        self.assertEqual(model["sanborn_manifest"]["sheet_count"], 5)
 
     def test_rendered_page_contains_read_only_town_data(self):
         package = load_town_package(ROOT, "texarkana")
@@ -38,6 +39,11 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("fictional_gameplay", html)
         self.assertIn("Teacher Source Notes", html)
         self.assertIn("Library of Congress", html)
+        self.assertIn("Sanborn Sheet Manifest", html)
+        self.assertIn("sheet_texarkana_1885_sanborn_005", html)
+        self.assertIn("https://www.loc.gov/resource/g4034tm.g4034tm_g087811885/?sp=5", html)
+        self.assertIn("not_started", html)
+        self.assertIn("deferred", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")
