@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[#######.............] 35%
+[########............] 40%
 ```
 
 Current active gates:
 
-1. Complete issue #9: Add town-package loader API.
+1. Complete issue #10: Add provenance query layer.
 2. Keep issue #4 aligned whenever progress changes.
-3. Continue with issue #10 after issue #9 merges.
+3. Continue with issue #11 after issue #10 merges.
 
 Open tracking pages:
 
@@ -31,12 +31,14 @@ Open tracking pages:
 - Foundation gate issue, closed: https://github.com/drbellschool/TheMindsEye/issues/6
 - Python packaging task, closed: https://github.com/drbellschool/TheMindsEye/issues/7
 - JSON schema validation task, closed: https://github.com/drbellschool/TheMindsEye/issues/8
-- Town-package loader task: https://github.com/drbellschool/TheMindsEye/issues/9
-- Next provenance task: https://github.com/drbellschool/TheMindsEye/issues/10
+- Town-package loader task, closed: https://github.com/drbellschool/TheMindsEye/issues/9
+- Provenance query task: https://github.com/drbellschool/TheMindsEye/issues/10
+- Next source metadata task: https://github.com/drbellschool/TheMindsEye/issues/11
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
 - JSON schema validation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/14
+- Town-package loader PR, merged: https://github.com/drbellschool/TheMindsEye/pull/15
 
 ## Agent Operating Rules
 
@@ -120,16 +122,16 @@ available on that branch.
 ### Phase 3: Provenance Query Layer
 
 ```text
-[....................] 0%
+[####################] 100%
 ```
 
-- [ ] Add source lookup functions.
-- [ ] Add location lookup functions.
-- [ ] Add claim lookup functions.
-- [ ] Add mission seed lookup functions.
-- [ ] Add teacher-facing citation trail tests.
-- [ ] Add map-linked claim resolution tests.
-- [ ] Add unsupported-claim rejection tests.
+- [x] Add source lookup functions.
+- [x] Add location lookup functions.
+- [x] Add claim lookup functions.
+- [x] Add mission seed lookup functions.
+- [x] Add teacher-facing citation trail tests.
+- [x] Add map-linked claim resolution tests.
+- [x] Add unsupported-claim rejection tests.
 
 ### Phase 4: Mission Seed and Teacher Notes
 
@@ -186,11 +188,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #9:
+The current unblocked task is issue #10:
 
 ```text
-Add and harden the town-package loader API.
+Add provenance query helpers and mission evidence trails.
 ```
 
-After issue #9 merges, agents should continue with issue #10 unless a newer
+After issue #10 merges, agents should continue with issue #11 unless a newer
 dashboard update or open PR blocks that work.
