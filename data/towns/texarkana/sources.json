@@ -10,5 +10,17 @@
     "access_level": "metadata",
     "accessed_date": "2026-07-05",
     "notes": "Used only to validate the town-package structure. Not a classroom-ready source record."
+  },
+  {
+    "source_id": "source_texarkana_1885_newspaper_placeholder",
+    "title": "1885 Texarkana newspaper item placeholder",
+    "source_type": "newspaper",
+    "repository": "Portal to Texas History or other archive to be verified",
+    "url": "",
+    "citation": "Placeholder citation. Replace with a verified newspaper item before classroom use.",
+    "rights_status": "unknown",
+    "access_level": "metadata",
+    "accessed_date": "2026-07-05",
+    "notes": "Placeholder for source-manifest validation only."
   }
 ]
