@@ -9,6 +9,10 @@ from .building_data import (
     load_building_manifest,
     load_verification_suggestion_manifest,
 )
+from .instructional_alignment import (
+    InstructionalAlignmentManifest,
+    load_instructional_alignment_manifest,
+)
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
@@ -42,6 +46,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "readiness": build_classroom_readiness_report(package),
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
         "building_manifest": _optional_building_manifest_summary(package),
+        "instructional_alignment": _optional_instructional_alignment_summary(package),
     }
 
 
@@ -75,6 +80,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _overview_section(model),
             _sanborn_manifest_section(model["sanborn_manifest"]),
             _building_manifest_section(model["building_manifest"]),
+            _instructional_alignment_section(model["instructional_alignment"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -235,6 +241,16 @@ def _optional_building_manifest_summary(package: TownPackage) -> dict[str, objec
     if building_manifest.town_package_id != package.package_id:
         return None
     return _building_manifest_summary(building_manifest)
+
+
+def _optional_instructional_alignment_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        manifest = load_instructional_alignment_manifest()
+    except MindseyeDataError:
+        return None
+    if manifest.town_package_id != package.package_id:
+        return None
+    return _instructional_alignment_summary(manifest)
 
 
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
@@ -408,6 +424,36 @@ def _verification_suggestion_summary(
                 "review_notes": suggestion.review_notes,
             }
             for suggestion in manifest.suggestions
+        ],
+    }
+
+
+def _instructional_alignment_summary(
+    manifest: InstructionalAlignmentManifest,
+) -> dict[str, object]:
+    return {
+        "instructional_manifest_id": manifest.instructional_manifest_id,
+        "mission_id": manifest.mission_id,
+        "title": manifest.title,
+        "hqim_status": manifest.hqim_status,
+        "teks_status": manifest.teks_status,
+        "teacher_authority_rule": manifest.teacher_authority_rule,
+        "record_count": manifest.record_count,
+        "alignments": [
+            {
+                "alignment_id": alignment.alignment_id,
+                "framework": alignment.framework,
+                "subject_area": alignment.subject_area,
+                "grade_band": alignment.grade_band,
+                "alignment_status": alignment.alignment_status,
+                "standard_id": alignment.standard_id,
+                "standard_label": alignment.standard_label,
+                "hqim_dimension": alignment.hqim_dimension,
+                "evidence_expectations": list(alignment.evidence_expectations),
+                "teacher_review_required": alignment.teacher_review_required,
+                "notes": alignment.notes,
+            }
+            for alignment in manifest.alignments
         ],
     }
 
@@ -806,6 +852,52 @@ def _verification_suggestion_block(raw_suggestions: object) -> str:
     {_details_list(boundary)}
     <div class="records">{''.join(suggestion_rows)}</div>
   </div>"""
+
+
+def _instructional_alignment_section(raw_manifest: object) -> str:
+    if raw_manifest is None:
+        return ""
+
+    manifest = _expect_dict(raw_manifest)
+    alignments = _expect_list(manifest["alignments"])
+    alignment_rows = []
+    for raw_alignment in alignments:
+        alignment = _expect_dict(raw_alignment)
+        standard_id = _text(alignment["standard_id"]) if alignment["standard_id"] else "Pending teacher selection"
+        alignment_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(alignment["alignment_id"])}</h4>
+    <div class="badge-row">
+      {_badge(alignment["framework"])}
+      {_badge(alignment["alignment_status"])}
+      {_badge(alignment["grade_band"])}
+    </div>
+  </div>
+  <p><strong>Subject area:</strong> {_text(alignment["subject_area"])}</p>
+  <p><strong>Standard ID:</strong> {standard_id}</p>
+  <p><strong>Alignment label:</strong> {_text(alignment["standard_label"])}</p>
+  <p><strong>HQIM dimension:</strong> {_text(alignment["hqim_dimension"])}</p>
+  <p><strong>Evidence expectations:</strong> {_joined_ids(alignment["evidence_expectations"])}</p>
+  <p class="note">{_text(alignment["notes"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="instructional-title">
+  <div class="section-heading">
+    <p class="eyebrow">Instructional Alignment</p>
+    <h2 id="instructional-title">{_text(manifest["title"])}</h2>
+    <div class="badge-row">
+      {_badge(manifest["hqim_status"])}
+      {_badge(manifest["teks_status"])}
+      {_badge(f"{manifest['record_count']} alignment records")}
+    </div>
+    <p>{_text(manifest["teacher_authority_rule"])}</p>
+  </div>
+  <div class="records">{''.join(alignment_rows)}</div>
+</section>"""
 
 
 def _mission_section(raw_mission: object) -> str:

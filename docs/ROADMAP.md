@@ -130,6 +130,7 @@ Acceptance tests:
 
 - teacher can see source evidence before approval;
 - verification suggestion records cannot auto-publish into student-facing labels or art;
+- mission cannot be marked classroom-ready while exact TEKS selection remains pending;
 - mission cannot be marked classroom-ready while unsupported historical claims exist;
 - teacher edits preserve or relabel provenance.
 

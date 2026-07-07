@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mindseye import (
     load_building_manifest,
+    load_instructional_alignment_manifest,
     load_sanborn_asset_manifest,
     load_sanborn_image_metadata_manifest,
     load_sanborn_sheet_manifest,
@@ -25,6 +26,7 @@ def main():
     load_sanborn_sheet_review_manifest(ROOT, "texarkana")
     load_sanborn_stitching_manifest(ROOT, "texarkana")
     load_building_manifest(ROOT, "texarkana")
+    load_instructional_alignment_manifest(ROOT, "texarkana")
     load_verification_suggestion_manifest(ROOT, "texarkana")
     print("Mind's Eye validation passed.")
 

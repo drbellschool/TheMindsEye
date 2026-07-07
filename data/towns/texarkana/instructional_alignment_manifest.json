@@ -1,0 +1,44 @@
+{
+  "instructional_manifest_id": "instructional_texarkana_1885_mission_001",
+  "manifest_type": "mission_instructional_alignment_manifest",
+  "town_package_id": "texarkana_1885",
+  "mission_id": "mission_texarkana_1885_001",
+  "title": "Texarkana 1885 instructional alignment seed",
+  "hqim_status": "framework_seeded",
+  "teks_status": "pending_teacher_selection",
+  "teacher_authority_rule": "A teacher must confirm the exact TEKS target and final mission framing before classroom use.",
+  "record_count": 2,
+  "alignments": [
+    {
+      "alignment_id": "alignment_texarkana_1885_hqim_001",
+      "framework": "HQIM",
+      "subject_area": "historical inquiry / ELAR / social studies bridge",
+      "grade_band": "middle_school",
+      "alignment_status": "framework_seed",
+      "standard_label": "Students must distinguish evidence, inference, and fictional framing through discussion and writing grounded in historical sources.",
+      "hqim_dimension": "text_and_evidence",
+      "evidence_expectations": [
+        "Students inspect cited historical claims before making conclusions.",
+        "Teacher highlights the difference between verified fact, source-based inference, and fictional gameplay.",
+        "Mission culminates in an evidence-based written or spoken explanation."
+      ],
+      "teacher_review_required": true,
+      "notes": "HQIM seed only. This record sets instructional expectations without claiming a final state standards code yet."
+    },
+    {
+      "alignment_id": "alignment_texarkana_1885_teks_001",
+      "framework": "TEKS",
+      "subject_area": "teacher_selected_social_studies_or_elar",
+      "grade_band": "middle_school",
+      "alignment_status": "pending_teacher_selection",
+      "standard_label": "Exact TEKS identifier is still pending teacher selection for the final mission frame.",
+      "hqim_dimension": "teacher_selected_target",
+      "evidence_expectations": [
+        "Teacher must choose the exact TEKS code before classroom use.",
+        "Mission artifacts must map to teacher-approved standards and rubric language."
+      ],
+      "teacher_review_required": true,
+      "notes": "No TEKS code is published yet. This keeps the instructional contract explicit without inventing a standards identifier."
+    }
+  ]
+}

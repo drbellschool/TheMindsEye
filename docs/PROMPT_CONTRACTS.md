@@ -11,6 +11,7 @@ Every production prompt must define:
 - stable prompt ID;
 - purpose;
 - owning engine/layer;
+- instructional alignment contract when classroom-facing;
 - expected inputs;
 - expected outputs;
 - required provenance behavior;
@@ -45,6 +46,7 @@ owner: The Mind's Eye
 input_schema: mission-seed.schema.json
 output_schema: mission-output.schema.json
 requires_provenance: true
+instructional_contract: instructional-alignment-manifest.schema.json
 allowed_claim_types:
   - verified_fact
   - source_based_inference
@@ -97,6 +99,7 @@ Required outputs:
 
 - mission title;
 - objective;
+- instructional alignment state;
 - historical claims used;
 - fictional elements used;
 - student-facing text;

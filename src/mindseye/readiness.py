@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from .instructional_alignment import load_instructional_alignment_manifest
 from .mission_seed import build_mission_seed_packet
-from .models import ClaimType, TownPackage
+from .models import ClaimType, MindseyeDataError, TownPackage
 
 
 def build_classroom_readiness_report(package: TownPackage, mission_id: str | None = None) -> dict[str, object]:
@@ -18,6 +19,7 @@ def build_classroom_readiness_report(package: TownPackage, mission_id: str | Non
         _provenance_labels_check(mission_packet),
         _fictional_separation_check(mission_packet),
         _placeholder_locations_check(mission_packet),
+        _instructional_alignment_check(mission_packet),
     ]
     blockers = [check for check in checks if not check["passed"] and check["severity"] == "blocker"]
 
@@ -140,6 +142,48 @@ def _placeholder_locations_check(mission_packet: dict[str, object]) -> dict[str,
         if not placeholder_location_ids
         else "Placeholder map/location records require teacher review before classroom use.",
         details={"placeholder_location_ids": placeholder_location_ids},
+    )
+
+
+def _instructional_alignment_check(mission_packet: dict[str, object]) -> dict[str, object]:
+    try:
+        manifest = load_instructional_alignment_manifest()
+    except MindseyeDataError as exc:
+        return _check(
+            check_id="instructional_alignment",
+            passed=False,
+            severity="blocker",
+            summary="Instructional alignment contract is missing or invalid.",
+            details={"error": str(exc)},
+        )
+
+    pending_alignment_ids = [
+        alignment.alignment_id
+        for alignment in manifest.alignments
+        if alignment.framework == "TEKS" and alignment.alignment_status != "reviewed"
+    ]
+    passed = (
+        manifest.town_package_id == str(mission_packet["town_package_id"])
+        and manifest.mission_id == str(mission_packet["mission_id"])
+        and manifest.teks_status == "approved_for_mission_use"
+        and not pending_alignment_ids
+    )
+
+    summary = "Instructional alignment includes teacher-approved HQIM and standards targets."
+    if not passed:
+        summary = "Instructional alignment still needs teacher-reviewed standards selection before classroom use."
+
+    return _check(
+        check_id="instructional_alignment",
+        passed=passed,
+        severity="blocker",
+        summary=summary,
+        details={
+            "instructional_manifest_id": manifest.instructional_manifest_id,
+            "hqim_status": manifest.hqim_status,
+            "teks_status": manifest.teks_status,
+            "pending_alignment_ids": pending_alignment_ids,
+        },
     )
 
 

@@ -284,4 +284,5 @@ If an AI agent begins with generic gameplay, multiplayer, or broad platform feat
 
 The next remaining agent work should include:
 
-- and `HQIM_FRAMEWORK.md`.
+- `TEACHER_REVIEW_WORKFLOW.md`;
+- and `ASSESSMENT_ARTIFACT_FRAMEWORK.md`.

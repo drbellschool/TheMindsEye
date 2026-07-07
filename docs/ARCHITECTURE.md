@@ -148,6 +148,11 @@ Responsibilities:
 
 The Story Engine may create dramatic framing, but it must respect the Knowledge / Provenance Engine.
 
+It should also respect an explicit instructional alignment contract. HQIM
+expectations may be seeded before final TEKS selection, but a mission should
+not be treated as classroom-ready until the teacher confirms the final
+standards target.
+
 ### 4. Game / Classroom Engine
 
 Purpose: run the classroom experience.

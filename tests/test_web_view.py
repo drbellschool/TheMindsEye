@@ -49,6 +49,8 @@ class WebViewTests(unittest.TestCase):
             model["building_manifest"]["buildings"][2]["review_record_id"],
             "review_texarkana_1885_sanborn_003",
         )
+        self.assertEqual(model["instructional_alignment"]["teks_status"], "pending_teacher_selection")
+        self.assertEqual(model["instructional_alignment"]["record_count"], 2)
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
             "sheet_texarkana_1885_sanborn_001",
@@ -102,6 +104,9 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Verification Suggestions", html)
         self.assertIn("Potential livery stable match from later archival hints", html)
         self.assertIn("insufficient_evidence", html)
+        self.assertIn("Instructional Alignment", html)
+        self.assertIn("alignment_texarkana_1885_hqim_001", html)
+        self.assertIn("pending_teacher_selection", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")
@@ -115,6 +120,8 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Placeholder map/location records require teacher review", html)
         self.assertIn("loc_texarkana_1885_001", html)
         self.assertIn("historical_source_notes", html)
+        self.assertIn("instructional_alignment", html)
+        self.assertIn("pending_teacher_selection", html)
         self.assertIn("pass", html)
 
     def test_rendered_page_escapes_dynamic_text(self):

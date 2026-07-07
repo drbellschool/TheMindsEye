@@ -6,6 +6,11 @@ is already implemented.
 """
 
 from .game_loop import MissionRun
+from .instructional_alignment import (
+    InstructionalAlignmentManifest,
+    InstructionalAlignmentRecord,
+    load_instructional_alignment_manifest,
+)
 from .map_engine import MapEngine
 from .mission_seed import build_mission_seed_packet, build_teacher_review_packet
 from .building_data import (
@@ -57,6 +62,8 @@ __all__ = [
     "MindseyeDataError",
     "BuildingManifest",
     "BuildingRecord",
+    "InstructionalAlignmentManifest",
+    "InstructionalAlignmentRecord",
     "SourceRecord",
     "LocationRecord",
     "ClaimRecord",
@@ -79,6 +86,7 @@ __all__ = [
     "MapEngine",
     "MissionRun",
     "build_classroom_readiness_report",
+    "load_instructional_alignment_manifest",
     "build_mission_seed_packet",
     "build_sanborn_image_intake_report",
     "build_sanborn_image_metadata_manifest",
