@@ -54,6 +54,10 @@ open for them.
 The current teacher-interface packet already carries these as planned module
 slots so future work can attach views without changing the contract shape.
 
+The current read-only browser view also surfaces the portal shell, so the
+teacher-facing structure is visible in the repository without claiming a full
+interactive dashboard yet.
+
 ## Required Summary Cards
 
 The portal should have summary cards for:

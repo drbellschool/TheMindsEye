@@ -16,6 +16,7 @@ from .instructional_alignment import (
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
+from .teacher_interface import build_teacher_interface_packet
 from .teacher_review import build_teacher_approval_packet
 from .sanborn import (
     SanbornAssetManifest,
@@ -49,6 +50,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "building_manifest": _optional_building_manifest_summary(package),
         "instructional_alignment": _optional_instructional_alignment_summary(package),
         "teacher_review": _optional_teacher_review_summary(package),
+        "teacher_interface": _optional_teacher_interface_summary(package),
     }
 
 
@@ -84,6 +86,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _building_manifest_section(model["building_manifest"]),
             _instructional_alignment_section(model["instructional_alignment"]),
             _teacher_review_section(model["teacher_review"]),
+            _teacher_interface_section(model["teacher_interface"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -264,6 +267,16 @@ def _optional_teacher_review_summary(package: TownPackage) -> dict[str, object] 
     if review_packet["town_package_id"] != package.package_id:
         return None
     return review_packet
+
+
+def _optional_teacher_interface_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        portal_packet = build_teacher_interface_packet(package)
+    except MindseyeDataError:
+        return None
+    if portal_packet["town_package_id"] != package.package_id:
+        return None
+    return portal_packet
 
 
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
@@ -966,6 +979,127 @@ def _teacher_review_section(raw_review: object) -> str:
     </article>
   </div>
   <div class="records">{''.join(item_rows)}</div>
+</section>"""
+
+
+def _teacher_interface_section(raw_portal: object) -> str:
+    if raw_portal is None:
+        return ""
+
+    portal = _expect_dict(raw_portal)
+    portal_modules = _expect_list(portal["portal_modules"])
+    workflow_steps = _expect_list(portal["workflow_steps"])
+    summary_cards = _expect_list(portal["summary_cards"])
+    review_workspace = _expect_dict(portal["review_workspace"])
+    decision_panel = _expect_dict(portal["decision_panel"])
+    release_state = _expect_dict(portal["release_state"])
+
+    module_rows = []
+    for raw_module in portal_modules:
+        module = _expect_dict(raw_module)
+        module_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(module["label"])}</h4>
+    <div class="badge-row">
+      {_badge(module["status"])}
+    </div>
+  </div>
+  <p><strong>Module ID:</strong> {_text(module["module_id"])}</p>
+</article>"""
+        )
+
+    workflow_rows = []
+    for raw_step in workflow_steps:
+        step = _expect_dict(raw_step)
+        workflow_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(step["step_number"])}. {_text(step["title"])}</h4>
+    <div class="badge-row">
+      {_badge(step["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(step["note"])}</p>
+</article>"""
+        )
+
+    summary_rows = []
+    for raw_card in summary_cards:
+        card = _expect_dict(raw_card)
+        value = _text(card["value"]) if card["value"] is not None else "Not calculated"
+        summary_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(card["label"])}</h4>
+    <div class="badge-row">
+      {_badge(card["status"])}
+    </div>
+  </div>
+  <p><strong>Value:</strong> {value}</p>
+  <p class="note">{_text(card["note"])}</p>
+</article>"""
+        )
+
+    exact_standard = _expect_dict(review_workspace["exact_standard_under_review"])
+    mission_content = _expect_dict(review_workspace["mission_content_being_reviewed"])
+    teacher_alignment_decision = _expect_dict(review_workspace["teacher_alignment_decision"])
+    decision_actions = _expect_list(decision_panel["decision_actions"])
+
+    action_rows = []
+    for raw_action in decision_actions:
+        action = _expect_dict(raw_action)
+        action_rows.append(
+            f"""
+<li>
+  <strong>{_text(action["label"])}</strong>
+  <span>{_text("enabled" if action["enabled"] else "disabled")}</span>
+</li>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="teacher-portal-title">
+  <div class="section-heading">
+    <p class="eyebrow">Teacher Portal</p>
+    <h2 id="teacher-portal-title">{_text(portal["portal_title"])}</h2>
+    <div class="badge-row">
+      {_badge("mission " + _text(portal["mission_id"]))}
+      {_badge("town " + _text(portal["town_package_id"]))}
+    </div>
+  </div>
+  <article class="panel">
+    <h3>Portal Modules</h3>
+    <div class="records">{''.join(module_rows)}</div>
+  </article>
+  <div class="split">
+    <article class="panel">
+      <h3>Workflow Steps</h3>
+      <div class="records">{''.join(workflow_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Summary Cards</h3>
+      <div class="records">{''.join(summary_rows)}</div>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Review Workspace</h3>
+      <p><strong>Exact standard under review:</strong> {_text(exact_standard["alignment_id"])}</p>
+      <p><strong>Standard label:</strong> {_text(exact_standard["standard_label"])}</p>
+      <p><strong>Teacher authority rule:</strong> {_text(exact_standard["teacher_authority_rule"])}</p>
+      <p><strong>Mission:</strong> {_text(mission_content["title"])}</p>
+      <p><strong>Current decision:</strong> {_text(teacher_alignment_decision["current_state"])}</p>
+    </article>
+    <article class="panel">
+      <h3>Decision Panel</h3>
+      <p><strong>Release state:</strong> {_text(release_state["state"])}</p>
+      <p class="note">{_text(release_state["reason"])}</p>
+      <ul class="check-list">{''.join(action_rows)}</ul>
+    </article>
+  </div>
 </section>"""
 
 
