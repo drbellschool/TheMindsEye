@@ -84,6 +84,15 @@ The decision area should support:
 - send back to tighten alignment;
 - and defer.
 
+## Subject Scope Rule
+
+The default review surface should stay focused on the logged-in teacher's
+primary subject and grade-band scope.
+
+Optional cross-subject TEKS tethers may exist in a mission scaffold, but they
+should remain secondary attachments and should not become a prominent portal
+module or the default review focus.
+
 ## Review-State Rule
 
 The teacher interface is not the source of truth.

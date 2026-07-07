@@ -63,6 +63,8 @@ from .sanborn import (
 )
 from .town_loader import load_town_package
 from .readiness import build_classroom_readiness_report
+from .assessment_evidence import build_assessment_evidence_packet
+from .student_mission import build_student_mission_flow_packet
 from .web_view import build_town_package_view_model, render_town_package_page
 
 __all__ = [
@@ -100,6 +102,8 @@ __all__ = [
     "build_teacher_interface_packet",
     "MissionRun",
     "build_classroom_readiness_report",
+    "build_assessment_evidence_packet",
+    "build_student_mission_flow_packet",
     "build_teacher_approval_packet",
     "load_instructional_alignment_manifest",
     "build_mission_seed_packet",

@@ -194,7 +194,7 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[###############.....] 75%
+[#################...] 85%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
@@ -208,8 +208,8 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Teacher review flow.
 - [x] Teacher interface foundation.
 - [x] Standards alignment workflow foundation.
-- [ ] Student mission flow.
-- [ ] Assessment evidence workflow.
+- [x] Student mission flow.
+- [x] Assessment evidence workflow.
 - [ ] Accessibility supports.
 - [ ] Pilot privacy baseline.
 
@@ -226,9 +226,8 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to turn the explicit review state into a
-standards-alignment workflow that can capture the final teacher-selected TEKS
-target and keep classroom release blocked until that approval is recorded.
+The next narrow unblocked task is to add accessibility support scaffolding for
+the student and teacher-facing views without widening the core prototype scope.
 
 That next task should:
 
@@ -238,6 +237,6 @@ That next task should:
   inference, and fictional gameplay;
 - stay compatible with the existing mission seed, teacher-note, and
   instructional-alignment outputs;
-- let the teacher confirm or reject the pending standards target explicitly;
+- keep evidence, rubrics, and mastery artifacts explainable;
 - and avoid drifting into generic gameplay or dashboard polish before the
-  review workflow is explicit.
+  accessibility baseline is explicit.

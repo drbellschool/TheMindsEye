@@ -28,6 +28,7 @@ def build_teacher_interface_packet(
         "mission_id": approval_packet["mission_id"],
         "town_package_id": approval_packet["town_package_id"],
         "standards_alignment": standards_packet,
+        "teacher_scope": standards_packet["teacher_scope_policy"],
         "portal_modules": _portal_modules(),
         "workflow_steps": _workflow_steps(approval_packet),
         "summary_cards": _summary_cards(readiness_report, approval_packet),
@@ -51,7 +52,7 @@ def _workflow_steps(approval_packet: dict[str, object]) -> list[dict[str, object
             "step_number": 2,
             "title": "Standards & TEKS Review",
             "status": "in_progress",
-            "note": "Teacher selection remains required for the exact TEKS target.",
+            "note": "Teacher selection remains required for the exact TEKS target, with secondary tethers kept hidden by default.",
         },
         {
             "step_number": 3,

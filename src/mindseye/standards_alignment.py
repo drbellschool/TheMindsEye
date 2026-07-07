@@ -46,6 +46,12 @@ def build_standards_alignment_packet(
         "town_package_id": alignment_manifest.town_package_id,
         "hqim_status": alignment_manifest.hqim_status,
         "teks_status": alignment_manifest.teks_status,
+        "teacher_scope_policy": {
+            "primary_subject_only": True,
+            "secondary_teks_allowed": True,
+            "secondary_tether_visibility": "mission_secondary_only",
+            "portal_visibility": "logged_in_teacher_subject_only",
+        },
         "teacher_authority_rule": alignment_manifest.teacher_authority_rule,
         "current_standard_under_review": exact_standard_under_review,
         "decision_state": decision_state,
@@ -63,6 +69,7 @@ def build_standards_alignment_packet(
         "hqim_records": hqim_records,
         "teks_records": teks_records,
         "review_notes": list(approval_packet["review_items"]),
+        "secondary_alignment_tethers": [],
     }
 
 

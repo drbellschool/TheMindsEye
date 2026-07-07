@@ -14,9 +14,12 @@ from .instructional_alignment import (
     load_instructional_alignment_manifest,
 )
 from .mission_seed import build_mission_seed_packet
+from .map_rendering import build_map_rendering_packet
+from .assessment_evidence import build_assessment_evidence_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
 from .standards_alignment import build_standards_alignment_packet
+from .student_mission import build_student_mission_flow_packet
 from .teacher_interface import build_teacher_interface_packet
 from .teacher_review import build_teacher_approval_packet
 from .sanborn import (
@@ -49,10 +52,13 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "readiness": build_classroom_readiness_report(package),
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
         "building_manifest": _optional_building_manifest_summary(package),
+        "map_rendering": _optional_map_rendering_summary(package),
         "instructional_alignment": _optional_instructional_alignment_summary(package),
         "standards_alignment": _optional_standards_alignment_summary(package),
         "teacher_review": _optional_teacher_review_summary(package),
         "teacher_interface": _optional_teacher_interface_summary(package),
+        "student_mission": _optional_student_mission_summary(package),
+        "assessment_evidence": _optional_assessment_evidence_summary(package),
     }
 
 
@@ -86,10 +92,13 @@ def render_town_package_page(package: TownPackage) -> str:
             _overview_section(model),
             _sanborn_manifest_section(model["sanborn_manifest"]),
             _building_manifest_section(model["building_manifest"]),
+            _map_rendering_section(model["map_rendering"]),
             _instructional_alignment_section(model["instructional_alignment"]),
             _standards_alignment_section(model["standards_alignment"]),
             _teacher_review_section(model["teacher_review"]),
             _teacher_interface_section(model["teacher_interface"]),
+            _student_mission_section(model["student_mission"]),
+            _assessment_evidence_section(model["assessment_evidence"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -252,6 +261,16 @@ def _optional_building_manifest_summary(package: TownPackage) -> dict[str, objec
     return _building_manifest_summary(building_manifest)
 
 
+def _optional_map_rendering_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        rendering_packet = build_map_rendering_packet(package)
+    except MindseyeDataError:
+        return None
+    if rendering_packet["town_package_id"] != package.package_id:
+        return None
+    return rendering_packet
+
+
 def _optional_instructional_alignment_summary(package: TownPackage) -> dict[str, object] | None:
     try:
         manifest = load_instructional_alignment_manifest()
@@ -290,6 +309,26 @@ def _optional_teacher_interface_summary(package: TownPackage) -> dict[str, objec
     if portal_packet["town_package_id"] != package.package_id:
         return None
     return portal_packet
+
+
+def _optional_student_mission_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        flow_packet = build_student_mission_flow_packet(package)
+    except MindseyeDataError:
+        return None
+    if flow_packet["town_package_id"] != package.package_id:
+        return None
+    return flow_packet
+
+
+def _optional_assessment_evidence_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        packet = build_assessment_evidence_packet(package)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
 
 
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
@@ -851,6 +890,174 @@ def _building_manifest_section(raw_manifest: object) -> str:
 </section>"""
 
 
+def _map_rendering_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    base_map_layer = _expect_dict(packet["base_map_layer"])
+    road_rail_layer = _expect_dict(packet["road_rail_layer"])
+    footprint_layer = _expect_dict(packet["building_footprint_layer"])
+    art_layer = _expect_dict(packet["building_art_layer"])
+    label_layer = _expect_dict(packet["label_layer"])
+    quest_layer = _expect_dict(packet["quest_marker_layer"])
+    evidence_layer = _expect_dict(packet["evidence_provenance_layer"])
+    art_records = _expect_list(art_layer["records"])
+    fallback_records = _expect_list(art_layer["fallback_records"])
+    footprint_records = _expect_list(footprint_layer["records"])
+    label_records = _expect_list(label_layer["records"])
+    evidence_records = _expect_list(evidence_layer["records"])
+
+    art_rows = []
+    for raw_art in art_records:
+        art = _expect_dict(raw_art)
+        art_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(art["building_art_id"])}</h4>
+    <div class="badge-row">
+      {_badge(art["visual_detail_status"])}
+      {_badge(art["review_anchor_status"])}
+    </div>
+  </div>
+  <p><strong>Anchor kind:</strong> {_text(art["review_anchor_kind"])}</p>
+  <p><strong>Anchor ID:</strong> {_text(art["review_anchor_id"])}</p>
+  <p><strong>Historical basis:</strong> {_text(art["historical_basis"])}</p>
+  <p><strong>Fallback mode:</strong> {_text(art["fallback_render_mode"])}</p>
+</article>"""
+        )
+
+    fallback_rows = []
+    for raw_art in fallback_records:
+        art = _expect_dict(raw_art)
+        fallback_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(art["building_art_id"])}</h4>
+    <div class="badge-row">
+      {_badge("fallback")}
+      {_badge(art["visual_detail_status"])}
+    </div>
+  </div>
+  <p><strong>Anchor kind:</strong> {_text(art["review_anchor_kind"])}</p>
+  <p><strong>Anchor ID:</strong> {_text(art["review_anchor_id"])}</p>
+  <p><strong>Anchor status:</strong> {_text(art["review_anchor_status"])}</p>
+  <p><strong>Fallback mode:</strong> {_text(art["fallback_render_mode"])}</p>
+</article>"""
+        )
+
+    footprint_rows = []
+    for raw_footprint in footprint_records:
+        footprint = _expect_dict(raw_footprint)
+        footprint_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(footprint["building_id"])}</h4>
+    <div class="badge-row">
+      {_badge(footprint["footprint_status"])}
+      {_badge(footprint["geometry_basis"])}
+    </div>
+  </div>
+  <p><strong>Location:</strong> {_text(footprint["location_id"])}</p>
+  <p><strong>Review record:</strong> {_text(footprint["review_record_id"]) if footprint["review_record_id"] else "None"}</p>
+  <p><strong>Visual detail status:</strong> {_text(footprint["visual_detail_status"])}</p>
+</article>"""
+        )
+
+    label_rows = []
+    for raw_label in label_records:
+        label = _expect_dict(raw_label)
+        label_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(label["label_id"])}</h4>
+    <div class="badge-row">
+      {_badge(label["label_type"])}
+      {_badge(label["certainty"])}
+    </div>
+  </div>
+  <p><strong>Text:</strong> {_text(label["label_text"])}</p>
+  <p><strong>Target:</strong> {_text(label["target_anchor_id"])}</p>
+</article>"""
+        )
+
+    evidence_rows = []
+    for raw_evidence in evidence_records:
+        evidence = _expect_dict(raw_evidence)
+        evidence_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(evidence["evidence_id"])}</h4>
+    <div class="badge-row">
+      {_badge(evidence["claim_type"])}
+      {_badge(evidence["confidence"])}
+    </div>
+  </div>
+  <p><strong>Anchor:</strong> {_text(evidence["anchor_id"])}</p>
+  <p><strong>Sources:</strong> {_joined_ids(evidence["source_ids"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="map-rendering-title">
+  <div class="section-heading">
+    <p class="eyebrow">Map Rendering Contract</p>
+    <h2 id="map-rendering-title">{_text(packet["render_contract_id"])}</h2>
+    <div class="badge-row">
+      {_badge(base_map_layer["render_mode"])}
+      {_badge(road_rail_layer["status"])}
+      {_badge(art_layer["status"])}
+    </div>
+    <p>Layered rendering keeps historical evidence, building art, runtime markers, and provenance separate.</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Base / Road Layers</h3>
+      <p><strong>Base map:</strong> {_text(base_map_layer["map_id"])}</p>
+      <p><strong>Stitching:</strong> {_text(base_map_layer["stitching_status"])}</p>
+      <p><strong>Georeferencing:</strong> {_text(base_map_layer["georeferencing_status"])}</p>
+      <p><strong>Road / rail status:</strong> {_text(road_rail_layer["status"])}</p>
+    </article>
+    <article class="panel">
+      <h3>Footprint / Art Layers</h3>
+      <p><strong>Footprints:</strong> {_text(len(footprint_rows))}</p>
+      <p><strong>Reviewed art records:</strong> {_text(len(art_rows))}</p>
+      <p><strong>Fallback art records:</strong> {_text(len(fallback_rows))}</p>
+      <p><strong>Labels:</strong> {_text(len(label_rows))}</p>
+      <p><strong>Quest markers:</strong> {_text(len(_expect_list(quest_layer["records"])))}</p>
+      <p><strong>Evidence records:</strong> {_text(len(evidence_rows))}</p>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Building Footprints</h3>
+      <div class="records">{''.join(footprint_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Building Art</h3>
+      <div class="records">{''.join(art_rows)}</div>
+      <h4>Fallback Art</h4>
+      <div class="records">{''.join(fallback_rows)}</div>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Labels</h3>
+      <div class="records">{''.join(label_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Evidence / Provenance</h3>
+      <div class="records">{''.join(evidence_rows)}</div>
+    </article>
+  </div>
+</section>"""
+
+
 def _verification_suggestion_block(raw_suggestions: object) -> str:
     if raw_suggestions is None:
         return ""
@@ -997,6 +1204,7 @@ def _standards_alignment_section(raw_packet: object) -> str:
     </div>
     <p>{_text(packet["teacher_authority_rule"])}</p>
     <p class="note">{_text(release_gate["reason"])}</p>
+    <p class="note">Secondary TEKS tethers stay mission-scoped and hidden from the primary review surface.</p>
   </div>
   <div class="split">
     <article class="panel">
@@ -1171,6 +1379,7 @@ def _teacher_interface_section(raw_portal: object) -> str:
     <p><strong>Workflow:</strong> {_text(standards_alignment["workflow_title"])}</p>
     <p><strong>TEKS status:</strong> {_text(standards_alignment["teks_status"])}</p>
     <p><strong>Release gate:</strong> {_text(standards_alignment["release_gate"]["status"])}</p>
+    <p class="note">Primary subject scope stays front and center; secondary TEKS tethering remains mission-scoped only.</p>
   </article>
   <div class="split">
     <article class="panel">
@@ -1190,6 +1399,7 @@ def _teacher_interface_section(raw_portal: object) -> str:
       <p><strong>Teacher authority rule:</strong> {_text(exact_standard["teacher_authority_rule"])}</p>
       <p><strong>Mission:</strong> {_text(mission_content["title"])}</p>
       <p><strong>Current decision:</strong> {_text(teacher_alignment_decision["current_state"])}</p>
+      <p class="note">Cross-subject standards remain secondary attachments and do not expand the default review scope.</p>
     </article>
     <article class="panel">
       <h3>Decision Panel</h3>
@@ -1198,6 +1408,258 @@ def _teacher_interface_section(raw_portal: object) -> str:
       <ul class="check-list">{''.join(action_rows)}</ul>
     </article>
   </div>
+</section>"""
+
+
+def _student_mission_section(raw_flow: object) -> str:
+    if raw_flow is None:
+        return ""
+
+    flow = _expect_dict(raw_flow)
+    steps = _expect_list(flow["visible_mission_steps"])
+    locations = _expect_list(flow["selected_locations"])
+    labels = _expect_list(flow["provenance_labels"])
+    evidence_packets = _expect_list(flow["evidence_packets"])
+
+    step_rows = []
+    for raw_step in steps:
+        step = _expect_dict(raw_step)
+        step_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(step["label"])}</h4>
+    <div class="badge-row">
+      {_badge(step["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(step["notes"])}</p>
+</article>"""
+        )
+
+    location_rows = []
+    for raw_location in locations:
+        location = _expect_dict(raw_location)
+        location_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(location["location_id"])}</h4>
+    <div class="badge-row">
+      {_badge(location["certainty"])}
+    </div>
+  </div>
+  <p><strong>Label:</strong> {_text(location["label"])}</p>
+  <p><strong>Street:</strong> {_text(location.get("street", ""))}</p>
+  <p><strong>Type:</strong> {_text(location.get("location_type", ""))}</p>
+</article>"""
+        )
+
+    evidence_rows = []
+    for raw_evidence in evidence_packets:
+        evidence = _expect_dict(raw_evidence)
+        source_rows = evidence.get("sources", [])
+        source_count = len(source_rows) if isinstance(source_rows, list) else 0
+        evidence_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(evidence["claim_id"])}</h4>
+    <div class="badge-row">
+      {_badge(evidence["claim_type"])}
+      {_badge(evidence["confidence"])}
+    </div>
+  </div>
+  <p><strong>Claim:</strong> {_text(evidence["claim_text"])}</p>
+  <p><strong>Sources:</strong> {_text(source_count)}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="student-mission-title">
+  <div class="section-heading">
+    <p class="eyebrow">Student Mission Flow</p>
+    <h2 id="student-mission-title">{_text(flow["flow_title"])}</h2>
+    <div class="badge-row">
+      {_badge(flow["release_state"])}
+      {_badge(f"{len(steps)} steps")}
+    </div>
+    <p>{_text(flow["student_objective"])}</p>
+    <p class="note">{_text(flow["release_reason"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Visible Steps</h3>
+      <div class="records">{''.join(step_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Artifact Expectation</h3>
+      <p>{_text(flow["artifact_expectation"]["label"])}</p>
+      <p class="note">{_text(flow["artifact_expectation"]["details"])}</p>
+      <p><strong>Provenance required:</strong> {_text(flow["artifact_expectation"]["provenance_required"])}</p>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Selected Locations</h3>
+      <div class="records">{''.join(location_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Visible Evidence</h3>
+      <div class="records">{''.join(evidence_rows)}</div>
+      <div class="badge-row">{_label_badges(labels)}</div>
+    </article>
+  </div>
+</section>"""
+
+
+def _assessment_evidence_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    artifact_expectation = _expect_dict(packet["artifact_expectation"])
+    mastery_scale = _expect_list(packet["mastery_scale"])
+    evidence_trail = _expect_dict(packet["evidence_trail"])
+    teacher_source_notes = _expect_list(evidence_trail["teacher_source_notes"])
+    provenance_labels = _expect_list(evidence_trail["provenance_labels"])
+    locations = _expect_list(evidence_trail["locations"])
+    artifact_types = _expect_list(packet["student_artifact_types"])
+
+    mastery_rows = []
+    for raw_level in mastery_scale:
+        level = _expect_dict(raw_level)
+        mastery_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(level["level"])}. {_text(level["label"])}</h4>
+    <div class="badge-row">
+      {_badge(level["grade_range"])}
+    </div>
+  </div>
+  <p>{_text(level["description"])}</p>
+</article>"""
+        )
+
+    note_rows = []
+    for raw_note in teacher_source_notes:
+        note = _expect_dict(raw_note)
+        note_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(note["claim_id"])}</h4>
+    <div class="badge-row">
+      {_badge(note["claim_type"])}
+      {_badge(note["confidence"])}
+    </div>
+  </div>
+  <p>{_text(note["claim_text"])}</p>
+</article>"""
+        )
+
+    label_rows = []
+    for raw_label in provenance_labels:
+        label = _expect_dict(raw_label)
+        label_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(label["claim_id"])}</h4>
+    <div class="badge-row">
+      {_badge(label["claim_type"])}
+      {_badge(label["confidence"])}
+    </div>
+  </div>
+</article>"""
+        )
+
+    location_rows = []
+    for raw_location in locations:
+        location = _expect_dict(raw_location)
+        location_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(location["location_id"])}</h4>
+    <div class="badge-row">
+      {_badge(location["certainty"])}
+    </div>
+  </div>
+  <p>{_text(location["label"])}</p>
+</article>"""
+        )
+
+    artifact_rows = []
+    for artifact_type in artifact_types:
+        artifact_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(artifact_type)}</h4>
+    <div class="badge-row">
+      {_badge("allowed")}
+    </div>
+  </div>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="assessment-title">
+  <div class="section-heading">
+    <p class="eyebrow">Assessment Evidence</p>
+    <h2 id="assessment-title">{_text(packet["framework_title"])}</h2>
+    <div class="badge-row">
+      {_badge(packet["assessment_status"])}
+      {_badge(packet["release_state"])}
+      {_badge(packet["rubric_boundary"]["status"])}
+    </div>
+    <p>{_text(packet["teacher_override_rule"])}</p>
+    <p class="note">{_text(packet["readiness_summary"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Artifact Expectation</h3>
+      <p><strong>Label:</strong> {_text(artifact_expectation["label"])}</p>
+      <p class="note">{_text(artifact_expectation["details"])}</p>
+      <p><strong>Provenance required:</strong> {_text(artifact_expectation["provenance_required"])}</p>
+      <p><strong>Teacher review state:</strong> {_text(packet["teacher_review_state"])}</p>
+    </article>
+    <article class="panel">
+      <h3>Gradebook Boundary and Teacher Override</h3>
+      <p><strong>Status:</strong> {_text(packet["gradebook_conversion"]["status"])}</p>
+      <p class="note">{_text(packet["gradebook_conversion"]["description"])}</p>
+      <p><strong>Rubric uploaded:</strong> {_text(packet["rubric_boundary"]["rubric_uploaded"])}</p>
+      <p><strong>AI compare allowed:</strong> {_text(packet["rubric_boundary"]["ai_compare_allowed"])}</p>
+      <p><strong>Teacher override allowed:</strong> {_text(packet["rubric_boundary"]["teacher_override_allowed"])}</p>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Mastery Scale</h3>
+      <div class="records">{''.join(mastery_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Student Artifact Types</h3>
+      <div class="records">{''.join(artifact_rows)}</div>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Teacher Source Notes</h3>
+      <div class="records">{''.join(note_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Visible Provenance Labels</h3>
+      <div class="records">{''.join(label_rows)}</div>
+      <div class="badge-row">{_label_badges(provenance_labels)}</div>
+    </article>
+  </div>
+  <article class="panel">
+    <h3>Location Evidence</h3>
+    <div class="records">{''.join(location_rows)}</div>
+  </article>
 </section>"""
 
 

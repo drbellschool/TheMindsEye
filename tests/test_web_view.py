@@ -45,6 +45,9 @@ class WebViewTests(unittest.TestCase):
             model["building_manifest"]["verification_suggestions"]["candidate_count"],
             2,
         )
+        self.assertEqual(model["map_rendering"]["base_map_layer"]["layer_id"], "base-map")
+        self.assertEqual(model["map_rendering"]["building_art_layer"]["status"], "reviewed_subset_available")
+        self.assertEqual(model["map_rendering"]["building_art_layer"]["records"][0]["review_anchor_kind"], "building")
         self.assertEqual(
             model["building_manifest"]["buildings"][2]["review_record_id"],
             "review_texarkana_1885_sanborn_003",
@@ -53,9 +56,15 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["instructional_alignment"]["record_count"], 2)
         self.assertEqual(model["standards_alignment"]["workflow_title"], "Standards & TEKS Review")
         self.assertEqual(model["standards_alignment"]["release_gate"]["status"], "blocked")
+        self.assertTrue(model["standards_alignment"]["teacher_scope_policy"]["primary_subject_only"])
         self.assertEqual(model["teacher_review"]["review_status"], "pending_teacher_review")
         self.assertFalse(model["teacher_review"]["classroom_release_ready"])
         self.assertEqual(model["teacher_interface"]["portal_title"], "Teacher Review & Classroom Approval")
+        self.assertTrue(model["teacher_interface"]["teacher_scope"]["primary_subject_only"])
+        self.assertEqual(model["student_mission"]["flow_title"], "Student Mission Flow")
+        self.assertEqual(model["student_mission"]["release_state"], "blocked")
+        self.assertEqual(model["assessment_evidence"]["framework_title"], "Assessment Evidence Workflow")
+        self.assertEqual(model["assessment_evidence"]["assessment_status"], "not_scored")
         self.assertIn("telegram_review", [module["module_id"] for module in model["teacher_interface"]["portal_modules"]])
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
@@ -107,6 +116,11 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("A.S. Blythe. Wagon Yard &amp; Livery.", html)
         self.assertIn("review_texarkana_1885_sanborn_003", html)
         self.assertIn("sheet_texarkana_1885_sanborn_005 / 5", html)
+        self.assertIn("Map Rendering Contract", html)
+        self.assertIn("Reviewed art records", html)
+        self.assertIn("Fallback art", html)
+        self.assertIn("Evidence / Provenance", html)
+        self.assertIn("reviewed_building_anchor", html)
         self.assertIn("Verification Suggestions", html)
         self.assertIn("Potential livery stable match from later archival hints", html)
         self.assertIn("insufficient_evidence", html)
@@ -115,6 +129,7 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("pending_teacher_selection", html)
         self.assertIn("Standards & TEKS Review", html)
         self.assertIn("Current Standard Under Review", html)
+        self.assertIn("secondary teks tethers stay mission-scoped", html.lower())
         self.assertIn("Teacher Review Approval", html)
         self.assertIn("teacher_review_texarkana_1885_teks_001", html)
         self.assertIn("release blocked", html)
@@ -123,6 +138,13 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Telegram Review", html)
         self.assertIn("Postal Review", html)
         self.assertIn("Behavior / Law Flags", html)
+        self.assertIn("Student Mission Flow", html)
+        self.assertIn("Visible Steps", html)
+        self.assertIn("Artifact Expectation", html)
+        self.assertIn("Visible Evidence", html)
+        self.assertIn("Assessment Evidence", html)
+        self.assertIn("Mastery Scale", html)
+        self.assertIn("Teacher Override", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")
@@ -141,6 +163,7 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("teacher_review_approval", html)
         self.assertIn("standards-title", html.lower())
         self.assertIn("teacher portal", html.lower())
+        self.assertIn("primary subject", html.lower())
         self.assertIn("pass", html)
 
     def test_rendered_page_escapes_dynamic_text(self):

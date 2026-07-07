@@ -15,6 +15,11 @@ The repository should support:
 - a rejected or send-back state;
 - and a classroom-approved state only when the final TEKS choice is recorded.
 
+The teacher portal should stay focused on the logged-in teacher's primary
+subject scope. Optional cross-subject TEKS tethers may exist inside a mission,
+but they should remain secondary and mission-scoped rather than becoming a
+main review surface.
+
 ## Required Data
 
 The standards workflow should surface:
@@ -27,6 +32,9 @@ The standards workflow should surface:
 - the teacher authority rule;
 - the available decision options;
 - and the release gate state.
+
+The standards packet should also preserve a policy note that secondary TEKS
+tethering is allowed but hidden from the default review view.
 
 ## Teacher Rule
 

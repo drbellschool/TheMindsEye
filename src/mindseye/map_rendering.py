@@ -107,6 +107,17 @@ def _building_layers(
             if building.identity_status == "reviewed" and building.review_record_id is not None
         }
         for building in building_manifest.buildings:
+            review_anchor_kind = "building" if building.building_id in reviewed_building_ids else "location"
+            review_anchor_id = building.building_id if review_anchor_kind == "building" else building.location_id
+            review_anchor_status = (
+                "reviewed_building_anchor"
+                if review_anchor_kind == "building"
+                else (
+                    "reviewed_location_anchor"
+                    if building.location_id in reviewed_location_ids
+                    else "placeholder_location_seed"
+                )
+            )
             building_rows.append(
                 {
                     "building_id": building.building_id,
@@ -127,6 +138,10 @@ def _building_layers(
                 "building_art_id": f"art_{building.building_id}_v1",
                 "building_id": building.building_id,
                 "location_id": building.location_id,
+                "review_anchor_kind": review_anchor_kind,
+                "review_anchor_id": review_anchor_id,
+                "review_anchor_status": review_anchor_status,
+                "review_anchor_reviewed": review_anchor_status != "placeholder_location_seed",
                 "asset_path": None,
                 "transparent_background": True,
                 "visual_detail_status": building.visual_detail_status,
