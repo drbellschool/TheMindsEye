@@ -90,7 +90,7 @@ Not approved yet:
 - [x] Contributor/contractor IP assignment caution is documented.
 - [x] Student-data minimization posture is documented.
 - [x] Pilot privacy/data-use notes exist.
-- [ ] Grant one-pager exists.
+- [x] Grant one-pager exists.
 - [ ] Pilot school/museum partner packet exists.
 
 ## Agent Acceptance Criteria for the MVP
