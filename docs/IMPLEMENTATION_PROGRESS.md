@@ -227,8 +227,8 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to add the pilot school/museum partner packet
-without widening the core prototype scope.
+The next narrow unblocked task is to add prompt files with stable IDs and eval
+scaffolding without widening the core prototype scope.
 
 That next task should:
 
@@ -240,4 +240,4 @@ That next task should:
   instructional-alignment outputs;
 - keep evidence, rubrics, and mastery artifacts explainable;
 - and avoid drifting into generic gameplay or dashboard polish before the
-  partner framing is explicit.
+  prompt scaffolding is explicit.
