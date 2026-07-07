@@ -67,6 +67,17 @@ from .sanborn import (
     load_sanborn_stitching_manifest,
 )
 from .town_loader import load_town_package
+from .ingest.texas_portal import (
+    TexasPortalAdapter,
+    TexasPortalEndpointDiscovery,
+    TexasPortalFetchResult,
+    TexasPortalSearchHit,
+    TexasPortalSearchResult,
+    TexasPortalSourceSnapshot,
+    build_search_url as build_texas_portal_search_url,
+    build_source_id as build_texas_portal_source_id,
+    parse_ark_reference,
+)
 from .accessibility import build_accessibility_support_packet
 from .privacy import build_privacy_baseline_packet
 from .student_data_minimization import build_student_data_minimization_packet
@@ -89,6 +100,15 @@ __all__ = [
     "LocationRecord",
     "ClaimRecord",
     "MissionSeed",
+    "TexasPortalAdapter",
+    "TexasPortalEndpointDiscovery",
+    "TexasPortalFetchResult",
+    "TexasPortalSearchHit",
+    "TexasPortalSearchResult",
+    "TexasPortalSourceSnapshot",
+    "build_texas_portal_search_url",
+    "build_texas_portal_source_id",
+    "parse_ark_reference",
     "SanbornAssetManifest",
     "SanbornAssetRecord",
     "SanbornImageIntakeFile",
