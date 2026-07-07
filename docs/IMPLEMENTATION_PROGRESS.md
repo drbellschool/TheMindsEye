@@ -194,7 +194,7 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[##########..........] 50%
+[############........] 60%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
@@ -204,9 +204,9 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Building review contract and verification suggestion queue.
 - [x] Reviewed-building subset and inference boundary.
 - [x] HQIM framework and instructional-alignment manifest.
-- [ ] Student mission flow.
-- [ ] Teacher review flow.
+- [x] Teacher review flow.
 - [ ] Standards alignment workflow.
+- [ ] Student mission flow.
 - [ ] Assessment evidence workflow.
 - [ ] Accessibility supports.
 - [ ] Pilot privacy baseline.
@@ -224,9 +224,9 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to add a teacher review and mission-approval
-workflow that can confirm exact TEKS targets, inspect instructional alignment,
-and promote a mission from draft to classroom-ready only after review.
+The next narrow unblocked task is to turn the explicit review state into a
+standards-alignment workflow that can capture the final teacher-selected TEKS
+target and keep classroom release blocked until that approval is recorded.
 
 That next task should:
 
@@ -236,6 +236,6 @@ That next task should:
   inference, and fictional gameplay;
 - stay compatible with the existing mission seed, teacher-note, and
   instructional-alignment outputs;
-- let the teacher confirm or reject pending standards targets explicitly;
+- let the teacher confirm or reject the pending standards target explicitly;
 - and avoid drifting into generic gameplay or dashboard polish before the
   review workflow is explicit.

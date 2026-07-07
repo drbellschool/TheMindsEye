@@ -14,6 +14,7 @@ from mindseye import (
     load_sanborn_sheet_review_manifest,
     load_sanborn_stitching_manifest,
     load_town_package,
+    load_teacher_review_manifest,
     load_verification_suggestion_manifest,
 )
 
@@ -27,6 +28,7 @@ def main():
     load_sanborn_stitching_manifest(ROOT, "texarkana")
     load_building_manifest(ROOT, "texarkana")
     load_instructional_alignment_manifest(ROOT, "texarkana")
+    load_teacher_review_manifest(ROOT, "texarkana")
     load_verification_suggestion_manifest(ROOT, "texarkana")
     print("Mind's Eye validation passed.")
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from .instructional_alignment import load_instructional_alignment_manifest
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimType, MindseyeDataError, TownPackage
+from .teacher_review import build_teacher_approval_packet
 
 
 def build_classroom_readiness_report(package: TownPackage, mission_id: str | None = None) -> dict[str, object]:
@@ -20,6 +21,7 @@ def build_classroom_readiness_report(package: TownPackage, mission_id: str | Non
         _fictional_separation_check(mission_packet),
         _placeholder_locations_check(mission_packet),
         _instructional_alignment_check(mission_packet),
+        _teacher_review_check(package, mission_packet),
     ]
     blockers = [check for check in checks if not check["passed"] and check["severity"] == "blocker"]
 
@@ -183,6 +185,45 @@ def _instructional_alignment_check(mission_packet: dict[str, object]) -> dict[st
             "hqim_status": manifest.hqim_status,
             "teks_status": manifest.teks_status,
             "pending_alignment_ids": pending_alignment_ids,
+        },
+    )
+
+
+def _teacher_review_check(
+    package: TownPackage, mission_packet: dict[str, object]
+) -> dict[str, object]:
+    try:
+        review_packet = build_teacher_approval_packet(package)
+    except MindseyeDataError as exc:
+        return _check(
+            check_id="teacher_review_approval",
+            passed=False,
+            severity="blocker",
+            summary="Teacher review contract is missing or invalid.",
+            details={"error": str(exc)},
+        )
+
+    passed = (
+        review_packet["mission_id"] == mission_packet["mission_id"]
+        and review_packet["town_package_id"] == mission_packet["town_package_id"]
+        and bool(review_packet["classroom_release_ready"])
+    )
+    summary = "Teacher review explicitly approves the mission for classroom use."
+    if not passed:
+        summary = "Teacher review still needs explicit approval or rejection of the pending standards targets."
+
+    return _check(
+        check_id="teacher_review_approval",
+        passed=passed,
+        severity="blocker",
+        summary=summary,
+        details={
+            "teacher_review_manifest_id": review_packet["teacher_review_manifest_id"],
+            "review_status": review_packet["review_status"],
+            "mission_release_status": review_packet["mission_release_status"],
+            "pending_alignment_ids": review_packet["pending_alignment_ids"],
+            "approved_alignment_ids": review_packet["approved_alignment_ids"],
+            "rejected_alignment_ids": review_packet["rejected_alignment_ids"],
         },
     )
 

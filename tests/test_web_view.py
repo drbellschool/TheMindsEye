@@ -51,6 +51,8 @@ class WebViewTests(unittest.TestCase):
         )
         self.assertEqual(model["instructional_alignment"]["teks_status"], "pending_teacher_selection")
         self.assertEqual(model["instructional_alignment"]["record_count"], 2)
+        self.assertEqual(model["teacher_review"]["review_status"], "pending_teacher_review")
+        self.assertFalse(model["teacher_review"]["classroom_release_ready"])
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
             "sheet_texarkana_1885_sanborn_001",
@@ -107,6 +109,9 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Instructional Alignment", html)
         self.assertIn("alignment_texarkana_1885_hqim_001", html)
         self.assertIn("pending_teacher_selection", html)
+        self.assertIn("Teacher Review Approval", html)
+        self.assertIn("teacher_review_texarkana_1885_teks_001", html)
+        self.assertIn("release blocked", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")
@@ -122,6 +127,7 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("historical_source_notes", html)
         self.assertIn("instructional_alignment", html)
         self.assertIn("pending_teacher_selection", html)
+        self.assertIn("teacher_review_approval", html)
         self.assertIn("pass", html)
 
     def test_rendered_page_escapes_dynamic_text(self):

@@ -21,6 +21,12 @@ from .building_data import (
     load_building_manifest,
     load_verification_suggestion_manifest,
 )
+from .teacher_review import (
+    TeacherReviewItem,
+    TeacherReviewManifest,
+    build_teacher_approval_packet,
+    load_teacher_review_manifest,
+)
 from .models import (
     ClaimRecord,
     ClaimType,
@@ -64,6 +70,8 @@ __all__ = [
     "BuildingRecord",
     "InstructionalAlignmentManifest",
     "InstructionalAlignmentRecord",
+    "TeacherReviewItem",
+    "TeacherReviewManifest",
     "SourceRecord",
     "LocationRecord",
     "ClaimRecord",
@@ -86,6 +94,7 @@ __all__ = [
     "MapEngine",
     "MissionRun",
     "build_classroom_readiness_report",
+    "build_teacher_approval_packet",
     "load_instructional_alignment_manifest",
     "build_mission_seed_packet",
     "build_sanborn_image_intake_report",
@@ -99,6 +108,7 @@ __all__ = [
     "load_sanborn_sheet_review_manifest",
     "load_sanborn_stitching_manifest",
     "load_town_package",
+    "load_teacher_review_manifest",
     "load_verification_suggestion_manifest",
     "render_town_package_page",
 ]

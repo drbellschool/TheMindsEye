@@ -16,6 +16,7 @@ from .instructional_alignment import (
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
+from .teacher_review import build_teacher_approval_packet
 from .sanborn import (
     SanbornAssetManifest,
     SanbornSheetManifest,
@@ -47,6 +48,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
         "building_manifest": _optional_building_manifest_summary(package),
         "instructional_alignment": _optional_instructional_alignment_summary(package),
+        "teacher_review": _optional_teacher_review_summary(package),
     }
 
 
@@ -81,6 +83,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _sanborn_manifest_section(model["sanborn_manifest"]),
             _building_manifest_section(model["building_manifest"]),
             _instructional_alignment_section(model["instructional_alignment"]),
+            _teacher_review_section(model["teacher_review"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -251,6 +254,16 @@ def _optional_instructional_alignment_summary(package: TownPackage) -> dict[str,
     if manifest.town_package_id != package.package_id:
         return None
     return _instructional_alignment_summary(manifest)
+
+
+def _optional_teacher_review_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        review_packet = build_teacher_approval_packet(package)
+    except MindseyeDataError:
+        return None
+    if review_packet["town_package_id"] != package.package_id:
+        return None
+    return review_packet
 
 
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
@@ -897,6 +910,62 @@ def _instructional_alignment_section(raw_manifest: object) -> str:
     <p>{_text(manifest["teacher_authority_rule"])}</p>
   </div>
   <div class="records">{''.join(alignment_rows)}</div>
+</section>"""
+
+
+def _teacher_review_section(raw_review: object) -> str:
+    if raw_review is None:
+        return ""
+
+    review = _expect_dict(raw_review)
+    review_items = _expect_list(review["review_items"])
+    item_rows = []
+    for raw_item in review_items:
+        item = _expect_dict(raw_item)
+        standard_id = _text(item["standard_id"]) if item["standard_id"] else "Pending teacher selection"
+        item_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["review_item_id"])}</h4>
+    <div class="badge-row">
+      {_badge(item["framework"])}
+      {_badge(item["decision_state"])}
+    </div>
+  </div>
+  <p><strong>Alignment:</strong> {_text(item["alignment_id"])}</p>
+  <p><strong>Standard ID:</strong> {standard_id}</p>
+  <p><strong>Standard label:</strong> {_text(item["standard_label"])}</p>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="teacher-review-title">
+  <div class="section-heading">
+    <p class="eyebrow">Teacher Review Approval</p>
+    <h2 id="teacher-review-title">{_text(review["title"])}</h2>
+    <div class="badge-row">
+      {_badge(review["review_status"])}
+      {_badge(review["mission_release_status"])}
+      {_badge("release ready" if review["classroom_release_ready"] else "release blocked")}
+    </div>
+    <p>{_text(review["teacher_authority_rule"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Decision State</h3>
+      <p><strong>Pending alignment IDs:</strong> {_joined_ids(review["pending_alignment_ids"])}</p>
+      <p><strong>Approved alignment IDs:</strong> {_joined_ids(review["approved_alignment_ids"])}</p>
+      <p><strong>Rejected alignment IDs:</strong> {_joined_ids(review["rejected_alignment_ids"])}</p>
+    </article>
+    <article class="panel">
+      <h3>Review Status</h3>
+      <p>{_text(review["review_status"])}</p>
+      <p class="readiness">{_text(review["mission_release_status"])}</p>
+    </article>
+  </div>
+  <div class="records">{''.join(item_rows)}</div>
 </section>"""
 
 
