@@ -48,15 +48,39 @@ class ServeTownViewTests(unittest.TestCase):
             opener.open(request)
 
         self.assertEqual(ctx.exception.code, 302)
-        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana#community-dashboard")
+        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana/community-dashboard")
         ctx.exception.close()
 
-    def test_texarkana_path_returns_dashboard_html(self) -> None:
+    def test_texarkana_alias_returns_dashboard_html(self) -> None:
         with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/texarkana") as response:
             html = response.read().decode("utf-8")
 
         self.assertIn("Community Verification Console", html)
-        self.assertIn("community-dashboard", html)
+        self.assertIn("Community Dashboard", html)
+        self.assertIn("Review Status Overview", html)
+
+    def test_each_community_route_renders(self) -> None:
+        route_expectations = {
+            "/texarkana/community-dashboard": ["Community Verification Console", "Primary Routes"],
+            "/texarkana/map-auditor": ["Map Auditor", "Stitched Map Workspace"],
+            "/texarkana/building-auditor": ["Building Auditor", "Footprint Review"],
+            "/texarkana/people-auditor": ["People Auditor", "Source Issue Browser"],
+            "/texarkana/source-provenance-inspector": ["Source / Provenance Inspector", "Source Metadata"],
+            "/texarkana/release-gate-report": ["Release Gate Report", "Readiness Matrix"],
+        }
+        for path, expected_fragments in route_expectations.items():
+            with self.subTest(path=path):
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}") as response:
+                    html = response.read().decode("utf-8")
+                for fragment in expected_fragments:
+                    self.assertIn(fragment, html)
+
+    def test_debug_route_remains_available(self) -> None:
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/texarkana/debug") as response:
+            html = response.read().decode("utf-8")
+
+        self.assertIn("Town Package Status", html)
+        self.assertIn("Building Auditor", html)
 
     def test_post_review_action_persists_people_update(self) -> None:
         package = load_town_package(ROOT, "texarkana")
@@ -70,7 +94,7 @@ class ServeTownViewTests(unittest.TestCase):
                 "review_status": "confirmed",
                 "historical_basis": "verified_fact",
                 "notes": "Saved from the HTTP review form.",
-                "return_to": "#people-auditor",
+                "return_to": "/texarkana/people-auditor",
             }
         ).encode("utf-8")
         opener = urllib.request.build_opener(NoRedirectHandler())
@@ -85,7 +109,7 @@ class ServeTownViewTests(unittest.TestCase):
             opener.open(request)
 
         self.assertEqual(ctx.exception.code, 303)
-        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana#people-auditor")
+        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana/people-auditor")
         ctx.exception.close()
 
         replayed_packet = build_community_review_packet(package, state_root=self.state_dir)
@@ -114,7 +138,7 @@ class ServeTownViewTests(unittest.TestCase):
                 "identity_basis": "verified_fact",
                 "visual_detail_status": "verified",
                 "notes": "Saved from the building review form.",
-                "return_to": "#map-auditor",
+                "return_to": "/texarkana/map-auditor",
             }
         ).encode("utf-8")
         opener = urllib.request.build_opener(NoRedirectHandler())
@@ -129,7 +153,7 @@ class ServeTownViewTests(unittest.TestCase):
             opener.open(request)
 
         self.assertEqual(ctx.exception.code, 303)
-        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana#map-auditor")
+        self.assertEqual(ctx.exception.headers.get("Location"), "/texarkana/map-auditor")
         ctx.exception.close()
 
         replayed_building_manifest = load_building_manifest(ROOT, "texarkana", state_root=self.state_dir)

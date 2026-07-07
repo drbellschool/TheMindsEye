@@ -1,0 +1,49 @@
+{
+  "shared": {
+    "town_name": "Demo Town",
+    "state_region": "Texas",
+    "package_id": "demo_1885",
+    "year": 1885,
+    "release_state": "blocked",
+    "release_blockers": [
+      "Demo values are in use because live town data is unavailable.",
+      "Replace this file with live review packets when you wire a new town."
+    ]
+  },
+  "routes": {
+    "community-dashboard": {
+      "hero_note": "This dashboard shell is waiting for live town data.",
+      "empty_summary": "Community overview will populate from the town package."
+    },
+    "map-auditor": {
+      "workspace_note": "No stitched control points are present in demo mode.",
+      "control_points": [
+        {
+          "label": "Control point A",
+          "notes": "Add georeference control points here."
+        },
+        {
+          "label": "Control point B",
+          "notes": "Add a second control point here."
+        }
+      ],
+      "art_note": "The map workspace is waiting for stitched sheet data."
+    },
+    "building-auditor": {
+      "footprint_note": "Footprint geometry is not loaded in demo mode.",
+      "art_note": "Transparent art previews will appear here once generated."
+    },
+    "people-auditor": {
+      "issue_note": "Source issue cards will populate from the community review packet.",
+      "workspace_note": "Person and business records are placeholder-only until live data exists."
+    },
+    "source-provenance-inspector": {
+      "source_note": "Select a source to inspect citation, OCR, and rights details.",
+      "provenance_note": "Linked records appear once the review packets are loaded."
+    },
+    "release-gate-report": {
+      "blocker_note": "This demo model is blocked until live review data exists.",
+      "export_note": "Export controls will be enabled after the core packets are loaded."
+    }
+  }
+}

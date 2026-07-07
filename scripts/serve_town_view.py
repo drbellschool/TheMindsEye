@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mindseye import load_town_package
 from mindseye.building_data import load_building_manifest
 from mindseye.community_review import build_community_review_packet
+from mindseye.community_ui import render_community_route_page
 from mindseye.models import MindseyeDataError
 from mindseye.review_state import append_review_event, build_building_review_event, build_community_review_event
 from mindseye.web_view import render_town_package_page
@@ -33,15 +34,39 @@ def make_handler(town_slug: str, state_dir: Path | None = None) -> type[BaseHTTP
                 self._send_text("ok\n", "text/plain; charset=utf-8")
                 return
             if path == "/":
-                self._redirect(f"/{town_slug}#community-dashboard", HTTPStatus.FOUND)
+                self._redirect(f"/{town_slug}/community-dashboard", HTTPStatus.FOUND)
                 return
-            if path not in {"/", f"/{town_slug}"}:
+            normalized_path = path.rstrip("/") if path != "/" else path
+            if normalized_path in {f"/{town_slug}", f"/{town_slug}/community-dashboard"}:
+                route = "community-dashboard"
+            elif normalized_path == f"/{town_slug}/map-auditor":
+                route = "map-auditor"
+            elif normalized_path == f"/{town_slug}/building-auditor":
+                route = "building-auditor"
+            elif normalized_path == f"/{town_slug}/people-auditor":
+                route = "people-auditor"
+            elif normalized_path == f"/{town_slug}/source-provenance-inspector":
+                route = "source-provenance-inspector"
+            elif normalized_path == f"/{town_slug}/release-gate-report":
+                route = "release-gate-report"
+            elif normalized_path == f"/{town_slug}/debug":
+                route = "debug"
+            else:
                 self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                 return
 
             try:
                 package = load_town_package(ROOT, town_slug)
-                html = render_town_package_page(package, town_slug=town_slug, state_root=runtime_state_dir)
+                if route == "debug":
+                    html = render_town_package_page(package, town_slug=town_slug, state_root=runtime_state_dir)
+                else:
+                    html = render_community_route_page(
+                        package,
+                        route=route,
+                        town_slug=town_slug,
+                        repo_root=ROOT,
+                        state_root=runtime_state_dir,
+                    )
             except Exception as exc:
                 self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
                 return
@@ -163,7 +188,12 @@ def make_handler(town_slug: str, state_dir: Path | None = None) -> type[BaseHTTP
             if not target:
                 target = "#community-dashboard"
             if target.startswith("#"):
-                return f"/{town_slug}{target}"
+                route = target.lstrip("#").strip("/")
+                if not route or route == "community-dashboard":
+                    return f"/{town_slug}/community-dashboard"
+                return f"/{town_slug}/{route}"
+            if target.startswith(f"/{town_slug}/community-dashboard") or target == f"/{town_slug}":
+                return f"/{town_slug}/community-dashboard"
             if target.startswith("/") and "://" not in target and not target.startswith("//"):
                 return target
             raise MindseyeDataError("invalid return_to target")
@@ -199,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     server = ThreadingHTTPServer((args.host, args.port), make_handler(args.town, args.state_dir))
-    url = f"http://{args.host}:{args.port}/{args.town}#community-dashboard"
+    url = f"http://{args.host}:{args.port}/{args.town}/community-dashboard"
     print(f"Serving The Mind's Eye town view at {url}", flush=True)
     try:
         server.serve_forever()
