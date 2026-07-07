@@ -15,7 +15,7 @@ Last updated: 2026-07-07
 Overall MVP progress:
 
 ```text
-[###################.] 95%
+[####################] 100%
 ```
 
 Current active gates:
@@ -212,6 +212,7 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Assessment evidence workflow.
 - [x] Accessibility supports.
 - [x] Pilot privacy baseline.
+- [x] Student-data minimization plan.
 
 ## Deferred Until Foundation Is Stable
 
@@ -226,8 +227,8 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to add the student-data minimization plan
-for the pilot without widening the core prototype scope.
+The next narrow unblocked task is to add the grant one-pager for the pilot
+without widening the core prototype scope.
 
 That next task should:
 
@@ -239,4 +240,4 @@ That next task should:
   instructional-alignment outputs;
 - keep evidence, rubrics, and mastery artifacts explainable;
 - and avoid drifting into generic gameplay or dashboard polish before the
-  minimization plan is explicit.
+  grant framing is explicit.

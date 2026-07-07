@@ -64,6 +64,7 @@ from .sanborn import (
 from .town_loader import load_town_package
 from .accessibility import build_accessibility_support_packet
 from .privacy import build_privacy_baseline_packet
+from .student_data_minimization import build_student_data_minimization_packet
 from .readiness import build_classroom_readiness_report
 from .assessment_evidence import build_assessment_evidence_packet
 from .student_mission import build_student_mission_flow_packet
@@ -102,6 +103,7 @@ __all__ = [
     "build_map_rendering_packet",
     "build_accessibility_support_packet",
     "build_privacy_baseline_packet",
+    "build_student_data_minimization_packet",
     "build_standards_alignment_packet",
     "build_teacher_interface_packet",
     "MissionRun",

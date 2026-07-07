@@ -17,6 +17,7 @@ from .mission_seed import build_mission_seed_packet
 from .map_rendering import build_map_rendering_packet
 from .accessibility import build_accessibility_support_packet
 from .privacy import build_privacy_baseline_packet
+from .student_data_minimization import build_student_data_minimization_packet
 from .assessment_evidence import build_assessment_evidence_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
@@ -63,6 +64,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "assessment_evidence": _optional_assessment_evidence_summary(package),
         "accessibility": _optional_accessibility_summary(package),
         "privacy": _optional_privacy_summary(package),
+        "student_data_minimization": _optional_student_data_minimization_summary(package),
     }
 
 
@@ -105,6 +107,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _assessment_evidence_section(model["assessment_evidence"]),
             _accessibility_section(model["accessibility"]),
             _privacy_section(model["privacy"]),
+            _student_data_minimization_section(model["student_data_minimization"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -350,6 +353,16 @@ def _optional_accessibility_summary(package: TownPackage) -> dict[str, object] |
 def _optional_privacy_summary(package: TownPackage) -> dict[str, object] | None:
     try:
         packet = build_privacy_baseline_packet(package)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_student_data_minimization_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        packet = build_student_data_minimization_packet(package)
     except MindseyeDataError:
         return None
     if packet["town_package_id"] != package.package_id:
@@ -1853,6 +1866,148 @@ def _privacy_section(raw_packet: object) -> str:
       <p><strong>Retention posture:</strong> {_text(packet["retention_posture"])}</p>
     </article>
   </div>
+</section>"""
+
+
+def _student_data_minimization_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    default_collections = _expect_list(packet["default_collections"])
+    conditional_collections = _expect_list(packet["conditional_collections"])
+    retention_controls = _expect_list(packet["retention_controls"])
+    teacher_controls = _expect_list(packet["teacher_controls"])
+    pilot_questions = _expect_list(packet["pilot_questions"])
+    prohibited_collections = _expect_list(packet["prohibited_collections"])
+    privacy_alignment = _expect_dict(packet["privacy_alignment"])
+
+    default_rows = []
+    for raw_item in default_collections:
+        item = _expect_dict(raw_item)
+        default_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["data_type"])}</h4>
+    <div class="badge-row">
+      {_badge(item["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(item["why_needed"])}</p>
+</article>"""
+        )
+
+    conditional_rows = []
+    for raw_item in conditional_collections:
+        item = _expect_dict(raw_item)
+        conditional_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["data_type"])}</h4>
+    <div class="badge-row">
+      {_badge(item["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(item["why_needed"])}</p>
+</article>"""
+        )
+
+    retention_rows = []
+    for raw_item in retention_controls:
+        item = _expect_dict(raw_item)
+        retention_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["label"])}</h4>
+    <div class="badge-row">
+      {_badge(item["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(item["note"])}</p>
+</article>"""
+        )
+
+    teacher_rows = []
+    for item in teacher_controls:
+        teacher_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(item)}</p>
+</article>"""
+        )
+
+    question_rows = []
+    for item in pilot_questions:
+        question_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(item)}</p>
+</article>"""
+        )
+
+    prohibited_rows = []
+    for item in prohibited_collections:
+        prohibited_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(item)}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="student-data-minimization-title">
+  <div class="section-heading">
+    <p class="eyebrow">Student Data Minimization Plan</p>
+    <h2 id="student-data-minimization-title">{_text(packet["framework_title"])}</h2>
+    <div class="badge-row">
+      {_badge(packet["minimization_status"])}
+      {_badge(packet["release_state"])}
+      {_badge(packet["collection_strategy"])}
+    </div>
+    <p>{_text(packet["purpose_limitation"])}</p>
+    <p class="note">{_text(packet["storage_limitation"])}</p>
+    <p class="note">{_text(packet["access_limitation"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Default Collections</h3>
+      <div class="records">{''.join(default_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Conditional Collections</h3>
+      <div class="records">{''.join(conditional_rows)}</div>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Prohibited Collections</h3>
+      <div class="records">{''.join(prohibited_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Retention Controls</h3>
+      <div class="records">{''.join(retention_rows)}</div>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Teacher Controls</h3>
+      <div class="records">{''.join(teacher_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Pilot Questions</h3>
+      <div class="records">{''.join(question_rows)}</div>
+      <p class="note">{_text(packet["readiness_summary"])}</p>
+    </article>
+  </div>
+  <article class="panel">
+    <h3>Privacy Alignment</h3>
+    <p><strong>No PII default:</strong> {_text(privacy_alignment["no_pii_default"])}</p>
+    <p><strong>Teacher final authority:</strong> {_text(privacy_alignment["teacher_final_authority"])}</p>
+    <p><strong>Retention posture:</strong> {_text(privacy_alignment["retention_posture"])}</p>
+  </article>
 </section>"""
 
 
