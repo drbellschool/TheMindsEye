@@ -284,5 +284,4 @@ If an AI agent begins with generic gameplay, multiplayer, or broad platform feat
 
 The next remaining agent work should include:
 
-- `BUILDING_INFERENCE_RULES.md`;
 - and `HQIM_FRAMEWORK.md`.

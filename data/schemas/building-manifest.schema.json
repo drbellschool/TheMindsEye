@@ -103,6 +103,9 @@
             "uniqueItems": true,
             "items": { "type": "string", "minLength": 1, "pattern": "^suggestion_[a-z0-9_]+$" }
           },
+          "review_record_id": { "type": "string", "minLength": 1, "pattern": "^review_[a-z0-9_]+$" },
+          "sheet_id": { "type": "string", "minLength": 1, "pattern": "^sheet_[a-z0-9_]+$" },
+          "sheet_number": { "type": "integer", "minimum": 1 },
           "anchor_status": {
             "type": "string",
             "enum": ["placeholder_location_seed", "reviewed_location_anchor", "reviewed_footprint_anchor"]
@@ -158,6 +161,21 @@
             },
             "then": {
               "properties": {
+                "source_ids": { "minItems": 1 }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["identity_status"],
+              "properties": {
+                "identity_status": { "enum": ["reviewed", "approved"] }
+              }
+            },
+            "then": {
+              "required": ["review_record_id", "sheet_id", "sheet_number"],
+              "properties": {
+                "supporting_claim_ids": { "minItems": 1 },
                 "source_ids": { "minItems": 1 }
               }
             }

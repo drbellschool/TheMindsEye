@@ -34,5 +34,29 @@
     "reasoning_note": "Verified from LOC item sanborn08781_001 metadata: created/published by Sanborn Map Company in Oct. 1885 and described as 5 sheets.",
     "student_visible": true,
     "teacher_visible": true
+  },
+  {
+    "claim_id": "claim_texarkana_1885_004",
+    "claim_text": "The reviewed Sanborn sheet 3 derivative directly labels a downtown building as \"A.S. Blythe. Wagon Yard & Livery.\"",
+    "claim_type": "verified_fact",
+    "confidence": "high",
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
+    "related_location_ids": ["loc_texarkana_1885_003"],
+    "related_entity_ids": [],
+    "reasoning_note": "Directly observed in review_texarkana_1885_sanborn_003 within the committed Sanborn sheet review manifest. Exact parcel geometry remains deferred.",
+    "student_visible": true,
+    "teacher_visible": true
+  },
+  {
+    "claim_id": "claim_texarkana_1885_005",
+    "claim_text": "The reviewed Sanborn sheet 5 derivative directly labels an industrial building as \"The Arkansaw Cotton Seed Oil Mill.\"",
+    "claim_type": "verified_fact",
+    "confidence": "high",
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
+    "related_location_ids": ["loc_texarkana_1885_004"],
+    "related_entity_ids": [],
+    "reasoning_note": "Directly observed in review_texarkana_1885_sanborn_005 within the committed Sanborn sheet review manifest. Broader tract extraction and stitched placement remain deferred.",
+    "student_visible": true,
+    "teacher_visible": true
   }
 ]

@@ -29,6 +29,7 @@ Each building record should identify:
 - `source_ids`
 - `supporting_claim_ids`
 - `suggestion_ids`
+- reviewed sheet anchors when available
 - `anchor_status`
 - `existence_status`
 - `identity_status`
@@ -135,6 +136,6 @@ The building model is the intermediate layer that allows:
 The current repo implementation seeds a small Texarkana building manifest with:
 
 - placeholder location anchors;
+- a tiny reviewed-building subset tied to direct Sanborn labels;
 - generic-art fallback allowed;
-- no reviewed building identities yet;
 - and linked review suggestions kept separate from published facts.

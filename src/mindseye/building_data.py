@@ -28,6 +28,9 @@ class BuildingRecord:
     source_ids: tuple[str, ...]
     supporting_claim_ids: tuple[str, ...]
     suggestion_ids: tuple[str, ...]
+    review_record_id: str | None
+    sheet_id: str | None
+    sheet_number: int | None
     anchor_status: str
     existence_status: str
     identity_status: str
@@ -52,6 +55,9 @@ class BuildingRecord:
                 raw, "supporting_claim_ids", "building record", allow_empty=True
             ),
             suggestion_ids=require_text_tuple(raw, "suggestion_ids", "building record", allow_empty=True),
+            review_record_id=optional_text(raw, "review_record_id"),
+            sheet_id=optional_text(raw, "sheet_id"),
+            sheet_number=optional_int(raw, "sheet_number"),
             anchor_status=require_text(raw, "anchor_status", "building record"),
             existence_status=require_text(raw, "existence_status", "building record"),
             identity_status=require_text(raw, "identity_status", "building record"),
@@ -258,6 +264,9 @@ def assert_building_manifest_links(
         if source_id not in package.source_ids:
             raise MindseyeDataError(f"building manifest references missing source: {source_id}")
 
+    reviews_by_id = {
+        review.review_record_id: review for review in sheet_review_manifest.reviews
+    }
     seen_building_ids: set[str] = set()
     for building in manifest.buildings:
         if building.building_id in seen_building_ids:
@@ -288,9 +297,41 @@ def assert_building_manifest_links(
             raise MindseyeDataError(
                 f"building {building.building_id} needs reviewed_label once identity is reviewed"
             )
+        if building.identity_status in {"reviewed", "approved"} and building.review_record_id is None:
+            raise MindseyeDataError(
+                f"building {building.building_id} needs review_record_id once identity is reviewed"
+            )
+        if building.identity_status in {"reviewed", "approved"} and not building.supporting_claim_ids:
+            raise MindseyeDataError(
+                f"building {building.building_id} needs supporting_claim_ids once identity is reviewed"
+            )
         if building.default_render_mode == "reviewed_art_only" and building.visual_detail_status == "illustrative":
             raise MindseyeDataError(
                 f"building {building.building_id} cannot require reviewed art with illustrative detail only"
+            )
+        if building.review_record_id is not None:
+            review = reviews_by_id.get(building.review_record_id)
+            if review is None:
+                raise MindseyeDataError(
+                    f"building {building.building_id} references unknown review_record_id: {building.review_record_id}"
+                )
+            if building.sheet_id is None or building.sheet_number is None:
+                raise MindseyeDataError(
+                    f"building {building.building_id} needs sheet_id and sheet_number when review_record_id is set"
+                )
+            if building.sheet_id != review.sheet_id:
+                raise MindseyeDataError(f"building {building.building_id} sheet_id mismatch")
+            if building.sheet_number != review.sheet_number:
+                raise MindseyeDataError(f"building {building.building_id} sheet_number mismatch")
+            if building.map_id != review.map_id:
+                raise MindseyeDataError(f"building {building.building_id} map_id does not match review record")
+            if review.source_id not in building.source_ids:
+                raise MindseyeDataError(
+                    f"building {building.building_id} must include reviewed sheet source_id"
+                )
+        elif building.sheet_id is not None or building.sheet_number is not None:
+            raise MindseyeDataError(
+                f"building {building.building_id} cannot set sheet references without review_record_id"
             )
 
 
@@ -407,3 +448,21 @@ def require_text_mapping(raw: dict[str, Any], key: str, label: str) -> dict[str,
             raise MindseyeDataError(f"{label} contains invalid mapping value: {key}")
         result[map_key] = map_value
     return result
+
+
+def optional_text(raw: dict[str, Any], key: str) -> str | None:
+    value = raw.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise MindseyeDataError(f"optional field must be non-empty text when present: {key}")
+    return value
+
+
+def optional_int(raw: dict[str, Any], key: str) -> int | None:
+    value = raw.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise MindseyeDataError(f"optional field must be positive integer when present: {key}")
+    return value

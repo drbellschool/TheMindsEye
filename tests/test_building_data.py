@@ -28,11 +28,11 @@ class BuildingDataTests(unittest.TestCase):
         buildings_by_id = {building.building_id: building for building in manifest.buildings}
 
         self.assertEqual(manifest.building_manifest_id, "building_texarkana_1885_manifest")
-        self.assertEqual(manifest.record_count, 2)
-        self.assertEqual(manifest.location_extraction_status, "deferred")
-        self.assertEqual(manifest.building_identity_status, "contract_seed_only")
+        self.assertEqual(manifest.record_count, 4)
+        self.assertEqual(manifest.location_extraction_status, "reviewed_subset_available")
+        self.assertEqual(manifest.building_identity_status, "reviewed_subset_available")
         self.assertEqual(manifest.building_art_status, "generic_fallback_only")
-        self.assertIn("source-based inference", manifest.claim_boundary["source_based_inference"])
+        self.assertIn("reviewed subset", manifest.claim_boundary["verified_fact"])
 
         first_building = buildings_by_id["building_texarkana_1885_001"]
         self.assertEqual(first_building.location_id, "loc_texarkana_1885_001")
@@ -44,6 +44,19 @@ class BuildingDataTests(unittest.TestCase):
         self.assertTrue(first_building.student_visible)
         self.assertTrue(first_building.teacher_visible)
         self.assertEqual(first_building.suggestion_ids, ("suggestion_texarkana_1885_001",))
+        self.assertIsNone(first_building.review_record_id)
+
+        reviewed_building = buildings_by_id["building_texarkana_1885_003"]
+        self.assertEqual(reviewed_building.location_id, "loc_texarkana_1885_003")
+        self.assertEqual(reviewed_building.identity_status, "reviewed")
+        self.assertEqual(reviewed_building.identity_basis, "verified_fact")
+        self.assertEqual(reviewed_building.review_record_id, "review_texarkana_1885_sanborn_003")
+        self.assertEqual(reviewed_building.sheet_id, "sheet_texarkana_1885_sanborn_003")
+        self.assertEqual(reviewed_building.sheet_number, 3)
+        self.assertEqual(reviewed_building.reviewed_label, "A.S. Blythe. Wagon Yard & Livery.")
+        self.assertEqual(reviewed_building.historical_function, "Wagon Yard & Livery")
+        self.assertEqual(reviewed_building.visual_detail_status, "inferred")
+        self.assertEqual(reviewed_building.supporting_claim_ids, ("claim_texarkana_1885_004",))
 
     def test_loads_verification_suggestion_manifest(self):
         building_manifest = load_building_manifest(ROOT, "texarkana")
@@ -108,6 +121,16 @@ class BuildingDataTests(unittest.TestCase):
 
             with self.assertRaisesRegex(MindseyeDataError, "suggestion_ids do not match"):
                 load_verification_suggestion_manifest(repo_root, "texarkana")
+
+    def test_rejects_reviewed_building_without_review_anchor(self):
+        with copied_repo() as repo_root:
+            mutate_json(
+                repo_root / "data" / "towns" / "texarkana" / "building_manifest.json",
+                lambda manifest: manifest["buildings"][2].pop("review_record_id"),
+            )
+
+            with self.assertRaisesRegex(MindseyeDataError, "review_record_id"):
+                load_building_manifest(repo_root, "texarkana")
 
 
 @contextmanager

@@ -347,6 +347,9 @@ def _building_manifest_summary(manifest: BuildingManifest) -> dict[str, object]:
                 "source_ids": list(building.source_ids),
                 "supporting_claim_ids": list(building.supporting_claim_ids),
                 "suggestion_ids": list(building.suggestion_ids),
+                "review_record_id": building.review_record_id,
+                "sheet_id": building.sheet_id,
+                "sheet_number": building.sheet_number,
                 "anchor_status": building.anchor_status,
                 "existence_status": building.existence_status,
                 "identity_status": building.identity_status,
@@ -707,6 +710,9 @@ def _building_manifest_section(raw_manifest: object) -> str:
     for raw_building in buildings:
         building = _expect_dict(raw_building)
         reviewed_label = _text(building["reviewed_label"]) if building["reviewed_label"] else "None"
+        review_record_id = _text(building["review_record_id"]) if building["review_record_id"] else "None"
+        sheet_id = _text(building["sheet_id"]) if building["sheet_id"] else "None"
+        sheet_number = _text(building["sheet_number"]) if building["sheet_number"] is not None else "None"
         building_rows.append(
             f"""
 <article class="record">
@@ -723,6 +729,8 @@ def _building_manifest_section(raw_manifest: object) -> str:
   <p><strong>Identity status:</strong> {_text(building["identity_status"])}</p>
   <p><strong>Visual detail status:</strong> {_text(building["visual_detail_status"])}</p>
   <p><strong>Reviewed label:</strong> {reviewed_label}</p>
+  <p><strong>Review record:</strong> {review_record_id}</p>
+  <p><strong>Reviewed sheet:</strong> {sheet_id} / {sheet_number}</p>
   <p><strong>Sources:</strong> {_joined_ids(building["source_ids"])}</p>
   <p><strong>Supporting claims:</strong> {_joined_ids(building["supporting_claim_ids"])}</p>
   <p><strong>Suggestion IDs:</strong> {_joined_ids(building["suggestion_ids"])}</p>

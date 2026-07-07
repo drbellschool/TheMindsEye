@@ -38,11 +38,16 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["sanborn_manifest"]["sheet_review"]["review_count"], 5)
         self.assertEqual(model["sanborn_manifest"]["stitching_prep"]["anchor_sheet_id"], "sheet_texarkana_1885_sanborn_003")
         self.assertEqual(model["sanborn_manifest"]["stitching_prep"]["link_count"], 3)
-        self.assertEqual(model["building_manifest"]["record_count"], 2)
+        self.assertEqual(model["building_manifest"]["record_count"], 4)
+        self.assertEqual(model["building_manifest"]["building_identity_status"], "reviewed_subset_available")
         self.assertEqual(model["building_manifest"]["building_art_status"], "generic_fallback_only")
         self.assertEqual(
             model["building_manifest"]["verification_suggestions"]["candidate_count"],
             2,
+        )
+        self.assertEqual(
+            model["building_manifest"]["buildings"][2]["review_record_id"],
+            "review_texarkana_1885_sanborn_003",
         )
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
@@ -91,6 +96,9 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Building Review Contract", html)
         self.assertIn("Unknown Building", html)
         self.assertIn("generic_art_allowed", html)
+        self.assertIn("A.S. Blythe. Wagon Yard &amp; Livery.", html)
+        self.assertIn("review_texarkana_1885_sanborn_003", html)
+        self.assertIn("sheet_texarkana_1885_sanborn_005 / 5", html)
         self.assertIn("Verification Suggestions", html)
         self.assertIn("Potential livery stable match from later archival hints", html)
         self.assertIn("insufficient_evidence", html)

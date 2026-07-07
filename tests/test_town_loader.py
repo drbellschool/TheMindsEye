@@ -51,7 +51,12 @@ class TownLoaderTests(unittest.TestCase):
         )
         self.assertEqual(
             [location.location_id for location in package.locations],
-            ["loc_texarkana_1885_001", "loc_texarkana_1885_002"],
+            [
+                "loc_texarkana_1885_001",
+                "loc_texarkana_1885_002",
+                "loc_texarkana_1885_003",
+                "loc_texarkana_1885_004",
+            ],
         )
 
     def test_sanborn_source_metadata_is_verified(self):
@@ -80,6 +85,21 @@ class TownLoaderTests(unittest.TestCase):
 
         self.assertEqual(confidence_by_claim_id["claim_texarkana_1885_001"], Confidence.LOW)
         self.assertEqual(confidence_by_claim_id["claim_texarkana_1885_002"], Confidence.FICTIONAL)
+        self.assertEqual(confidence_by_claim_id["claim_texarkana_1885_004"], Confidence.HIGH)
+
+    def test_reviewed_building_sample_claims_and_locations_are_loaded(self):
+        package = load_town_package(ROOT, "texarkana")
+        locations_by_id = {location.location_id: location for location in package.locations}
+        claims_by_id = {claim.claim_id: claim for claim in package.claims}
+
+        reviewed_location = locations_by_id["loc_texarkana_1885_003"]
+        self.assertEqual(reviewed_location.label, "A.S. Blythe. Wagon Yard & Livery.")
+        self.assertEqual(reviewed_location.certainty, "verified")
+
+        reviewed_claim = claims_by_id["claim_texarkana_1885_005"]
+        self.assertEqual(reviewed_claim.claim_type, ClaimType.VERIFIED_FACT)
+        self.assertEqual(reviewed_claim.confidence, Confidence.HIGH)
+        self.assertEqual(reviewed_claim.related_location_ids, ("loc_texarkana_1885_004",))
 
     def test_raw_source_records_are_preserved_separately(self):
         package = load_town_package(ROOT, "texarkana")

@@ -15,14 +15,14 @@ Last updated: 2026-07-07
 Overall MVP progress:
 
 ```text
-[##################..] 93%
+[###################.] 94%
 ```
 
 Current active gates:
 
 1. Keep issue #4 aligned whenever progress changes.
 2. Keep Sanborn control-point capture, georeferencing, location extraction, and claim generation deferred after stitching prep.
-3. Keep building inference rules and first reviewed building samples narrowly scoped before promoting identities, artwork, or claims at scale.
+3. Keep the reviewed-building subset narrowly scoped and avoid broad extraction, bespoke art, or dashboard workflow sprawl before instructional framework work lands.
 
 Open tracking pages:
 
@@ -142,6 +142,7 @@ available on that branch.
 - [x] Add initial sheet-level review notes without stitching or claim generation.
 - [x] Add an initial stitching-prep manifest and specification without georeferencing or claim generation.
 - [x] Add a building-anchor manifest and verification-suggestion queue without extracted geometry or auto-published identities.
+- [x] Add building inference rules and a first tiny reviewed-building subset tied to committed Sanborn review records.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -192,7 +193,7 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[########............] 40%
+[#########...........] 45%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
@@ -200,6 +201,7 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Teacher-facing classroom readiness report.
 - [x] Show classroom readiness report in the local web view.
 - [x] Building review contract and verification suggestion queue.
+- [x] Reviewed-building subset and inference boundary.
 - [ ] Student mission flow.
 - [ ] Teacher review flow.
 - [ ] Standards alignment workflow.
@@ -220,20 +222,18 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to define the building inference rules and
-capture a first tiny reviewed-building sample for Texarkana 1885 without
-pretending that broad location extraction or stitched geometry is already
-complete.
+The next narrow unblocked task is to define the HQIM and standards-alignment
+framework that will govern future mission generation, teacher review, and
+student evidence before broader gameplay or dashboard expansion.
 
 That next task should:
 
-- keep broad location extraction and claim generation deferred;
-- avoid implying stitched geometry is already verified;
-- define how evidence can upgrade a building from unknown to suggested,
-  reviewed, or approved;
-- use reviewed sheet observations before any larger inferred interior or art
-  expansion;
-- preserve the student-safe generic-building fallback when identity remains
-  unknown;
-- and stay aligned with the building manifest and verification queue added on
-  this branch.
+- keep broad location extraction, georeferencing, and claim generation
+  deferred;
+- preserve the historical boundary between verified fact, source-based
+  inference, and fictional gameplay;
+- define how TEKS, HQIM expectations, and teacher authority constrain mission
+  generation;
+- stay compatible with the existing mission seed and teacher-note outputs;
+- and avoid drifting into generic gameplay or dashboard polish before the
+  instructional framework is explicit.

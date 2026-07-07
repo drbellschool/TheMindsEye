@@ -18,5 +18,25 @@
     "source_ids": ["source_texarkana_1885_sanborn_loc"],
     "certainty": "placeholder",
     "notes": "Stable placeholder location for validating classroom mission flow. Building identity and exact sheet position still require Sanborn sheet extraction."
+  },
+  {
+    "location_id": "loc_texarkana_1885_003",
+    "map_id": "map_texarkana_1885_sanborn_loc",
+    "label": "A.S. Blythe. Wagon Yard & Livery.",
+    "street": "Unknown",
+    "location_type": "building",
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
+    "certainty": "verified",
+    "notes": "Reviewed sample location anchored to Sanborn sheet 3 visual review. The exact parcel geometry and stitched coordinates remain deferred."
+  },
+  {
+    "location_id": "loc_texarkana_1885_004",
+    "map_id": "map_texarkana_1885_sanborn_loc",
+    "label": "The Arkansaw Cotton Seed Oil Mill.",
+    "street": "Unknown",
+    "location_type": "building",
+    "source_ids": ["source_texarkana_1885_sanborn_loc"],
+    "certainty": "verified",
+    "notes": "Reviewed sample location anchored to Sanborn sheet 5 visual review. The label is directly observed, but exact parcel geometry and broader industrial tract extraction remain deferred."
   }
 ]
