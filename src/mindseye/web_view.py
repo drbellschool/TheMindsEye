@@ -15,6 +15,7 @@ from .instructional_alignment import (
 )
 from .mission_seed import build_mission_seed_packet
 from .map_rendering import build_map_rendering_packet
+from .accessibility import build_accessibility_support_packet
 from .assessment_evidence import build_assessment_evidence_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
@@ -59,6 +60,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "teacher_interface": _optional_teacher_interface_summary(package),
         "student_mission": _optional_student_mission_summary(package),
         "assessment_evidence": _optional_assessment_evidence_summary(package),
+        "accessibility": _optional_accessibility_summary(package),
     }
 
 
@@ -99,6 +101,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _teacher_interface_section(model["teacher_interface"]),
             _student_mission_section(model["student_mission"]),
             _assessment_evidence_section(model["assessment_evidence"]),
+            _accessibility_section(model["accessibility"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -324,6 +327,16 @@ def _optional_student_mission_summary(package: TownPackage) -> dict[str, object]
 def _optional_assessment_evidence_summary(package: TownPackage) -> dict[str, object] | None:
     try:
         packet = build_assessment_evidence_packet(package)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_accessibility_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        packet = build_accessibility_support_packet(package)
     except MindseyeDataError:
         return None
     if packet["town_package_id"] != package.package_id:
@@ -1660,6 +1673,87 @@ def _assessment_evidence_section(raw_packet: object) -> str:
     <h3>Location Evidence</h3>
     <div class="records">{''.join(location_rows)}</div>
   </article>
+</section>"""
+
+
+def _accessibility_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    support_categories = _expect_list(packet["support_categories"])
+    teacher_notes = _expect_list(packet["teacher_notes"])
+    scaffold_notes = _expect_list(packet["mission_scaffold_notes"])
+    boundary = _expect_dict(packet["support_boundary"])
+
+    support_rows = []
+    for raw_support in support_categories:
+        support = _expect_dict(raw_support)
+        support_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(support["label"])}</h4>
+    <div class="badge-row">
+      {_badge(support["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(support["note"])}</p>
+</article>"""
+        )
+
+    note_rows = []
+    for note in teacher_notes:
+        note_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(note)}</p>
+</article>"""
+        )
+
+    scaffold_rows = []
+    for note in scaffold_notes:
+        scaffold_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(note)}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="accessibility-title">
+  <div class="section-heading">
+    <p class="eyebrow">Accessibility Supports</p>
+    <h2 id="accessibility-title">{_text(packet["framework_title"])}</h2>
+    <div class="badge-row">
+      {_badge(packet["accessibility_status"])}
+      {_badge(packet["release_state"])}
+    </div>
+    <p>{_text(packet["embedded_support_rule"])}</p>
+    <p class="note">{_text(packet["release_summary"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Support Categories</h3>
+      <div class="records">{''.join(support_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Boundary</h3>
+      <p><strong>Teacher authority:</strong> {_text(boundary["teacher_authority"])}</p>
+      <p><strong>Student profile inference:</strong> {_text(boundary["student_profile_inference"])}</p>
+      <p><strong>Dynamic scoring:</strong> {_text(boundary["dynamic_scoring"])}</p>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Teacher Notes</h3>
+      <div class="records">{''.join(note_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Embedded Scaffolds</h3>
+      <div class="records">{''.join(scaffold_rows)}</div>
+    </article>
+  </div>
 </section>"""
 
 

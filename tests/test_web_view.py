@@ -65,6 +65,8 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["student_mission"]["release_state"], "blocked")
         self.assertEqual(model["assessment_evidence"]["framework_title"], "Assessment Evidence Workflow")
         self.assertEqual(model["assessment_evidence"]["assessment_status"], "not_scored")
+        self.assertEqual(model["accessibility"]["framework_title"], "Accessibility Supports")
+        self.assertEqual(model["accessibility"]["accessibility_status"], "seeded")
         self.assertIn("telegram_review", [module["module_id"] for module in model["teacher_interface"]["portal_modules"]])
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
@@ -145,6 +147,9 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Assessment Evidence", html)
         self.assertIn("Mastery Scale", html)
         self.assertIn("Teacher Override", html)
+        self.assertIn("Accessibility Supports", html)
+        self.assertIn("Support Categories", html)
+        self.assertIn("Embedded Scaffolds", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")
