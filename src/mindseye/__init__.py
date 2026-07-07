@@ -8,6 +8,14 @@ is already implemented.
 from .game_loop import MissionRun
 from .map_engine import MapEngine
 from .mission_seed import build_mission_seed_packet, build_teacher_review_packet
+from .building_data import (
+    BuildingManifest,
+    BuildingRecord,
+    VerificationSuggestionManifest,
+    VerificationSuggestionRecord,
+    load_building_manifest,
+    load_verification_suggestion_manifest,
+)
 from .models import (
     ClaimRecord,
     ClaimType,
@@ -28,12 +36,16 @@ from .sanborn import (
     SanbornSheetReviewManifest,
     SanbornSheetReviewRecord,
     SanbornSheetRecord,
+    SanbornStitchingLinkRecord,
+    SanbornStitchingManifest,
+    SanbornStitchingSheetPlan,
     build_sanborn_image_intake_report,
     build_sanborn_image_metadata_manifest,
     load_sanborn_asset_manifest,
     load_sanborn_image_metadata_manifest,
     load_sanborn_sheet_manifest,
     load_sanborn_sheet_review_manifest,
+    load_sanborn_stitching_manifest,
 )
 from .town_loader import load_town_package
 from .readiness import build_classroom_readiness_report
@@ -43,6 +55,8 @@ __all__ = [
     "ClaimType",
     "Confidence",
     "MindseyeDataError",
+    "BuildingManifest",
+    "BuildingRecord",
     "SourceRecord",
     "LocationRecord",
     "ClaimRecord",
@@ -56,6 +70,11 @@ __all__ = [
     "SanbornSheetReviewManifest",
     "SanbornSheetReviewRecord",
     "SanbornSheetRecord",
+    "SanbornStitchingLinkRecord",
+    "SanbornStitchingManifest",
+    "SanbornStitchingSheetPlan",
+    "VerificationSuggestionManifest",
+    "VerificationSuggestionRecord",
     "TownPackage",
     "MapEngine",
     "MissionRun",
@@ -65,10 +84,13 @@ __all__ = [
     "build_sanborn_image_metadata_manifest",
     "build_teacher_review_packet",
     "build_town_package_view_model",
+    "load_building_manifest",
     "load_sanborn_asset_manifest",
     "load_sanborn_image_metadata_manifest",
     "load_sanborn_sheet_manifest",
     "load_sanborn_sheet_review_manifest",
+    "load_sanborn_stitching_manifest",
     "load_town_package",
+    "load_verification_suggestion_manifest",
     "render_town_package_page",
 ]

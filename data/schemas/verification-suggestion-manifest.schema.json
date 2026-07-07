@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-suggestion-manifest.schema.json",
+  "title": "The Mind's Eye Verification Suggestion Manifest",
+  "type": "object",
+  "required": [
+    "suggestion_manifest_id",
+    "manifest_type",
+    "town_package_id",
+    "map_id",
+    "building_manifest_id",
+    "source_ids",
+    "title",
+    "review_queue_status",
+    "promotion_rule",
+    "claim_boundary",
+    "candidate_count",
+    "suggestions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "suggestion_manifest_id": { "type": "string", "minLength": 1, "pattern": "^verification_[a-z0-9_]+$" },
+    "manifest_type": { "type": "string", "const": "town_verification_suggestion_manifest" },
+    "town_package_id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_]+$" },
+    "map_id": { "type": "string", "minLength": 1, "pattern": "^map_[a-z0-9_]+$" },
+    "building_manifest_id": { "type": "string", "minLength": 1, "pattern": "^building_[a-z0-9_]+$" },
+    "source_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "review_queue_status": {
+      "type": "string",
+      "enum": ["seed_only", "active_review", "partially_resolved"]
+    },
+    "promotion_rule": { "type": "string", "minLength": 1 },
+    "claim_boundary": {
+      "type": "object",
+      "required": ["verified_fact", "source_based_inference", "fictional_gameplay"],
+      "additionalProperties": false,
+      "properties": {
+        "verified_fact": { "type": "string", "minLength": 1 },
+        "source_based_inference": { "type": "string", "minLength": 1 },
+        "fictional_gameplay": { "type": "string", "minLength": 1 }
+      }
+    },
+    "candidate_count": { "type": "integer", "minimum": 1 },
+    "suggestions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "suggestion_id",
+          "target_building_id",
+          "location_id",
+          "suggestion_type",
+          "status",
+          "candidate_label",
+          "source_ids",
+          "suggestion_origin",
+          "confidence",
+          "historical_basis",
+          "auto_publish",
+          "student_visible",
+          "review_notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "suggestion_id": { "type": "string", "minLength": 1, "pattern": "^suggestion_[a-z0-9_]+$" },
+          "target_building_id": { "type": "string", "minLength": 1, "pattern": "^building_[a-z0-9_]+$" },
+          "location_id": { "type": "string", "minLength": 1, "pattern": "^loc_[a-z0-9_]+$" },
+          "suggestion_type": {
+            "type": "string",
+            "enum": ["building_identity", "business_identity", "person_place_link", "street_place_link"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["suggested", "under_review", "confirmed", "rejected", "insufficient_evidence"]
+          },
+          "candidate_label": { "type": "string", "minLength": 1 },
+          "source_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+          },
+          "suggestion_origin": { "type": "string", "minLength": 1 },
+          "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+          "historical_basis": { "type": "string", "const": "source_based_inference" },
+          "auto_publish": { "type": "boolean", "const": false },
+          "student_visible": { "type": "boolean", "const": false },
+          "review_notes": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

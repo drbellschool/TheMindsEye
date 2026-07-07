@@ -10,19 +10,19 @@ changes project status.
 
 ## Current Snapshot
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 Overall MVP progress:
 
 ```text
-[##################..] 91%
+[##################..] 93%
 ```
 
 Current active gates:
 
-1. Complete issue #37: Add initial Sanborn sheet review notes for Texarkana 1885.
-2. Keep issue #4 aligned whenever progress changes.
-3. Keep Sanborn stitching, georeferencing, location extraction, and claim generation deferred after sheet review.
+1. Keep issue #4 aligned whenever progress changes.
+2. Keep Sanborn control-point capture, georeferencing, location extraction, and claim generation deferred after stitching prep.
+3. Keep building inference rules and first reviewed building samples narrowly scoped before promoting identities, artwork, or claims at scale.
 
 Open tracking pages:
 
@@ -140,6 +140,8 @@ available on that branch.
 - [x] Show current Sanborn image intake status and missing files in the local web view.
 - [x] Capture validated image metadata for downloaded Sanborn sheet derivatives.
 - [x] Add initial sheet-level review notes without stitching or claim generation.
+- [x] Add an initial stitching-prep manifest and specification without georeferencing or claim generation.
+- [x] Add a building-anchor manifest and verification-suggestion queue without extracted geometry or auto-published identities.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -185,17 +187,19 @@ available on that branch.
 - [x] Show claims with provenance labels.
 - [x] Show mission seed links.
 - [x] Show teacher-facing source notes.
+- [x] Show building anchor contract and verification suggestion queue in the local web view.
 
 ### Phase 6: Later Classroom Product
 
 ```text
-[#######.............] 35%
+[########............] 40%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
 
 - [x] Teacher-facing classroom readiness report.
 - [x] Show classroom readiness report in the local web view.
+- [x] Building review contract and verification suggestion queue.
 - [ ] Student mission flow.
 - [ ] Teacher review flow.
 - [ ] Standards alignment workflow.
@@ -216,11 +220,20 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #37:
+The next narrow unblocked task is to define the building inference rules and
+capture a first tiny reviewed-building sample for Texarkana 1885 without
+pretending that broad location extraction or stitched geometry is already
+complete.
 
-```text
-Add initial Sanborn sheet review notes for Texarkana 1885.
-```
+That next task should:
 
-After issue #37 merges, agents should create or continue the next narrow
-Sanborn extraction-prep task without georeferencing or claim generation yet.
+- keep broad location extraction and claim generation deferred;
+- avoid implying stitched geometry is already verified;
+- define how evidence can upgrade a building from unknown to suggested,
+  reviewed, or approved;
+- use reviewed sheet observations before any larger inferred interior or art
+  expansion;
+- preserve the student-safe generic-building fallback when identity remains
+  unknown;
+- and stay aligned with the building manifest and verification queue added on
+  this branch.

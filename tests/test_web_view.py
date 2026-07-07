@@ -36,6 +36,14 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["sanborn_manifest"]["image_intake"]["expected_file_count"], len(expected_files))
         self.assertEqual(model["sanborn_manifest"]["image_intake"]["missing_sheet_ids"], missing_sheet_ids)
         self.assertEqual(model["sanborn_manifest"]["sheet_review"]["review_count"], 5)
+        self.assertEqual(model["sanborn_manifest"]["stitching_prep"]["anchor_sheet_id"], "sheet_texarkana_1885_sanborn_003")
+        self.assertEqual(model["sanborn_manifest"]["stitching_prep"]["link_count"], 3)
+        self.assertEqual(model["building_manifest"]["record_count"], 2)
+        self.assertEqual(model["building_manifest"]["building_art_status"], "generic_fallback_only")
+        self.assertEqual(
+            model["building_manifest"]["verification_suggestions"]["candidate_count"],
+            2,
+        )
         self.assertEqual(
             model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
             "sheet_texarkana_1885_sanborn_001",
@@ -76,6 +84,16 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("5 review notes", html)
         self.assertIn("Kizer Lumber Co's Planning Mill", html)
         self.assertIn("The Arkansaw Cotton Seed Oil Mill.", html)
+        self.assertIn("Sanborn Stitching Prep", html)
+        self.assertIn("prep_only", html)
+        self.assertIn("sheet_texarkana_1885_sanborn_003", html)
+        self.assertIn("cross_sheet_reference", html)
+        self.assertIn("Building Review Contract", html)
+        self.assertIn("Unknown Building", html)
+        self.assertIn("generic_art_allowed", html)
+        self.assertIn("Verification Suggestions", html)
+        self.assertIn("Potential livery stable match from later archival hints", html)
+        self.assertIn("insufficient_evidence", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")

@@ -402,6 +402,126 @@ class SanbornSheetReviewManifest:
         )
 
 
+@dataclass(frozen=True)
+class SanbornStitchingSheetPlan:
+    sheet_id: str
+    sheet_number: int
+    sheet_role: str
+    stitch_priority: str
+    stitch_readiness: str
+    candidate_neighbor_sheet_ids: tuple[str, ...]
+    blocking_tasks: tuple[str, ...]
+    notes: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornStitchingSheetPlan":
+        return cls(
+            sheet_id=require_text(raw, "sheet_id", "sanborn stitching sheet plan"),
+            sheet_number=require_int(raw, "sheet_number", "sanborn stitching sheet plan"),
+            sheet_role=require_text(raw, "sheet_role", "sanborn stitching sheet plan"),
+            stitch_priority=require_text(raw, "stitch_priority", "sanborn stitching sheet plan"),
+            stitch_readiness=require_text(raw, "stitch_readiness", "sanborn stitching sheet plan"),
+            candidate_neighbor_sheet_ids=require_text_tuple(
+                raw, "candidate_neighbor_sheet_ids", "sanborn stitching sheet plan", allow_empty=True
+            ),
+            blocking_tasks=require_text_tuple(raw, "blocking_tasks", "sanborn stitching sheet plan"),
+            notes=str(raw.get("notes", "")),
+        )
+
+
+@dataclass(frozen=True)
+class SanbornStitchingLinkRecord:
+    from_sheet_id: str
+    to_sheet_id: str
+    link_type: str
+    alignment_status: str
+    evidence_basis: str
+    notes: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornStitchingLinkRecord":
+        return cls(
+            from_sheet_id=require_text(raw, "from_sheet_id", "sanborn stitching link"),
+            to_sheet_id=require_text(raw, "to_sheet_id", "sanborn stitching link"),
+            link_type=require_text(raw, "link_type", "sanborn stitching link"),
+            alignment_status=require_text(raw, "alignment_status", "sanborn stitching link"),
+            evidence_basis=require_text(raw, "evidence_basis", "sanborn stitching link"),
+            notes=str(raw.get("notes", "")),
+        )
+
+
+@dataclass(frozen=True)
+class SanbornStitchingManifest:
+    stitching_manifest_id: str
+    manifest_type: str
+    town_package_id: str
+    map_id: str
+    source_id: str
+    sheet_manifest_id: str
+    asset_manifest_id: str
+    image_metadata_manifest_id: str
+    sheet_review_manifest_id: str
+    title: str
+    preparation_date: str
+    stitching_scope: str
+    stitching_method: str
+    rights_status: str
+    origin_repository: str
+    binary_files_committed: bool
+    stitching_status: str
+    control_point_status: str
+    georeferencing_status: str
+    location_extraction_status: str
+    claim_generation_status: str
+    anchor_sheet_id: str
+    claim_boundary: dict[str, str]
+    runtime_notes: tuple[str, ...]
+    sheet_plan_count: int
+    sheet_plans: tuple[SanbornStitchingSheetPlan, ...]
+    link_count: int
+    links: tuple[SanbornStitchingLinkRecord, ...]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SanbornStitchingManifest":
+        sheet_plans = require_object_list(raw, "sheet_plans", "sanborn stitching manifest")
+        links = require_object_list(raw, "links", "sanborn stitching manifest")
+        claim_boundary = require_text_mapping(raw, "claim_boundary", "sanborn stitching manifest")
+        return cls(
+            stitching_manifest_id=require_text(raw, "stitching_manifest_id", "sanborn stitching manifest"),
+            manifest_type=require_text(raw, "manifest_type", "sanborn stitching manifest"),
+            town_package_id=require_text(raw, "town_package_id", "sanborn stitching manifest"),
+            map_id=require_text(raw, "map_id", "sanborn stitching manifest"),
+            source_id=require_text(raw, "source_id", "sanborn stitching manifest"),
+            sheet_manifest_id=require_text(raw, "sheet_manifest_id", "sanborn stitching manifest"),
+            asset_manifest_id=require_text(raw, "asset_manifest_id", "sanborn stitching manifest"),
+            image_metadata_manifest_id=require_text(
+                raw, "image_metadata_manifest_id", "sanborn stitching manifest"
+            ),
+            sheet_review_manifest_id=require_text(raw, "sheet_review_manifest_id", "sanborn stitching manifest"),
+            title=require_text(raw, "title", "sanborn stitching manifest"),
+            preparation_date=require_text(raw, "preparation_date", "sanborn stitching manifest"),
+            stitching_scope=require_text(raw, "stitching_scope", "sanborn stitching manifest"),
+            stitching_method=require_text(raw, "stitching_method", "sanborn stitching manifest"),
+            rights_status=require_text(raw, "rights_status", "sanborn stitching manifest"),
+            origin_repository=require_text(raw, "origin_repository", "sanborn stitching manifest"),
+            binary_files_committed=require_bool(raw, "binary_files_committed", "sanborn stitching manifest"),
+            stitching_status=require_text(raw, "stitching_status", "sanborn stitching manifest"),
+            control_point_status=require_text(raw, "control_point_status", "sanborn stitching manifest"),
+            georeferencing_status=require_text(raw, "georeferencing_status", "sanborn stitching manifest"),
+            location_extraction_status=require_text(
+                raw, "location_extraction_status", "sanborn stitching manifest"
+            ),
+            claim_generation_status=require_text(raw, "claim_generation_status", "sanborn stitching manifest"),
+            anchor_sheet_id=require_text(raw, "anchor_sheet_id", "sanborn stitching manifest"),
+            claim_boundary=claim_boundary,
+            runtime_notes=require_text_tuple(raw, "runtime_notes", "sanborn stitching manifest"),
+            sheet_plan_count=require_int(raw, "sheet_plan_count", "sanborn stitching manifest"),
+            sheet_plans=tuple(SanbornStitchingSheetPlan.from_dict(item) for item in sheet_plans),
+            link_count=require_int(raw, "link_count", "sanborn stitching manifest"),
+            links=tuple(SanbornStitchingLinkRecord.from_dict(item) for item in links),
+        )
+
+
 def load_sanborn_sheet_manifest(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
@@ -476,6 +596,24 @@ def load_sanborn_sheet_review_manifest(
     image_metadata_manifest = load_sanborn_image_metadata_manifest(root, town_slug)
     assert_sanborn_sheet_review_manifest_links(sheet_review_manifest, image_metadata_manifest)
     return sheet_review_manifest
+
+
+def load_sanborn_stitching_manifest(
+    repo_root: Path | None = None,
+    town_slug: str = "texarkana",
+    filename: str = "sanborn_1885_stitching_manifest.json",
+) -> SanbornStitchingManifest:
+    """Load and validate stitching-prep records without creating stitched geometry."""
+    root = repo_root_from(repo_root)
+    manifest_path = root / "data" / "towns" / town_slug / filename
+    raw_manifest = load_json(manifest_path)
+    if not isinstance(raw_manifest, dict):
+        raise MindseyeDataError("sanborn stitching manifest must be a JSON object")
+
+    stitching_manifest = SanbornStitchingManifest.from_dict(raw_manifest)
+    sheet_review_manifest = load_sanborn_sheet_review_manifest(root, town_slug)
+    assert_sanborn_stitching_manifest_links(stitching_manifest, sheet_review_manifest)
+    return stitching_manifest
 
 
 def build_sanborn_image_intake_report(
@@ -846,6 +984,102 @@ def assert_sanborn_sheet_review_manifest_links(
             raise MindseyeDataError(f"sanborn sheet review {review.review_record_id} review_status mismatch")
         if not review.notes.strip():
             raise MindseyeDataError(f"sanborn sheet review {review.review_record_id} must include notes")
+
+
+def assert_sanborn_stitching_manifest_links(
+    stitching_manifest: SanbornStitchingManifest,
+    sheet_review_manifest: SanbornSheetReviewManifest,
+) -> None:
+    if stitching_manifest.manifest_type != "loc_sanborn_stitching_manifest":
+        raise MindseyeDataError("sanborn stitching manifest has unsupported manifest_type")
+    if stitching_manifest.town_package_id != sheet_review_manifest.town_package_id:
+        raise MindseyeDataError("sanborn stitching manifest town_package_id does not match sheet review")
+    if stitching_manifest.map_id != sheet_review_manifest.map_id:
+        raise MindseyeDataError("sanborn stitching manifest map_id does not match sheet review")
+    if stitching_manifest.source_id != sheet_review_manifest.source_id:
+        raise MindseyeDataError("sanborn stitching manifest source_id does not match sheet review")
+    if stitching_manifest.sheet_manifest_id != sheet_review_manifest.sheet_manifest_id:
+        raise MindseyeDataError("sanborn stitching manifest sheet_manifest_id mismatch")
+    if stitching_manifest.asset_manifest_id != sheet_review_manifest.asset_manifest_id:
+        raise MindseyeDataError("sanborn stitching manifest asset_manifest_id mismatch")
+    if stitching_manifest.image_metadata_manifest_id != sheet_review_manifest.image_metadata_manifest_id:
+        raise MindseyeDataError("sanborn stitching manifest image_metadata_manifest_id mismatch")
+    if stitching_manifest.sheet_review_manifest_id != sheet_review_manifest.sheet_review_manifest_id:
+        raise MindseyeDataError("sanborn stitching manifest sheet_review_manifest_id mismatch")
+    if stitching_manifest.rights_status != sheet_review_manifest.rights_status:
+        raise MindseyeDataError("sanborn stitching manifest rights_status mismatch")
+    if stitching_manifest.origin_repository != sheet_review_manifest.origin_repository:
+        raise MindseyeDataError("sanborn stitching manifest origin_repository mismatch")
+    if stitching_manifest.binary_files_committed:
+        raise MindseyeDataError("sanborn stitching manifest must not commit binaries")
+    if stitching_manifest.stitching_status != "prep_only":
+        raise MindseyeDataError("sanborn stitching manifest must remain prep_only")
+    if stitching_manifest.control_point_status != "not_started":
+        raise MindseyeDataError("sanborn stitching manifest must keep control points not_started")
+    if stitching_manifest.georeferencing_status != "deferred":
+        raise MindseyeDataError("sanborn stitching manifest must defer georeferencing")
+    if stitching_manifest.location_extraction_status != "deferred":
+        raise MindseyeDataError("sanborn stitching manifest must defer location extraction")
+    if stitching_manifest.claim_generation_status != "deferred":
+        raise MindseyeDataError("sanborn stitching manifest must defer claim generation")
+    if stitching_manifest.sheet_plan_count != len(stitching_manifest.sheet_plans):
+        raise MindseyeDataError("sanborn stitching manifest sheet_plan_count does not match sheet_plans")
+    if stitching_manifest.link_count != len(stitching_manifest.links):
+        raise MindseyeDataError("sanborn stitching manifest link_count does not match links")
+
+    reviews_by_sheet_id = {review.sheet_id: review for review in sheet_review_manifest.reviews}
+    if stitching_manifest.anchor_sheet_id not in reviews_by_sheet_id:
+        raise MindseyeDataError("sanborn stitching manifest anchor_sheet_id must reference a reviewed sheet")
+    if [plan.sheet_id for plan in stitching_manifest.sheet_plans] != [
+        review.sheet_id for review in sheet_review_manifest.reviews
+    ]:
+        raise MindseyeDataError("sanborn stitching manifest must preserve reviewed sheet order")
+
+    seen_sheet_ids: set[str] = set()
+    for plan in stitching_manifest.sheet_plans:
+        if plan.sheet_id in seen_sheet_ids:
+            raise MindseyeDataError(f"duplicate sanborn stitching sheet plan: {plan.sheet_id}")
+        seen_sheet_ids.add(plan.sheet_id)
+
+        review = reviews_by_sheet_id.get(plan.sheet_id)
+        if review is None:
+            raise MindseyeDataError(f"sanborn stitching plan references unknown sheet: {plan.sheet_id}")
+        if plan.sheet_number != review.sheet_number:
+            raise MindseyeDataError(f"sanborn stitching plan {plan.sheet_id} sheet_number mismatch")
+        if plan.sheet_role != review.sheet_role:
+            raise MindseyeDataError(f"sanborn stitching plan {plan.sheet_id} sheet_role mismatch")
+        if not plan.blocking_tasks:
+            raise MindseyeDataError(f"sanborn stitching plan {plan.sheet_id} must include blocking tasks")
+        if not plan.notes.strip():
+            raise MindseyeDataError(f"sanborn stitching plan {plan.sheet_id} must include notes")
+        for neighbor_sheet_id in plan.candidate_neighbor_sheet_ids:
+            if neighbor_sheet_id == plan.sheet_id:
+                raise MindseyeDataError(f"sanborn stitching plan {plan.sheet_id} cannot neighbor itself")
+            if neighbor_sheet_id not in reviews_by_sheet_id:
+                raise MindseyeDataError(
+                    f"sanborn stitching plan {plan.sheet_id} references unknown neighbor: {neighbor_sheet_id}"
+                )
+
+    seen_links: set[tuple[str, str]] = set()
+    for link in stitching_manifest.links:
+        key = (link.from_sheet_id, link.to_sheet_id)
+        if key in seen_links:
+            raise MindseyeDataError(f"duplicate sanborn stitching link: {link.from_sheet_id}->{link.to_sheet_id}")
+        seen_links.add(key)
+        if link.from_sheet_id == link.to_sheet_id:
+            raise MindseyeDataError("sanborn stitching link cannot point to the same sheet")
+        if link.from_sheet_id not in reviews_by_sheet_id:
+            raise MindseyeDataError(f"sanborn stitching link references unknown from_sheet_id: {link.from_sheet_id}")
+        if link.to_sheet_id not in reviews_by_sheet_id:
+            raise MindseyeDataError(f"sanborn stitching link references unknown to_sheet_id: {link.to_sheet_id}")
+        if link.alignment_status != "candidate":
+            raise MindseyeDataError(
+                f"sanborn stitching link {link.from_sheet_id}->{link.to_sheet_id} must remain candidate"
+            )
+        if not link.notes.strip():
+            raise MindseyeDataError(
+                f"sanborn stitching link {link.from_sheet_id}->{link.to_sheet_id} must include notes"
+            )
 
 
 def require_int(raw: dict[str, Any], key: str, label: str) -> int:

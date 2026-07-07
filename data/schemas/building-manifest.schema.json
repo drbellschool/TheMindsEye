@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "building-manifest.schema.json",
+  "title": "The Mind's Eye Building Manifest",
+  "type": "object",
+  "required": [
+    "building_manifest_id",
+    "manifest_type",
+    "town_package_id",
+    "map_id",
+    "source_ids",
+    "sheet_review_manifest_id",
+    "stitching_manifest_id",
+    "title",
+    "review_scope",
+    "location_extraction_status",
+    "building_identity_status",
+    "building_art_status",
+    "claim_boundary",
+    "record_count",
+    "buildings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "building_manifest_id": { "type": "string", "minLength": 1, "pattern": "^building_[a-z0-9_]+$" },
+    "manifest_type": { "type": "string", "const": "town_building_manifest" },
+    "town_package_id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_]+$" },
+    "map_id": { "type": "string", "minLength": 1, "pattern": "^map_[a-z0-9_]+$" },
+    "source_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+    },
+    "sheet_review_manifest_id": { "type": "string", "minLength": 1 },
+    "stitching_manifest_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "review_scope": { "type": "string", "minLength": 1 },
+    "location_extraction_status": {
+      "type": "string",
+      "enum": ["deferred", "seed_only", "in_progress", "reviewed_subset_available"]
+    },
+    "building_identity_status": {
+      "type": "string",
+      "enum": ["contract_seed_only", "review_queue_active", "reviewed_subset_available"]
+    },
+    "building_art_status": {
+      "type": "string",
+      "enum": ["deferred", "generic_fallback_only", "reviewed_art_partial", "reviewed_art_available"]
+    },
+    "claim_boundary": {
+      "type": "object",
+      "required": ["verified_fact", "source_based_inference", "fictional_gameplay"],
+      "additionalProperties": false,
+      "properties": {
+        "verified_fact": { "type": "string", "minLength": 1 },
+        "source_based_inference": { "type": "string", "minLength": 1 },
+        "fictional_gameplay": { "type": "string", "minLength": 1 }
+      }
+    },
+    "record_count": { "type": "integer", "minimum": 1 },
+    "buildings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "building_id",
+          "location_id",
+          "map_id",
+          "source_ids",
+          "supporting_claim_ids",
+          "suggestion_ids",
+          "anchor_status",
+          "existence_status",
+          "identity_status",
+          "identity_basis",
+          "reviewed_label",
+          "historical_function",
+          "visual_detail_status",
+          "default_render_mode",
+          "student_safe_name",
+          "student_visible",
+          "teacher_visible"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "building_id": { "type": "string", "minLength": 1, "pattern": "^building_[a-z0-9_]+$" },
+          "location_id": { "type": "string", "minLength": 1, "pattern": "^loc_[a-z0-9_]+$" },
+          "map_id": { "type": "string", "minLength": 1, "pattern": "^map_[a-z0-9_]+$" },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+          },
+          "supporting_claim_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^claim_[a-z0-9_]+$" }
+          },
+          "suggestion_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^suggestion_[a-z0-9_]+$" }
+          },
+          "anchor_status": {
+            "type": "string",
+            "enum": ["placeholder_location_seed", "reviewed_location_anchor", "reviewed_footprint_anchor"]
+          },
+          "existence_status": {
+            "type": "string",
+            "enum": ["placeholder_presence", "source_based_presence", "verified_sanborn_presence"]
+          },
+          "identity_status": {
+            "type": "string",
+            "enum": ["unknown", "suggested", "reviewed", "approved"]
+          },
+          "identity_basis": {
+            "type": "string",
+            "enum": ["unassigned", "verified_fact", "source_based_inference", "fictional_gameplay"]
+          },
+          "reviewed_label": { "type": "string" },
+          "historical_function": { "type": "string" },
+          "visual_detail_status": {
+            "type": "string",
+            "enum": ["unassigned", "verified", "inferred", "illustrative"]
+          },
+          "default_render_mode": {
+            "type": "string",
+            "enum": ["footprint_only", "neutral_mass", "generic_art_allowed", "reviewed_art_only"]
+          },
+          "student_safe_name": { "type": "string", "minLength": 1 },
+          "student_visible": { "type": "boolean" },
+          "teacher_visible": { "type": "boolean" },
+          "notes": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["identity_status"],
+              "properties": {
+                "identity_status": { "const": "unknown" }
+              }
+            },
+            "then": {
+              "properties": {
+                "reviewed_label": { "const": "" },
+                "historical_function": { "const": "" }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["identity_basis"],
+              "properties": {
+                "identity_basis": { "enum": ["verified_fact", "source_based_inference"] }
+              }
+            },
+            "then": {
+              "properties": {
+                "source_ids": { "minItems": 1 }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["default_render_mode"],
+              "properties": {
+                "default_render_mode": { "const": "generic_art_allowed" }
+              }
+            },
+            "then": {
+              "properties": {
+                "visual_detail_status": { "enum": ["inferred", "illustrative"] }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

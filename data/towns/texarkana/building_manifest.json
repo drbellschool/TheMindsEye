@@ -1,0 +1,65 @@
+{
+  "building_manifest_id": "building_texarkana_1885_manifest",
+  "manifest_type": "town_building_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_ids": [
+    "source_texarkana_1885_sanborn_loc",
+    "source_texarkana_1885_newspaper_placeholder"
+  ],
+  "sheet_review_manifest_id": "sanborn_texarkana_1885_loc_sheet_review_manifest",
+  "stitching_manifest_id": "sanborn_texarkana_1885_loc_stitching_manifest",
+  "title": "Texarkana 1885 building anchor contract",
+  "review_scope": "Seed building anchors for map rendering, teacher review, and future building art without claiming extracted geometry or verified identities yet.",
+  "location_extraction_status": "deferred",
+  "building_identity_status": "contract_seed_only",
+  "building_art_status": "generic_fallback_only",
+  "claim_boundary": {
+    "verified_fact": "Only reviewed building existence or identity supported by cited evidence may later be promoted to verified_fact from this layer.",
+    "source_based_inference": "Current building anchors remain source-based inference or placeholder-linked until map extraction and identity review are completed.",
+    "fictional_gameplay": "No fictional gameplay building identities are published from this manifest."
+  },
+  "record_count": 2,
+  "buildings": [
+    {
+      "building_id": "building_texarkana_1885_001",
+      "location_id": "loc_texarkana_1885_001",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "source_ids": ["source_texarkana_1885_sanborn_loc"],
+      "supporting_claim_ids": ["claim_texarkana_1885_001"],
+      "suggestion_ids": ["suggestion_texarkana_1885_001"],
+      "anchor_status": "placeholder_location_seed",
+      "existence_status": "source_based_presence",
+      "identity_status": "unknown",
+      "identity_basis": "unassigned",
+      "reviewed_label": "",
+      "historical_function": "",
+      "visual_detail_status": "illustrative",
+      "default_render_mode": "generic_art_allowed",
+      "student_safe_name": "Unknown Building",
+      "student_visible": true,
+      "teacher_visible": true,
+      "notes": "Contract-only anchor tied to an existing placeholder location. Exact footprint extraction, reviewed identity, and reviewed art remain deferred."
+    },
+    {
+      "building_id": "building_texarkana_1885_002",
+      "location_id": "loc_texarkana_1885_002",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "source_ids": ["source_texarkana_1885_sanborn_loc"],
+      "supporting_claim_ids": [],
+      "suggestion_ids": ["suggestion_texarkana_1885_002"],
+      "anchor_status": "placeholder_location_seed",
+      "existence_status": "source_based_presence",
+      "identity_status": "unknown",
+      "identity_basis": "unassigned",
+      "reviewed_label": "",
+      "historical_function": "",
+      "visual_detail_status": "illustrative",
+      "default_render_mode": "generic_art_allowed",
+      "student_safe_name": "Unknown Building",
+      "student_visible": true,
+      "teacher_visible": true,
+      "notes": "Generic student-safe rendering is allowed, but no specific newspaper-office identity may be implied until a reviewer confirms supporting evidence."
+    }
+  ]
+}

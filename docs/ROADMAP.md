@@ -102,6 +102,7 @@ Build:
 - location lookup;
 - nearby-place query;
 - movement validation stub;
+- map rendering data contract separating base map, road/rail, footprint, art, label, quest-marker, and evidence/provenance layers;
 - map-linked mission clue placement;
 - and teacher-visible explanation of location evidence.
 
@@ -109,6 +110,7 @@ Acceptance tests:
 
 - student actions can reference stable location IDs;
 - map-linked claims resolve to citations;
+- building art records cannot render without a reviewed building/location anchor and explicit visual provenance state;
 - impossible/unknown locations produce uncertainty rather than hallucinated map answers.
 
 ## Phase 5 — Teacher Review and Export
@@ -120,12 +122,14 @@ Build:
 - teacher review view;
 - source note display;
 - claim inspection;
+- review queue for suggested building/person/business matches before promotion into classroom-facing labels or art;
 - edit/approve workflow;
 - printable/exportable mission materials.
 
 Acceptance tests:
 
 - teacher can see source evidence before approval;
+- verification suggestion records cannot auto-publish into student-facing labels or art;
 - mission cannot be marked classroom-ready while unsupported historical claims exist;
 - teacher edits preserve or relabel provenance.
 

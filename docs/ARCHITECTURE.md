@@ -82,11 +82,26 @@ Responsibilities:
 - spatial relationship between places;
 - and map-linked source evidence.
 
+The eventual renderer should also separate spatial evidence from visual
+presentation. At minimum, the map contract should distinguish the base map
+layer, road/rail layer, building footprint layer, building art layer, label
+layer, quest marker layer, and evidence/provenance layer.
+
+Building art records must never float free from reviewed historical anchors.
+They should reference a reviewed building or location record and carry explicit
+visual provenance so that verified, inferred, and illustrative details are not
+blurred together.
+
 The Sanborn map is not decorative. It is a gameplay and reasoning layer. A student should eventually be able to say something like:
 
 > I walk down Fifth Street past the livery.
 
 The system should know whether that movement makes sense inside the mapped town.
+
+Live student-map overlays such as classmates, NPCs, quest markers, and active
+events should be treated as runtime layers attached to reviewed map anchors.
+They must not overwrite the historical place record or imply stronger evidence
+than the underlying town package supports.
 
 ### 2. Knowledge / Provenance Engine
 
@@ -109,6 +124,10 @@ Core principle:
 > Nothing historical in the world should exist without provenance.
 
 This does not mean every detail must be fully verified. It means the system must label whether a detail is verified, inferred, or fictional.
+
+Candidate identity matches from the Portal to Texas History, directories,
+newspapers, and similar systems should live in a separate review queue until a
+human promotes them into reviewed building, location, claim, or art records.
 
 ### 3. Story / Mission Engine
 

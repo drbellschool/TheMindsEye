@@ -1,0 +1,49 @@
+{
+  "suggestion_manifest_id": "verification_texarkana_1885_manifest",
+  "manifest_type": "town_verification_suggestion_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "building_manifest_id": "building_texarkana_1885_manifest",
+  "source_ids": ["source_texarkana_1885_newspaper_placeholder"],
+  "title": "Texarkana 1885 map identity review queue",
+  "review_queue_status": "seed_only",
+  "promotion_rule": "Candidate matches never become verified building labels, teacher-facing facts, or student-facing art identities until a human reviewer confirms them.",
+  "claim_boundary": {
+    "verified_fact": "A confirmed suggestion still requires explicit promotion into a reviewed building or claim record before it becomes verified_fact.",
+    "source_based_inference": "All queue items remain source-based inference while they are suggestions, even when they look promising.",
+    "fictional_gameplay": "No fictional gameplay identities belong in the verification queue."
+  },
+  "candidate_count": 2,
+  "suggestions": [
+    {
+      "suggestion_id": "suggestion_texarkana_1885_001",
+      "target_building_id": "building_texarkana_1885_001",
+      "location_id": "loc_texarkana_1885_001",
+      "suggestion_type": "business_identity",
+      "status": "suggested",
+      "candidate_label": "Potential livery stable match from later archival hints",
+      "source_ids": ["source_texarkana_1885_newspaper_placeholder"],
+      "suggestion_origin": "manual_placeholder_queue",
+      "confidence": "low",
+      "historical_basis": "source_based_inference",
+      "auto_publish": false,
+      "student_visible": false,
+      "review_notes": "Workflow example only. Replace with a verified Portal to Texas History, directory, or newspaper source before any promotion."
+    },
+    {
+      "suggestion_id": "suggestion_texarkana_1885_002",
+      "target_building_id": "building_texarkana_1885_002",
+      "location_id": "loc_texarkana_1885_002",
+      "suggestion_type": "building_identity",
+      "status": "insufficient_evidence",
+      "candidate_label": "Potential newspaper office match",
+      "source_ids": ["source_texarkana_1885_newspaper_placeholder"],
+      "suggestion_origin": "manual_placeholder_queue",
+      "confidence": "low",
+      "historical_basis": "source_based_inference",
+      "auto_publish": false,
+      "student_visible": false,
+      "review_notes": "The current placeholder source is not enough to publish a location label or bespoke art identity. Keep the building generic until stronger evidence exists."
+    }
+  ]
+}

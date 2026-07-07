@@ -85,6 +85,13 @@ Required concerns:
 - blocks;
 - sidewalks/paths where known;
 - building footprints;
+- base map layer;
+- road/rail layer;
+- building art layer;
+- label layer;
+- quest marker layer;
+- runtime presence beacons;
+- evidence/provenance layer;
 - location IDs;
 - directionality;
 - neighboring locations;
@@ -100,6 +107,14 @@ The system should be able to resolve that action against the map layer and retur
 Agent rule:
 
 > Navigation should prefer uncertainty over hallucination. If the map cannot prove a path or location, the system must say so.
+
+Additional rendering rule:
+
+> The renderer must not collapse evidence, geometry, art, and quest overlays into one map asset. Layered rendering data is part of the town-package contract.
+
+Presence rule:
+
+> Player, classmate, NPC, and event beacons are runtime overlays. They must anchor to reviewed map records without redefining the historical map itself.
 
 Future files may include:
 
@@ -133,6 +148,10 @@ Required concerns:
 - source confidence;
 - and visible distinction between verified details and inferred details.
 
+Visual contract rule:
+
+> Building artwork is not the building record. Any building art layer must reference a reviewed building/location anchor and must store whether visual details are verified, inferred, or illustrative.
+
 Agent rule:
 
 > A building detail must never be upgraded from inferred to verified unless the source evidence supports it.
@@ -140,7 +159,10 @@ Agent rule:
 Future files may include:
 
 ```text
-data/towns/texarkana/buildings.json
+docs/maps/BUILDING_DATA_MODEL.md
+docs/review/VERIFICATION_SUGGESTION_WORKFLOW.md
+data/towns/texarkana/building_manifest.json
+data/towns/texarkana/verification_suggestion_manifest.json
 data/towns/texarkana/businesses.json
 data/towns/texarkana/people.json
 data/towns/texarkana/building_claims.json
@@ -247,21 +269,20 @@ Agent rule:
 3. Source manifest and provenance engine.
 4. Sanborn sheet inventory and stitching specification.
 5. Building/location ID model.
-6. Initial Texarkana map/building sample dataset.
-7. Building detail and inference rules.
-8. HQIM/instructional framework.
-9. One source-grounded mission seed.
-10. Teacher review and citation display.
-11. Student mission experience.
-12. Second town package test.
+6. Map rendering data contract separating evidence, geometry, art, labels, and quest overlays.
+7. Initial Texarkana map/building sample dataset.
+8. Building detail and inference rules.
+9. HQIM/instructional framework.
+10. One source-grounded mission seed.
+11. Teacher review and citation display.
+12. Student mission experience.
+13. Second town package test.
 
 ## Immediate Correction
 
 If an AI agent begins with generic gameplay, multiplayer, or broad platform features before Sanborn stitching, building details, and HQIM are represented, the agent is off-track.
 
-The next agent work should include:
+The next remaining agent work should include:
 
-- `SANBORN_STITCHING_SPEC.md`;
-- `BUILDING_DATA_MODEL.md`;
 - `BUILDING_INFERENCE_RULES.md`;
 - and `HQIM_FRAMEWORK.md`.

@@ -45,6 +45,8 @@ The community dashboard should allow trusted users or reviewers to:
 - review building labels;
 - confirm or challenge what a building is called;
 - add or review evidence;
+- inspect system-suggested matches from the Portal to Texas History, directories, newspapers, and other sources;
+- confirm, reject, or defer those suggestions before they become town facts;
 - and help improve local historical accuracy.
 
 This is not just a public website. It is part of the accuracy engine.
@@ -60,8 +62,10 @@ The teacher dashboard should allow teachers to:
 - select TEKS or learning standards;
 - generate missions from the town-history universe;
 - review claims, citations, and fictional elements before use;
+- review suggested place/person/business matches before using them in student materials when appropriate;
 - assign individual, group, or class missions;
 - monitor progress;
+- see where students and relevant live events are in town;
 - view standards at a glance;
 - see MTSS-related supports or intervention flags;
 - and receive a grade or score that can be entered into the gradebook during an interim period.
@@ -75,10 +79,12 @@ Purpose: student gameplay, learning progress, mission completion, reflection, an
 The student console should allow students to:
 
 - enter the historical town;
+- use a live town map;
 - complete missions;
 - work individually;
 - work in groups;
 - participate in class missions;
+- see safe beacons for themselves, classmates, NPCs, quests, and events where appropriate;
 - collect clues/evidence;
 - level up;
 - earn perks;
@@ -132,8 +138,30 @@ Desired behavior:
 - The view should feel like looking through or beneath the roof/rooftop into the building's likely use or interior.
 - If the building cannot be identified, it should remain only a roof or generic exterior marker.
 - Unknown buildings must not be filled with fake detail.
+- If the only verified fact is that a building existed on the Sanborn sheet, the student map may still use generic art for visual coherence, but it must not pretend the specific business identity or interior is verified.
 
 This protects historical integrity while still allowing the world to become visually engaging.
+
+## Human Verification Hint Workflow
+
+The system should eventually behave more like a review assistant than an
+auto-publisher.
+
+Desired behavior:
+
+- the system may surface likely evidence matches from the Portal to Texas
+  History and other sources;
+- those suggestions may feel like "green leaf" hints;
+- but a human reviewer must still confirm them;
+- and suggested matches must not silently become verified town facts.
+
+Candidate states should include:
+
+- suggested;
+- under review;
+- confirmed;
+- rejected;
+- and insufficient evidence.
 
 ## Texas History API and Historical Universe
 

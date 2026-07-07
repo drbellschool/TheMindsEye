@@ -134,6 +134,7 @@ Required features:
 - numbered buildings;
 - building interiors;
 - empty buildings when unknown;
+- generic but visually coherent buildings when only existence is known;
 - historically accurate placement;
 - AI confidence;
 - community approval before publishing.
@@ -213,12 +214,17 @@ Community dashboard review areas:
 - ownership;
 - labels;
 - sources;
+- candidate suggestions from source-matching systems;
 - approvals;
 - moderation;
 - town censorship when appropriate for local governance and educational policy;
 - historical corrections.
 
 Community review must improve historical accuracy without allowing unverified claims to become facts.
+
+Suggested matches from the Portal to Texas History, directories, newspapers,
+and other source systems must remain review candidates until a human confirms
+them.
 
 ## 9. Provenance System
 
@@ -311,6 +317,7 @@ Teacher sees:
 - mastery;
 - evidence;
 - mission status;
+- live event status;
 - AI confidence;
 - time;
 - reports.
@@ -326,6 +333,10 @@ The student dashboard should show:
 - current location;
 - inventory;
 - map;
+- map filters;
+- live events;
+- classmate markers where appropriate;
+- NPC markers where appropriate;
 - journal;
 - telegrams;
 - evidence;
@@ -594,7 +605,12 @@ Required map features include:
 - building labels;
 - building numbers;
 - players;
+- classmate markers;
 - NPCs;
+- quest markers;
+- event markers;
+- search;
+- layer toggles;
 - animals;
 - vehicles;
 - shops;

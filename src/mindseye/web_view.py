@@ -3,6 +3,12 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+from .building_data import (
+    BuildingManifest,
+    VerificationSuggestionManifest,
+    load_building_manifest,
+    load_verification_suggestion_manifest,
+)
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
@@ -14,6 +20,7 @@ from .sanborn import (
     load_sanborn_asset_manifest,
     load_sanborn_sheet_manifest,
     load_sanborn_sheet_review_manifest,
+    load_sanborn_stitching_manifest,
 )
 
 
@@ -34,6 +41,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "mission": build_mission_seed_packet(package),
         "readiness": build_classroom_readiness_report(package),
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
+        "building_manifest": _optional_building_manifest_summary(package),
     }
 
 
@@ -66,6 +74,7 @@ def render_town_package_page(package: TownPackage) -> str:
             '<main class="layout">',
             _overview_section(model),
             _sanborn_manifest_section(model["sanborn_manifest"]),
+            _building_manifest_section(model["building_manifest"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -146,6 +155,7 @@ def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, objec
         "asset_manifest": _optional_sanborn_asset_manifest_summary(manifest),
         "image_intake": _optional_sanborn_image_intake_summary(manifest),
         "sheet_review": _optional_sanborn_sheet_review_summary(manifest),
+        "stitching_prep": _optional_sanborn_stitching_summary(manifest),
         "sheets": [
             {
                 "sheet_id": sheet.sheet_id,
@@ -207,6 +217,26 @@ def _optional_sanborn_sheet_review_summary(manifest: SanbornSheetManifest) -> di
     return _sanborn_sheet_review_summary(sheet_review_manifest)
 
 
+def _optional_sanborn_stitching_summary(manifest: SanbornSheetManifest) -> dict[str, object] | None:
+    try:
+        stitching_manifest = load_sanborn_stitching_manifest()
+    except MindseyeDataError:
+        return None
+    if stitching_manifest.sheet_manifest_id != manifest.manifest_id:
+        return None
+    return _sanborn_stitching_summary(stitching_manifest)
+
+
+def _optional_building_manifest_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        building_manifest = load_building_manifest()
+    except MindseyeDataError:
+        return None
+    if building_manifest.town_package_id != package.package_id:
+        return None
+    return _building_manifest_summary(building_manifest)
+
+
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
     return {
         "asset_manifest_id": manifest.asset_manifest_id,
@@ -253,6 +283,128 @@ def _sanborn_sheet_review_summary(manifest: SanbornSheetReviewManifest) -> dict[
                 "notes": review.notes,
             }
             for review in manifest.reviews
+        ],
+    }
+
+
+def _sanborn_stitching_summary(manifest: object) -> dict[str, object]:
+    return {
+        "stitching_manifest_id": manifest.stitching_manifest_id,
+        "stitching_scope": manifest.stitching_scope,
+        "stitching_method": manifest.stitching_method,
+        "stitching_status": manifest.stitching_status,
+        "control_point_status": manifest.control_point_status,
+        "georeferencing_status": manifest.georeferencing_status,
+        "location_extraction_status": manifest.location_extraction_status,
+        "claim_generation_status": manifest.claim_generation_status,
+        "anchor_sheet_id": manifest.anchor_sheet_id,
+        "sheet_plan_count": manifest.sheet_plan_count,
+        "link_count": manifest.link_count,
+        "claim_boundary": manifest.claim_boundary,
+        "runtime_notes": list(manifest.runtime_notes),
+        "sheet_plans": [
+            {
+                "sheet_id": sheet_plan.sheet_id,
+                "sheet_number": sheet_plan.sheet_number,
+                "sheet_role": sheet_plan.sheet_role,
+                "stitch_priority": sheet_plan.stitch_priority,
+                "stitch_readiness": sheet_plan.stitch_readiness,
+                "candidate_neighbor_sheet_ids": list(sheet_plan.candidate_neighbor_sheet_ids),
+                "blocking_tasks": list(sheet_plan.blocking_tasks),
+                "notes": sheet_plan.notes,
+            }
+            for sheet_plan in manifest.sheet_plans
+        ],
+        "links": [
+            {
+                "from_sheet_id": link.from_sheet_id,
+                "to_sheet_id": link.to_sheet_id,
+                "link_type": link.link_type,
+                "alignment_status": link.alignment_status,
+                "evidence_basis": link.evidence_basis,
+                "notes": link.notes,
+            }
+            for link in manifest.links
+        ],
+    }
+
+
+def _building_manifest_summary(manifest: BuildingManifest) -> dict[str, object]:
+    return {
+        "building_manifest_id": manifest.building_manifest_id,
+        "title": manifest.title,
+        "review_scope": manifest.review_scope,
+        "location_extraction_status": manifest.location_extraction_status,
+        "building_identity_status": manifest.building_identity_status,
+        "building_art_status": manifest.building_art_status,
+        "claim_boundary": manifest.claim_boundary,
+        "record_count": manifest.record_count,
+        "buildings": [
+            {
+                "building_id": building.building_id,
+                "location_id": building.location_id,
+                "map_id": building.map_id,
+                "source_ids": list(building.source_ids),
+                "supporting_claim_ids": list(building.supporting_claim_ids),
+                "suggestion_ids": list(building.suggestion_ids),
+                "anchor_status": building.anchor_status,
+                "existence_status": building.existence_status,
+                "identity_status": building.identity_status,
+                "identity_basis": building.identity_basis,
+                "reviewed_label": building.reviewed_label,
+                "historical_function": building.historical_function,
+                "visual_detail_status": building.visual_detail_status,
+                "default_render_mode": building.default_render_mode,
+                "student_safe_name": building.student_safe_name,
+                "student_visible": building.student_visible,
+                "teacher_visible": building.teacher_visible,
+                "notes": building.notes,
+            }
+            for building in manifest.buildings
+        ],
+        "verification_suggestions": _optional_verification_suggestion_summary(manifest),
+    }
+
+
+def _optional_verification_suggestion_summary(
+    manifest: BuildingManifest,
+) -> dict[str, object] | None:
+    try:
+        suggestion_manifest = load_verification_suggestion_manifest()
+    except MindseyeDataError:
+        return None
+    if suggestion_manifest.building_manifest_id != manifest.building_manifest_id:
+        return None
+    return _verification_suggestion_summary(suggestion_manifest)
+
+
+def _verification_suggestion_summary(
+    manifest: VerificationSuggestionManifest,
+) -> dict[str, object]:
+    return {
+        "suggestion_manifest_id": manifest.suggestion_manifest_id,
+        "title": manifest.title,
+        "review_queue_status": manifest.review_queue_status,
+        "promotion_rule": manifest.promotion_rule,
+        "claim_boundary": manifest.claim_boundary,
+        "candidate_count": manifest.candidate_count,
+        "suggestions": [
+            {
+                "suggestion_id": suggestion.suggestion_id,
+                "target_building_id": suggestion.target_building_id,
+                "location_id": suggestion.location_id,
+                "suggestion_type": suggestion.suggestion_type,
+                "status": suggestion.status,
+                "candidate_label": suggestion.candidate_label,
+                "source_ids": list(suggestion.source_ids),
+                "suggestion_origin": suggestion.suggestion_origin,
+                "confidence": suggestion.confidence,
+                "historical_basis": suggestion.historical_basis,
+                "auto_publish": suggestion.auto_publish,
+                "student_visible": suggestion.student_visible,
+                "review_notes": suggestion.review_notes,
+            }
+            for suggestion in manifest.suggestions
         ],
     }
 
@@ -321,6 +473,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
     asset_manifest = manifest.get("asset_manifest")
     image_intake = manifest.get("image_intake")
     sheet_review = manifest.get("sheet_review")
+    stitching_prep = manifest.get("stitching_prep")
     sheet_rows = []
     for raw_sheet in sheets:
         sheet = _expect_dict(raw_sheet)
@@ -368,6 +521,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
   {_sanborn_asset_manifest_block(asset_manifest)}
   {_sanborn_image_intake_block(image_intake)}
   {_sanborn_sheet_review_block(sheet_review)}
+  {_sanborn_stitching_block(stitching_prep)}
   <div class="records">{''.join(sheet_rows)}</div>
 </section>"""
 
@@ -478,6 +632,171 @@ def _sanborn_sheet_review_block(raw_sheet_review: object) -> str:
     <p class="note">{_text(sheet_review["review_method"])}</p>
     {_details_list(boundary)}
     <div class="records">{''.join(review_rows)}</div>
+  </div>"""
+
+
+def _sanborn_stitching_block(raw_stitching_prep: object) -> str:
+    if raw_stitching_prep is None:
+        return ""
+
+    stitching_prep = _expect_dict(raw_stitching_prep)
+    sheet_plans = _expect_list(stitching_prep["sheet_plans"])
+    links = _expect_list(stitching_prep["links"])
+    boundary = _expect_dict(stitching_prep["claim_boundary"])
+    runtime_notes = _expect_list(stitching_prep["runtime_notes"])
+
+    plan_rows = []
+    for raw_plan in sheet_plans:
+        plan = _expect_dict(raw_plan)
+        plan_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(plan["sheet_id"])}</h4>
+    <div class="badge-row">
+      {_badge(f"sheet {plan['sheet_number']}")}
+      {_badge(plan["stitch_priority"])}
+      {_badge(plan["stitch_readiness"])}
+    </div>
+  </div>
+  <p>{_text(plan["notes"])}</p>
+  <p><strong>Candidate neighbors:</strong> {_joined_ids(plan["candidate_neighbor_sheet_ids"])}</p>
+  <p><strong>Blocking tasks:</strong> {_joined_ids(plan["blocking_tasks"])}</p>
+</article>"""
+        )
+
+    link_rows = []
+    for raw_link in links:
+        link = _expect_dict(raw_link)
+        link_rows.append(
+            f"""
+<li>
+  <strong>{_text(link["from_sheet_id"])} -> {_text(link["to_sheet_id"])}</strong>
+  <span>{_text(link["link_type"])}</span>
+</li>"""
+        )
+
+    return f"""
+  <div class="panel asset-panel">
+    <h3>Sanborn Stitching Prep</h3>
+    <div class="badge-row">
+      {_badge(stitching_prep["stitching_status"])}
+      {_badge(stitching_prep["control_point_status"])}
+      {_badge(stitching_prep["claim_generation_status"])}
+    </div>
+    <p class="note">{_text(stitching_prep["stitching_scope"])}</p>
+    <p class="note">{_text(stitching_prep["stitching_method"])}</p>
+    <p><strong>Anchor sheet:</strong> {_text(stitching_prep["anchor_sheet_id"])}</p>
+    <p><strong>Candidate links:</strong> {_text(stitching_prep["link_count"])}</p>
+    <p><strong>Runtime notes:</strong> {_joined_ids(runtime_notes)}</p>
+    {_details_list(boundary)}
+    <ul class="check-list">{''.join(link_rows)}</ul>
+    <div class="records">{''.join(plan_rows)}</div>
+  </div>"""
+
+
+def _building_manifest_section(raw_manifest: object) -> str:
+    if raw_manifest is None:
+        return ""
+
+    manifest = _expect_dict(raw_manifest)
+    buildings = _expect_list(manifest["buildings"])
+    boundary = _expect_dict(manifest["claim_boundary"])
+    verification_suggestions = manifest.get("verification_suggestions")
+    building_rows = []
+    for raw_building in buildings:
+        building = _expect_dict(raw_building)
+        reviewed_label = _text(building["reviewed_label"]) if building["reviewed_label"] else "None"
+        building_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(building["building_id"])}</h4>
+    <div class="badge-row">
+      {_badge(building["anchor_status"])}
+      {_badge(building["existence_status"])}
+      {_badge(building["default_render_mode"])}
+    </div>
+  </div>
+  <p><strong>Student-safe name:</strong> {_text(building["student_safe_name"])}</p>
+  <p><strong>Location anchor:</strong> {_text(building["location_id"])}</p>
+  <p><strong>Identity status:</strong> {_text(building["identity_status"])}</p>
+  <p><strong>Visual detail status:</strong> {_text(building["visual_detail_status"])}</p>
+  <p><strong>Reviewed label:</strong> {reviewed_label}</p>
+  <p><strong>Sources:</strong> {_joined_ids(building["source_ids"])}</p>
+  <p><strong>Supporting claims:</strong> {_joined_ids(building["supporting_claim_ids"])}</p>
+  <p><strong>Suggestion IDs:</strong> {_joined_ids(building["suggestion_ids"])}</p>
+  <p class="note">{_text(building["notes"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="building-title">
+  <div class="section-heading">
+    <p class="eyebrow">Building Review Contract</p>
+    <h2 id="building-title">{_text(manifest["title"])}</h2>
+    <div class="badge-row">
+      {_badge(f"{manifest['record_count']} building anchors")}
+      {_badge(manifest["building_identity_status"])}
+      {_badge(manifest["building_art_status"])}
+    </div>
+    <p>{_text(manifest["review_scope"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Contract Boundary</h3>
+      {_details_list(boundary)}
+    </article>
+    <article class="panel">
+      <h3>Current Status</h3>
+      <p><strong>Location extraction:</strong> {_text(manifest["location_extraction_status"])}</p>
+      <p>Generic building rendering is allowed only as a student-safe fallback. Reviewed identity and reviewed art remain separate.</p>
+    </article>
+  </div>
+  {_verification_suggestion_block(verification_suggestions)}
+  <div class="records">{''.join(building_rows)}</div>
+</section>"""
+
+
+def _verification_suggestion_block(raw_suggestions: object) -> str:
+    if raw_suggestions is None:
+        return ""
+
+    suggestion_manifest = _expect_dict(raw_suggestions)
+    suggestions = _expect_list(suggestion_manifest["suggestions"])
+    boundary = _expect_dict(suggestion_manifest["claim_boundary"])
+    suggestion_rows = []
+    for raw_suggestion in suggestions:
+        suggestion = _expect_dict(raw_suggestion)
+        suggestion_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(suggestion["suggestion_id"])}</h4>
+    <div class="badge-row">
+      {_badge(suggestion["status"])}
+      {_badge(suggestion["suggestion_type"])}
+      {_badge(suggestion["confidence"])}
+    </div>
+  </div>
+  <p><strong>Candidate:</strong> {_text(suggestion["candidate_label"])}</p>
+  <p><strong>Target building:</strong> {_text(suggestion["target_building_id"])}</p>
+  <p><strong>Origin:</strong> {_text(suggestion["suggestion_origin"])}</p>
+  <p><strong>Sources:</strong> {_joined_ids(suggestion["source_ids"])}</p>
+  <p class="note">{_text(suggestion["review_notes"])}</p>
+</article>"""
+        )
+
+    return f"""
+  <div class="panel asset-panel">
+    <h3>Verification Suggestions</h3>
+    <div class="badge-row">
+      {_badge(f"{suggestion_manifest['candidate_count']} candidates")}
+      {_badge(suggestion_manifest["review_queue_status"])}
+    </div>
+    <p>{_text(suggestion_manifest["promotion_rule"])}</p>
+    {_details_list(boundary)}
+    <div class="records">{''.join(suggestion_rows)}</div>
   </div>"""
 
 
