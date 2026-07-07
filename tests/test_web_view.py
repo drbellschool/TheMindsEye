@@ -35,6 +35,11 @@ class WebViewTests(unittest.TestCase):
         self.assertEqual(model["sanborn_manifest"]["image_intake"]["present_file_count"], len(present_files))
         self.assertEqual(model["sanborn_manifest"]["image_intake"]["expected_file_count"], len(expected_files))
         self.assertEqual(model["sanborn_manifest"]["image_intake"]["missing_sheet_ids"], missing_sheet_ids)
+        self.assertEqual(model["sanborn_manifest"]["sheet_review"]["review_count"], 5)
+        self.assertEqual(
+            model["sanborn_manifest"]["sheet_review"]["reviews"][0]["sheet_id"],
+            "sheet_texarkana_1885_sanborn_001",
+        )
 
     def test_rendered_page_contains_read_only_town_data(self):
         package = load_town_package(ROOT, "texarkana")
@@ -67,6 +72,10 @@ class WebViewTests(unittest.TestCase):
         self.assertIn("Missing sheet IDs", html)
         self.assertIn(f"{present_file_count} present", html)
         self.assertIn(f"{expected_file_count} expected", html)
+        self.assertIn("Sanborn Sheet Review", html)
+        self.assertIn("5 review notes", html)
+        self.assertIn("Kizer Lumber Co's Planning Mill", html)
+        self.assertIn("The Arkansaw Cotton Seed Oil Mill.", html)
 
     def test_rendered_page_contains_classroom_readiness_report(self):
         package = load_town_package(ROOT, "texarkana")

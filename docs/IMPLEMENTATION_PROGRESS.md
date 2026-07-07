@@ -15,14 +15,14 @@ Last updated: 2026-07-06
 Overall MVP progress:
 
 ```text
-[##################..] 89%
+[##################..] 91%
 ```
 
 Current active gates:
 
-1. Complete issue #35: Capture validated Sanborn image metadata for Texarkana 1885.
+1. Complete issue #37: Add initial Sanborn sheet review notes for Texarkana 1885.
 2. Keep issue #4 aligned whenever progress changes.
-3. Keep Sanborn stitching, georeferencing, and building-level extraction deferred after metadata capture.
+3. Keep Sanborn stitching, georeferencing, location extraction, and claim generation deferred after sheet review.
 
 Open tracking pages:
 
@@ -43,7 +43,8 @@ Open tracking pages:
 - Sanborn image intake task, closed: https://github.com/drbellschool/TheMindsEye/issues/30
 - Human-assisted Sanborn image placement task, closed: https://github.com/drbellschool/TheMindsEye/issues/32
 - Sanborn intake web view task, closed: https://github.com/drbellschool/TheMindsEye/issues/33
-- Sanborn image metadata task: https://github.com/drbellschool/TheMindsEye/issues/35
+- Sanborn image metadata task, closed: https://github.com/drbellschool/TheMindsEye/issues/35
+- Sanborn sheet review task: https://github.com/drbellschool/TheMindsEye/issues/37
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -59,6 +60,7 @@ Open tracking pages:
 - Sanborn asset manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/29
 - Sanborn image intake PR, merged: https://github.com/drbellschool/TheMindsEye/pull/31
 - Sanborn intake web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/34
+- Sanborn image metadata PR, merged: https://github.com/drbellschool/TheMindsEye/pull/36
 
 ## Agent Operating Rules
 
@@ -137,6 +139,7 @@ available on that branch.
 - [x] Add ignored local image intake workflow with checksum validation for downloaded Sanborn sheets.
 - [x] Show current Sanborn image intake status and missing files in the local web view.
 - [x] Capture validated image metadata for downloaded Sanborn sheet derivatives.
+- [x] Add initial sheet-level review notes without stitching or claim generation.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -213,11 +216,11 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #35:
+The current unblocked task is issue #37:
 
 ```text
-Capture validated Sanborn image metadata for Texarkana 1885.
+Add initial Sanborn sheet review notes for Texarkana 1885.
 ```
 
-After issue #35 merges, agents should create or continue the next narrow
-Sanborn image-review task without stitching or georeferencing yet.
+After issue #37 merges, agents should create or continue the next narrow
+Sanborn extraction-prep task without georeferencing or claim generation yet.

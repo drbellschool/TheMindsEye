@@ -9,9 +9,11 @@ from .readiness import build_classroom_readiness_report
 from .sanborn import (
     SanbornAssetManifest,
     SanbornSheetManifest,
+    SanbornSheetReviewManifest,
     build_sanborn_image_intake_report,
     load_sanborn_asset_manifest,
     load_sanborn_sheet_manifest,
+    load_sanborn_sheet_review_manifest,
 )
 
 
@@ -143,6 +145,7 @@ def _sanborn_manifest_summary(manifest: SanbornSheetManifest) -> dict[str, objec
         "claim_boundary": manifest.claim_boundary,
         "asset_manifest": _optional_sanborn_asset_manifest_summary(manifest),
         "image_intake": _optional_sanborn_image_intake_summary(manifest),
+        "sheet_review": _optional_sanborn_sheet_review_summary(manifest),
         "sheets": [
             {
                 "sheet_id": sheet.sheet_id,
@@ -194,6 +197,16 @@ def _optional_sanborn_image_intake_summary(manifest: SanbornSheetManifest) -> di
     }
 
 
+def _optional_sanborn_sheet_review_summary(manifest: SanbornSheetManifest) -> dict[str, object] | None:
+    try:
+        sheet_review_manifest = load_sanborn_sheet_review_manifest()
+    except MindseyeDataError:
+        return None
+    if sheet_review_manifest.sheet_manifest_id != manifest.manifest_id:
+        return None
+    return _sanborn_sheet_review_summary(sheet_review_manifest)
+
+
 def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str, object]:
     return {
         "asset_manifest_id": manifest.asset_manifest_id,
@@ -211,6 +224,35 @@ def _sanborn_asset_manifest_summary(manifest: SanbornAssetManifest) -> dict[str,
                 "local_cache_path": asset.local_cache_path,
             }
             for asset in manifest.assets
+        ],
+    }
+
+
+def _sanborn_sheet_review_summary(manifest: SanbornSheetReviewManifest) -> dict[str, object]:
+    return {
+        "sheet_review_manifest_id": manifest.sheet_review_manifest_id,
+        "review_scope": manifest.review_scope,
+        "review_method": manifest.review_method,
+        "review_count": manifest.review_count,
+        "binary_files_committed": manifest.binary_files_committed,
+        "stitching_status": manifest.stitching_status,
+        "georeferencing_status": manifest.georeferencing_status,
+        "location_extraction_status": manifest.location_extraction_status,
+        "claim_generation_status": manifest.claim_generation_status,
+        "claim_boundary": manifest.claim_boundary,
+        "reviews": [
+            {
+                "review_record_id": review.review_record_id,
+                "sheet_id": review.sheet_id,
+                "sheet_number": review.sheet_number,
+                "review_status": review.review_status,
+                "sheet_role": review.sheet_role,
+                "observed_labels": list(review.observed_labels),
+                "visible_features": list(review.visible_features),
+                "deferred_work": list(review.deferred_work),
+                "notes": review.notes,
+            }
+            for review in manifest.reviews
         ],
     }
 
@@ -278,6 +320,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
     boundary = _expect_dict(manifest["claim_boundary"])
     asset_manifest = manifest.get("asset_manifest")
     image_intake = manifest.get("image_intake")
+    sheet_review = manifest.get("sheet_review")
     sheet_rows = []
     for raw_sheet in sheets:
         sheet = _expect_dict(raw_sheet)
@@ -324,6 +367,7 @@ def _sanborn_manifest_section(raw_manifest: object) -> str:
   </div>
   {_sanborn_asset_manifest_block(asset_manifest)}
   {_sanborn_image_intake_block(image_intake)}
+  {_sanborn_sheet_review_block(sheet_review)}
   <div class="records">{''.join(sheet_rows)}</div>
 </section>"""
 
@@ -390,6 +434,50 @@ def _sanborn_image_intake_block(raw_image_intake: object) -> str:
     <p><strong>Cache:</strong> {_text(image_intake["cache_dir"])}</p>
     <p><strong>Missing sheet IDs:</strong> {missing_text}</p>
     <ul class="check-list">{''.join(expected_rows)}</ul>
+  </div>"""
+
+
+def _sanborn_sheet_review_block(raw_sheet_review: object) -> str:
+    if raw_sheet_review is None:
+        return ""
+
+    sheet_review = _expect_dict(raw_sheet_review)
+    reviews = _expect_list(sheet_review["reviews"])
+    boundary = _expect_dict(sheet_review["claim_boundary"])
+    review_rows = []
+    for raw_review in reviews:
+        review = _expect_dict(raw_review)
+        review_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(review["sheet_id"])}</h4>
+    <div class="badge-row">
+      {_badge(f"sheet {review['sheet_number']}")}
+      {_badge(review["review_status"])}
+      {_badge(review["sheet_role"])}
+    </div>
+  </div>
+  <p>{_text(review["notes"])}</p>
+  <p><strong>Observed labels:</strong> {_joined_ids(review["observed_labels"])}</p>
+  <p><strong>Visible features:</strong> {_joined_ids(review["visible_features"])}</p>
+  <p><strong>Deferred work:</strong> {_joined_ids(review["deferred_work"])}</p>
+</article>"""
+        )
+
+    binary_status = "no binaries committed" if not sheet_review["binary_files_committed"] else "binary files committed"
+    return f"""
+  <div class="panel asset-panel">
+    <h3>Sanborn Sheet Review</h3>
+    <div class="badge-row">
+      {_badge(f"{sheet_review['review_count']} review notes")}
+      {_badge(binary_status)}
+      {_badge(sheet_review["claim_generation_status"])}
+    </div>
+    <p class="note">{_text(sheet_review["review_scope"])}</p>
+    <p class="note">{_text(sheet_review["review_method"])}</p>
+    {_details_list(boundary)}
+    <div class="records">{''.join(review_rows)}</div>
   </div>"""
 
 
