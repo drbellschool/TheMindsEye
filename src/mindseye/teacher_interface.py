@@ -27,6 +27,7 @@ def build_teacher_interface_packet(
         "portal_title": "Teacher Review & Classroom Approval",
         "mission_id": approval_packet["mission_id"],
         "town_package_id": approval_packet["town_package_id"],
+        "portal_modules": _portal_modules(),
         "workflow_steps": _workflow_steps(approval_packet),
         "summary_cards": _summary_cards(readiness_report, approval_packet),
         "review_workspace": _review_workspace(alignment_manifest, approval_packet),
@@ -81,6 +82,25 @@ def _workflow_steps(approval_packet: dict[str, object]) -> list[dict[str, object
             "status": "locked" if blocked else "unlocked",
             "note": "Release remains blocked until teacher approval is recorded.",
         },
+    ]
+
+
+def _portal_modules() -> list[dict[str, object]]:
+    return [
+        {"module_id": "dashboard", "label": "Dashboard", "status": "available"},
+        {"module_id": "mission_queue", "label": "Mission Queue", "status": "planned"},
+        {"module_id": "teks_library", "label": "TEKS Library", "status": "planned"},
+        {"module_id": "class_summary", "label": "Class Summary", "status": "planned"},
+        {"module_id": "student_progress", "label": "Student Progress", "status": "planned"},
+        {"module_id": "grades", "label": "Grades", "status": "planned"},
+        {"module_id": "roster_members", "label": "Roster / Members", "status": "planned"},
+        {"module_id": "chat_conversations", "label": "Chat Conversations", "status": "planned"},
+        {"module_id": "telegram_review", "label": "Telegram Review", "status": "planned"},
+        {"module_id": "postal_review", "label": "Postal Review", "status": "planned"},
+        {"module_id": "behavior_law_flags", "label": "Behavior / Law Flags", "status": "planned"},
+        {"module_id": "review_history", "label": "Review History", "status": "planned"},
+        {"module_id": "reports", "label": "Reports", "status": "planned"},
+        {"module_id": "help_support", "label": "Need Help?", "status": "planned"},
     ]
 
 

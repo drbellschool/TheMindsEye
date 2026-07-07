@@ -15,6 +15,10 @@ class TeacherInterfaceTests(unittest.TestCase):
 
         self.assertEqual(packet["portal_title"], "Teacher Review & Classroom Approval")
         self.assertEqual(packet["mission_id"], "mission_texarkana_1885_001")
+        self.assertIn("telegram_review", [module["module_id"] for module in packet["portal_modules"]])
+        self.assertIn("postal_review", [module["module_id"] for module in packet["portal_modules"]])
+        self.assertIn("teks_library", [module["module_id"] for module in packet["portal_modules"]])
+        self.assertIn("behavior_law_flags", [module["module_id"] for module in packet["portal_modules"]])
         self.assertEqual(len(packet["workflow_steps"]), 7)
         self.assertEqual(packet["workflow_steps"][1]["title"], "Standards & TEKS Review")
         self.assertEqual(packet["workflow_steps"][1]["status"], "in_progress")

@@ -28,6 +28,32 @@ The teacher interface foundation should expose these sections as data:
 - teacher certification;
 - and classroom release.
 
+## Expected Portal Modules
+
+These modules are expected in the future teacher/admin surface, even though
+they are not required to be designed in full right now:
+
+- mission queue;
+- TEKS library;
+- class summary;
+- student progress;
+- grades;
+- roster / members;
+- chat conversations;
+- telegram review and approvals;
+- postal review;
+- behavior and law flags;
+- review history;
+- reports;
+- and support/help.
+
+These are portal expectations, not a commitment to full implementation in the
+current slice. The repository should keep the navigation and contract space
+open for them.
+
+The current teacher-interface packet already carries these as planned module
+slots so future work can attach views without changing the contract shape.
+
 ## Required Summary Cards
 
 The portal should have summary cards for:
