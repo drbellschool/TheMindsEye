@@ -16,6 +16,7 @@ from .instructional_alignment import (
 from .mission_seed import build_mission_seed_packet
 from .map_rendering import build_map_rendering_packet
 from .accessibility import build_accessibility_support_packet
+from .privacy import build_privacy_baseline_packet
 from .assessment_evidence import build_assessment_evidence_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
@@ -61,6 +62,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "student_mission": _optional_student_mission_summary(package),
         "assessment_evidence": _optional_assessment_evidence_summary(package),
         "accessibility": _optional_accessibility_summary(package),
+        "privacy": _optional_privacy_summary(package),
     }
 
 
@@ -102,6 +104,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _student_mission_section(model["student_mission"]),
             _assessment_evidence_section(model["assessment_evidence"]),
             _accessibility_section(model["accessibility"]),
+            _privacy_section(model["privacy"]),
             _readiness_section(model["readiness"]),
             _mission_section(model["mission"]),
             _claims_section(model["claims"]),
@@ -337,6 +340,16 @@ def _optional_assessment_evidence_summary(package: TownPackage) -> dict[str, obj
 def _optional_accessibility_summary(package: TownPackage) -> dict[str, object] | None:
     try:
         packet = build_accessibility_support_packet(package)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_privacy_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        packet = build_privacy_baseline_packet(package)
     except MindseyeDataError:
         return None
     if packet["town_package_id"] != package.package_id:
@@ -1752,6 +1765,92 @@ def _accessibility_section(raw_packet: object) -> str:
     <article class="panel">
       <h3>Embedded Scaffolds</h3>
       <div class="records">{''.join(scaffold_rows)}</div>
+    </article>
+  </div>
+</section>"""
+
+
+def _privacy_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    access_controls = _expect_list(packet["access_controls"])
+    pilot_material_notes = _expect_list(packet["pilot_material_notes"])
+    retention_notes = _expect_list(packet["retention_notes"])
+    boundary = _expect_dict(packet["privacy_boundary"])
+
+    access_rows = []
+    for raw_control in access_controls:
+        control = _expect_dict(raw_control)
+        access_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(control["label"])}</h4>
+    <div class="badge-row">
+      {_badge(control["status"])}
+    </div>
+  </div>
+  <p class="note">{_text(control["note"])}</p>
+</article>"""
+        )
+
+    pilot_rows = []
+    for note in pilot_material_notes:
+        pilot_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(note)}</p>
+</article>"""
+        )
+
+    retention_rows = []
+    for note in retention_notes:
+        retention_rows.append(
+            f"""
+<article class="record">
+  <p>{_text(note)}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="privacy-title">
+  <div class="section-heading">
+    <p class="eyebrow">Pilot Privacy Baseline</p>
+    <h2 id="privacy-title">{_text(packet["framework_title"])}</h2>
+    <div class="badge-row">
+      {_badge(packet["privacy_status"])}
+      {_badge(packet["release_state"])}
+    </div>
+    <p>{_text(packet["data_minimization_rule"])}</p>
+    <p class="note">{_text(packet["ai_limitations_note"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Access Controls</h3>
+      <div class="records">{''.join(access_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Privacy Boundary</h3>
+      <p><strong>Student names:</strong> {_text(boundary["student_names"])}</p>
+      <p><strong>Student IDs:</strong> {_text(boundary["student_ids"])}</p>
+      <p><strong>Grades:</strong> {_text(boundary["grades"])}</p>
+      <p><strong>Saved writing profiles:</strong> {_text(boundary["saved_writing_profiles"])}</p>
+    </article>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Pilot Material Notes</h3>
+      <div class="records">{''.join(pilot_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Retention Notes</h3>
+      <div class="records">{''.join(retention_rows)}</div>
+      <p class="note">{_text(packet["readiness_summary"])}</p>
+      <p><strong>Teacher final authority:</strong> {_text(packet["teacher_final_authority"])}</p>
+      <p><strong>No PII default:</strong> {_text(packet["no_pii_default"])}</p>
+      <p><strong>Retention posture:</strong> {_text(packet["retention_posture"])}</p>
     </article>
   </div>
 </section>"""
