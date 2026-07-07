@@ -16,6 +16,7 @@ from .instructional_alignment import (
 from .mission_seed import build_mission_seed_packet
 from .models import ClaimRecord, LocationRecord, MindseyeDataError, SourceRecord, TownPackage
 from .readiness import build_classroom_readiness_report
+from .standards_alignment import build_standards_alignment_packet
 from .teacher_interface import build_teacher_interface_packet
 from .teacher_review import build_teacher_approval_packet
 from .sanborn import (
@@ -49,6 +50,7 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
         "building_manifest": _optional_building_manifest_summary(package),
         "instructional_alignment": _optional_instructional_alignment_summary(package),
+        "standards_alignment": _optional_standards_alignment_summary(package),
         "teacher_review": _optional_teacher_review_summary(package),
         "teacher_interface": _optional_teacher_interface_summary(package),
     }
@@ -85,6 +87,7 @@ def render_town_package_page(package: TownPackage) -> str:
             _sanborn_manifest_section(model["sanborn_manifest"]),
             _building_manifest_section(model["building_manifest"]),
             _instructional_alignment_section(model["instructional_alignment"]),
+            _standards_alignment_section(model["standards_alignment"]),
             _teacher_review_section(model["teacher_review"]),
             _teacher_interface_section(model["teacher_interface"]),
             _readiness_section(model["readiness"]),
@@ -267,6 +270,16 @@ def _optional_teacher_review_summary(package: TownPackage) -> dict[str, object] 
     if review_packet["town_package_id"] != package.package_id:
         return None
     return review_packet
+
+
+def _optional_standards_alignment_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        standards_packet = build_standards_alignment_packet(package)
+    except MindseyeDataError:
+        return None
+    if standards_packet["town_package_id"] != package.package_id:
+        return None
+    return standards_packet
 
 
 def _optional_teacher_interface_summary(package: TownPackage) -> dict[str, object] | None:
@@ -926,6 +939,84 @@ def _instructional_alignment_section(raw_manifest: object) -> str:
 </section>"""
 
 
+def _standards_alignment_section(raw_packet: object) -> str:
+    if raw_packet is None:
+        return ""
+
+    packet = _expect_dict(raw_packet)
+    standard = _expect_dict(packet["current_standard_under_review"])
+    hqim_records = _expect_list(packet["hqim_records"])
+    teks_records = _expect_list(packet["teks_records"])
+    release_gate = _expect_dict(packet["release_gate"])
+
+    hqim_rows = []
+    for raw_alignment in hqim_records:
+        alignment = _expect_dict(raw_alignment)
+        hqim_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(alignment["alignment_id"])}</h4>
+    <div class="badge-row">
+      {_badge(alignment["framework"])}
+      {_badge(alignment["alignment_status"])}
+    </div>
+  </div>
+  <p><strong>Standard label:</strong> {_text(alignment["standard_label"])}</p>
+</article>"""
+        )
+
+    teks_rows = []
+    for raw_alignment in teks_records:
+        alignment = _expect_dict(raw_alignment)
+        standard_id = _text(alignment["standard_id"]) if alignment["standard_id"] else "Pending teacher selection"
+        teks_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(alignment["alignment_id"])}</h4>
+    <div class="badge-row">
+      {_badge(alignment["framework"])}
+      {_badge(alignment["alignment_status"])}
+    </div>
+  </div>
+  <p><strong>Standard ID:</strong> {standard_id}</p>
+  <p><strong>Standard label:</strong> {_text(alignment["standard_label"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band" aria-labelledby="standards-title">
+  <div class="section-heading">
+    <p class="eyebrow">Standards & TEKS Review</p>
+    <h2 id="standards-title">{_text(packet["workflow_title"])}</h2>
+    <div class="badge-row">
+      {_badge(packet["hqim_status"])}
+      {_badge(packet["teks_status"])}
+      {_badge(release_gate["status"])}
+    </div>
+    <p>{_text(packet["teacher_authority_rule"])}</p>
+    <p class="note">{_text(release_gate["reason"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>HQIM Records</h3>
+      <div class="records">{''.join(hqim_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>TEKS Records</h3>
+      <div class="records">{''.join(teks_rows)}</div>
+    </article>
+  </div>
+  <article class="panel">
+    <h3>Current Standard Under Review</h3>
+    <p><strong>Alignment:</strong> {_text(standard["alignment_id"])}</p>
+    <p><strong>Status:</strong> {_text(standard["alignment_status"])}</p>
+    <p><strong>Label:</strong> {_text(standard["standard_label"])}</p>
+  </article>
+</section>"""
+
+
 def _teacher_review_section(raw_review: object) -> str:
     if raw_review is None:
         return ""
@@ -990,6 +1081,7 @@ def _teacher_interface_section(raw_portal: object) -> str:
     portal_modules = _expect_list(portal["portal_modules"])
     workflow_steps = _expect_list(portal["workflow_steps"])
     summary_cards = _expect_list(portal["summary_cards"])
+    standards_alignment = _expect_dict(portal["standards_alignment"])
     review_workspace = _expect_dict(portal["review_workspace"])
     decision_panel = _expect_dict(portal["decision_panel"])
     release_state = _expect_dict(portal["release_state"])
@@ -1073,6 +1165,12 @@ def _teacher_interface_section(raw_portal: object) -> str:
   <article class="panel">
     <h3>Portal Modules</h3>
     <div class="records">{''.join(module_rows)}</div>
+  </article>
+  <article class="panel">
+    <h3>Standards Alignment Snapshot</h3>
+    <p><strong>Workflow:</strong> {_text(standards_alignment["workflow_title"])}</p>
+    <p><strong>TEKS status:</strong> {_text(standards_alignment["teks_status"])}</p>
+    <p><strong>Release gate:</strong> {_text(standards_alignment["release_gate"]["status"])}</p>
   </article>
   <div class="split">
     <article class="panel">

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .instructional_alignment import load_instructional_alignment_manifest
-from .models import MindseyeDataError, TownPackage
+from .models import TownPackage
+from .standards_alignment import build_standards_alignment_packet
 from .readiness import build_classroom_readiness_report
 from .teacher_review import build_teacher_approval_packet
 
@@ -21,16 +21,17 @@ def build_teacher_interface_packet(
     """
     readiness_report = build_classroom_readiness_report(package)
     approval_packet = build_teacher_approval_packet(package, repo_root=repo_root, town_slug=town_slug)
-    alignment_manifest = load_instructional_alignment_manifest(repo_root, town_slug)
+    standards_packet = build_standards_alignment_packet(package, repo_root=repo_root, town_slug=town_slug)
 
     return {
         "portal_title": "Teacher Review & Classroom Approval",
         "mission_id": approval_packet["mission_id"],
         "town_package_id": approval_packet["town_package_id"],
+        "standards_alignment": standards_packet,
         "portal_modules": _portal_modules(),
         "workflow_steps": _workflow_steps(approval_packet),
         "summary_cards": _summary_cards(readiness_report, approval_packet),
-        "review_workspace": _review_workspace(alignment_manifest, approval_packet),
+        "review_workspace": _review_workspace(approval_packet, standards_packet),
         "decision_panel": _decision_panel(approval_packet),
         "review_history": [],
         "release_state": _release_state(approval_packet, readiness_report),
@@ -138,14 +139,14 @@ def _summary_cards(
 
 
 def _review_workspace(
-    alignment_manifest,
     approval_packet: dict[str, object],
+    standards_packet: dict[str, object],
 ) -> dict[str, object]:
     return {
         "exact_standard_under_review": {
-            "status": "pending_teacher_selection",
-            "alignment_id": "alignment_texarkana_1885_teks_001",
-            "standard_label": _alignment_label(alignment_manifest, "alignment_texarkana_1885_teks_001"),
+            "status": standards_packet["current_standard_under_review"]["alignment_status"],
+            "alignment_id": standards_packet["current_standard_under_review"]["alignment_id"],
+            "standard_label": standards_packet["current_standard_under_review"]["standard_label"],
             "teacher_authority_rule": approval_packet["teacher_authority_rule"],
         },
         "mission_content_being_reviewed": {
@@ -154,12 +155,13 @@ def _review_workspace(
             "review_items": list(approval_packet["review_items"]),
         },
         "teacher_alignment_decision": {
-            "allowed_actions": ["approve", "send_back", "defer"],
-            "current_state": approval_packet["review_status"],
+            "allowed_actions": list(standards_packet["decision_options"]),
+            "current_state": standards_packet["decision_state"],
             "pending_alignment_ids": list(approval_packet["pending_alignment_ids"]),
             "approved_alignment_ids": list(approval_packet["approved_alignment_ids"]),
             "rejected_alignment_ids": list(approval_packet["rejected_alignment_ids"]),
         },
+        "release_gate": dict(standards_packet["release_gate"]),
     }
 
 
@@ -199,10 +201,3 @@ def _release_state(
         "reason": "Teacher review remains incomplete or the TEKS target is still pending.",
         "blockers": list(readiness_report["blockers"]),
     }
-
-
-def _alignment_label(alignment_manifest, alignment_id: str) -> str:
-    for alignment in alignment_manifest.alignments:
-        if alignment.alignment_id == alignment_id:
-            return alignment.standard_label
-    raise MindseyeDataError(f"unknown alignment_id: {alignment_id}")

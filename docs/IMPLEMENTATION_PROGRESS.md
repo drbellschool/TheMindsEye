@@ -194,7 +194,7 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[##############......] 70%
+[###############.....] 75%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
@@ -207,7 +207,7 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] HQIM framework and instructional-alignment manifest.
 - [x] Teacher review flow.
 - [x] Teacher interface foundation.
-- [ ] Standards alignment workflow.
+- [x] Standards alignment workflow foundation.
 - [ ] Student mission flow.
 - [ ] Assessment evidence workflow.
 - [ ] Accessibility supports.
