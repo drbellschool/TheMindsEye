@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mindseye import (
+    load_asset_generation_queue,
     load_building_manifest,
     build_sanborn_composite_manifest,
     build_sanborn_georeference_workspace,
@@ -27,6 +28,7 @@ from mindseye import (
 
 def main():
     load_town_package(ROOT, "texarkana")
+    load_asset_generation_queue(ROOT, "texarkana")
     load_sanborn_sheet_manifest(ROOT, "texarkana")
     load_sanborn_asset_manifest(ROOT, "texarkana")
     load_sanborn_image_metadata_manifest(ROOT, "texarkana")

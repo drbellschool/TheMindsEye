@@ -83,6 +83,16 @@ from .ingest.texas_portal import (
     build_source_id as build_texas_portal_source_id,
     parse_ark_reference,
 )
+from .ai import (
+    AIRequest,
+    AIRequestReference,
+    AssetGenerationQueue,
+    EVIDENCE_PROMPT_ID,
+    VISUAL_PROMPT_ID,
+    load_asset_generation_queue,
+    validate_ai_request,
+    validate_asset_generation_queue,
+)
 from .accessibility import build_accessibility_support_packet
 from .privacy import build_privacy_baseline_packet
 from .student_data_minimization import build_student_data_minimization_packet
@@ -95,6 +105,11 @@ __all__ = [
     "ClaimType",
     "Confidence",
     "MindseyeDataError",
+    "AIRequest",
+    "AIRequestReference",
+    "AssetGenerationQueue",
+    "EVIDENCE_PROMPT_ID",
+    "VISUAL_PROMPT_ID",
     "BuildingManifest",
     "BuildingRecord",
     "InstructionalAlignmentManifest",
@@ -114,6 +129,9 @@ __all__ = [
     "build_texas_portal_search_url",
     "build_texas_portal_source_id",
     "parse_ark_reference",
+    "load_asset_generation_queue",
+    "validate_ai_request",
+    "validate_asset_generation_queue",
     "SanbornAssetManifest",
     "SanbornAssetRecord",
     "SanbornImageIntakeFile",
