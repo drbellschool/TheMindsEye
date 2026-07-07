@@ -194,7 +194,7 @@ available on that branch.
 ### Phase 6: Later Classroom Product
 
 ```text
-[############........] 60%
+[#############.......] 65%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
@@ -203,6 +203,7 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Show classroom readiness report in the local web view.
 - [x] Building review contract and verification suggestion queue.
 - [x] Reviewed-building subset and inference boundary.
+- [x] Map rendering data contract and layer packet.
 - [x] HQIM framework and instructional-alignment manifest.
 - [x] Teacher review flow.
 - [ ] Standards alignment workflow.

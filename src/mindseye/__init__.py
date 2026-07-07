@@ -12,6 +12,7 @@ from .instructional_alignment import (
     load_instructional_alignment_manifest,
 )
 from .map_engine import MapEngine
+from .map_rendering import build_map_rendering_packet
 from .mission_seed import build_mission_seed_packet, build_teacher_review_packet
 from .building_data import (
     BuildingManifest,
@@ -92,6 +93,7 @@ __all__ = [
     "VerificationSuggestionRecord",
     "TownPackage",
     "MapEngine",
+    "build_map_rendering_packet",
     "MissionRun",
     "build_classroom_readiness_report",
     "build_teacher_approval_packet",
