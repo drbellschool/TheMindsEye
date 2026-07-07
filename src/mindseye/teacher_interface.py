@@ -91,6 +91,8 @@ def _portal_modules() -> list[dict[str, object]]:
     return [
         {"module_id": "dashboard", "label": "Dashboard", "status": "available"},
         {"module_id": "mission_queue", "label": "Mission Queue", "status": "planned"},
+        {"module_id": "campaign_planner", "label": "Campaign Planner", "status": "planned"},
+        {"module_id": "preassessment", "label": "Preassessment", "status": "planned"},
         {"module_id": "teks_library", "label": "TEKS Library", "status": "planned"},
         {"module_id": "class_summary", "label": "Class Summary", "status": "planned"},
         {"module_id": "student_progress", "label": "Student Progress", "status": "planned"},

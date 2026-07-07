@@ -174,7 +174,9 @@ The framework should support:
 
 The town universe is not limited to one map year.
 
-A town package may use an approximate 10-year historical window around a map year.
+A town package should use a 20-year historical gate centered on a map year,
+typically 10 years before and 10 years after the Sanborn map year, unless a
+specific evidence boundary is documented for that town.
 
 Example:
 

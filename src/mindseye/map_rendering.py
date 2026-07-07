@@ -12,6 +12,7 @@ def build_map_rendering_packet(
     package: TownPackage,
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
+    state_root: Path | None = None,
 ) -> dict[str, object]:
     """Build a read-only rendering contract from existing package data.
 
@@ -23,7 +24,7 @@ def build_map_rendering_packet(
     road_rail_layer = _road_rail_layer(package)
     building_manifest = None
     try:
-        building_manifest = load_building_manifest(repo_root, town_slug)
+        building_manifest = load_building_manifest(repo_root, town_slug, state_root=state_root)
     except MindseyeDataError:
         pass
     building_footprint_layer, building_art_layer = _building_layers(

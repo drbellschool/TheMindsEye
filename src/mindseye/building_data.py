@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import MindseyeDataError, TownPackage, require_text, require_text_tuple
+from .review_state import apply_building_manifest_state, load_review_state
 from .sanborn import (
     SanbornSheetReviewManifest,
     SanbornStitchingManifest,
@@ -196,6 +197,7 @@ def load_building_manifest(
     repo_root: Path | None = None,
     town_slug: str = "texarkana",
     filename: str = BUILDING_MANIFEST_FILENAME,
+    state_root: Path | None = None,
 ) -> BuildingManifest:
     """Load and validate building-anchor records for the current town package."""
     root = repo_root_from(repo_root)
@@ -214,7 +216,8 @@ def load_building_manifest(
     sheet_review_manifest = load_sanborn_sheet_review_manifest(root, town_slug)
     stitching_manifest = load_sanborn_stitching_manifest(root, town_slug)
     assert_building_manifest_links(manifest, package, sheet_review_manifest, stitching_manifest)
-    return manifest
+    state = load_review_state(state_root)
+    return apply_building_manifest_state(manifest, state)
 
 
 def load_verification_suggestion_manifest(

@@ -44,10 +44,15 @@ The community dashboard should allow trusted users or reviewers to:
 - check addresses;
 - review building labels;
 - confirm or challenge what a building is called;
+- review people and business identities separately from building footprints;
 - add or review evidence;
 - inspect system-suggested matches from the Portal to Texas History, directories, newspapers, and other sources;
 - confirm, reject, or defer those suggestions before they become town facts;
+- review telegram, postal, railroad, price, and ownership evidence as separate lanes when available;
 - and help improve local historical accuracy.
+
+Future review rollups should also support county manager and state manager
+views that aggregate the lower-level community review work without erasing it.
 
 This is not just a public website. It is part of the accuracy engine.
 
@@ -201,6 +206,11 @@ Missions should be possible at multiple levels:
 Mission generation must use the map, building evidence, historical source universe, standards, and teacher intent.
 
 It should not produce generic historical fiction.
+
+Campaigns should sit above missions as longer class-unit containers. A campaign
+should be able to hold multiple missions, use a 16-step mastery progression,
+and let a preassessment place the student at the correct starting checkpoint.
+The campaign layer should remain reusable across towns and subjects.
 
 ## Student Progression, Levels, and Perks
 

@@ -208,6 +208,9 @@ Do not build student accounts, multiplayer, district deployment, or broad AI gen
 - [x] Teacher review flow.
 - [x] Teacher interface foundation.
 - [x] Standards alignment workflow foundation.
+- [x] Campaign orchestration foundation.
+- [x] Community verification console foundation.
+- [x] People / business review records and source-issue adapter.
 - [x] Student mission flow.
 - [x] Assessment evidence workflow.
 - [x] Accessibility supports.
@@ -227,15 +230,19 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The next narrow unblocked task is to add prompt files with stable IDs and eval
-scaffolding without widening the core prototype scope.
+The next narrow unblocked task is to expand the remaining community review
+lanes for telegrams, postal records, railroad context, and prices while adding
+prompt files with stable IDs and eval scaffolding without widening the core
+prototype scope.
 
 That next task should:
 
 - keep broad location extraction, georeferencing, and claim generation
   deferred;
+- keep the 20-year historical gate centered on the Sanborn map year;
 - preserve the historical boundary between verified fact, source-based
   inference, and fictional gameplay;
+- keep person and business records linked to a visible source issue/page trail;
 - stay compatible with the existing mission seed, teacher-note, and
   instructional-alignment outputs;
 - keep evidence, rubrics, and mastery artifacts explainable;

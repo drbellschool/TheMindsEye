@@ -12,7 +12,12 @@ from .instructional_alignment import (
     load_instructional_alignment_manifest,
 )
 from .map_engine import MapEngine
+from .map_auditor import build_map_auditor_packet
 from .map_rendering import build_map_rendering_packet
+from .campaign import build_campaign_packet
+from .community_dashboard import build_community_dashboard_packet
+from .community_review import build_community_review_packet, load_community_review_manifest
+from .people_auditor import build_people_auditor_packet
 from .standards_alignment import build_standards_alignment_packet
 from .teacher_interface import build_teacher_interface_packet
 from .mission_seed import build_mission_seed_packet, build_teacher_review_packet
@@ -100,7 +105,12 @@ __all__ = [
     "VerificationSuggestionRecord",
     "TownPackage",
     "MapEngine",
+    "build_map_auditor_packet",
     "build_map_rendering_packet",
+    "build_campaign_packet",
+    "build_community_dashboard_packet",
+    "build_community_review_packet",
+    "build_people_auditor_packet",
     "build_accessibility_support_packet",
     "build_privacy_baseline_packet",
     "build_student_data_minimization_packet",
@@ -125,6 +135,7 @@ __all__ = [
     "load_sanborn_stitching_manifest",
     "load_town_package",
     "load_teacher_review_manifest",
+    "load_community_review_manifest",
     "load_verification_suggestion_manifest",
     "render_town_package_page",
 ]

@@ -13,6 +13,7 @@ TOWN_FILE_SCHEMAS = {
     "locations.json": "location.schema.json",
     "claims.json": "claim.schema.json",
     "mission_seed.json": "mission-seed.schema.json",
+    "community_review_manifest.json": "community-review-manifest.schema.json",
 }
 
 

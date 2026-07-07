@@ -22,5 +22,17 @@
     "access_level": "metadata",
     "accessed_date": "2026-07-05",
     "notes": "Placeholder for source-manifest validation only."
+  },
+  {
+    "source_id": "source_texarkana_1893_daily_texarkana_democrat_098_p3",
+    "title": "Daily Texarkana Democrat issue page 3",
+    "source_type": "newspaper_issue_page",
+    "repository": "The Portal to Texas History",
+    "url": "https://texashistory.unt.edu/ark:/67531/metapth1644239/m1/3/",
+    "citation": "Daily Texarkana Democrat, Vol. 10, No. 98, Ed. 1, December 20, 1893, page 3 of 4, Portal to Texas History.",
+    "rights_status": "public_domain",
+    "access_level": "digital_image",
+    "accessed_date": "2026-07-07",
+    "notes": "Issue page used as a source-issue adapter seed for person and business review lanes. The OCR includes A. S. Blythe and H. T. Huey business text."
   }
 ]

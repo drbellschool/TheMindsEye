@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 from typing import Any
 
 from .building_data import (
@@ -9,12 +10,17 @@ from .building_data import (
     load_building_manifest,
     load_verification_suggestion_manifest,
 )
+from .campaign import build_campaign_packet
+from .community_dashboard import build_community_dashboard_packet
+from .community_review import build_community_review_packet
 from .instructional_alignment import (
     InstructionalAlignmentManifest,
     load_instructional_alignment_manifest,
 )
+from .map_auditor import build_map_auditor_packet
 from .mission_seed import build_mission_seed_packet
 from .map_rendering import build_map_rendering_packet
+from .people_auditor import build_people_auditor_packet
 from .accessibility import build_accessibility_support_packet
 from .privacy import build_privacy_baseline_packet
 from .student_data_minimization import build_student_data_minimization_packet
@@ -37,7 +43,11 @@ from .sanborn import (
 )
 
 
-def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
+def build_town_package_view_model(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object]:
     """Build the read-only browser view model from existing package APIs."""
     return {
         "package": {
@@ -54,12 +64,17 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
         "mission": build_mission_seed_packet(package),
         "readiness": build_classroom_readiness_report(package),
         "sanborn_manifest": _optional_sanborn_manifest_summary(package),
-        "building_manifest": _optional_building_manifest_summary(package),
-        "map_rendering": _optional_map_rendering_summary(package),
+        "building_manifest": _optional_building_manifest_summary(package, town_slug=town_slug, state_root=state_root),
+        "map_rendering": _optional_map_rendering_summary(package, town_slug=town_slug, state_root=state_root),
         "instructional_alignment": _optional_instructional_alignment_summary(package),
         "standards_alignment": _optional_standards_alignment_summary(package),
         "teacher_review": _optional_teacher_review_summary(package),
         "teacher_interface": _optional_teacher_interface_summary(package),
+        "community_dashboard": _optional_community_dashboard_summary(package, town_slug=town_slug, state_root=state_root),
+        "map_auditor": _optional_map_auditor_summary(package, town_slug=town_slug, state_root=state_root),
+        "community_review": _optional_community_review_summary(package, town_slug=town_slug, state_root=state_root),
+        "people_auditor": _optional_people_auditor_summary(package, town_slug=town_slug, state_root=state_root),
+        "campaign": _optional_campaign_summary(package),
         "student_mission": _optional_student_mission_summary(package),
         "assessment_evidence": _optional_assessment_evidence_summary(package),
         "accessibility": _optional_accessibility_summary(package),
@@ -68,9 +83,13 @@ def build_town_package_view_model(package: TownPackage) -> dict[str, object]:
     }
 
 
-def render_town_package_page(package: TownPackage) -> str:
+def render_town_package_page(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> str:
     """Render a local, read-only HTML page for the current town package."""
-    model = build_town_package_view_model(package)
+    model = build_town_package_view_model(package, town_slug=town_slug, state_root=state_root)
     package_info = model["package"]
     if not isinstance(package_info, dict):
         raise TypeError("package view model must contain a package dictionary")
@@ -88,7 +107,7 @@ def render_town_package_page(package: TownPackage) -> str:
             "<body>",
             '<header class="topbar">',
             "<div>",
-            '<p class="eyebrow">Read-only town package view</p>',
+            '<p class="eyebrow">Local review-enabled town view</p>',
             f"<h1>The Mind's Eye: {_text(package_info['town_name'])} 1885</h1>",
             f"<p>{_text(package_info['state_region'])} - Package {_text(package_info['package_id'])}</p>",
             "</div>",
@@ -97,12 +116,16 @@ def render_town_package_page(package: TownPackage) -> str:
             '<main class="layout">',
             _overview_section(model),
             _sanborn_manifest_section(model["sanborn_manifest"]),
-            _building_manifest_section(model["building_manifest"]),
             _map_rendering_section(model["map_rendering"]),
             _instructional_alignment_section(model["instructional_alignment"]),
             _standards_alignment_section(model["standards_alignment"]),
             _teacher_review_section(model["teacher_review"]),
             _teacher_interface_section(model["teacher_interface"]),
+            _community_dashboard_section(model["community_dashboard"]),
+            _map_auditor_section(model["map_auditor"]),
+            _building_manifest_section(model["building_manifest"]),
+            _people_auditor_section(model["people_auditor"]),
+            _campaign_section(model["campaign"]),
             _student_mission_section(model["student_mission"]),
             _assessment_evidence_section(model["assessment_evidence"]),
             _accessibility_section(model["accessibility"]),
@@ -260,9 +283,13 @@ def _optional_sanborn_stitching_summary(manifest: SanbornSheetManifest) -> dict[
     return _sanborn_stitching_summary(stitching_manifest)
 
 
-def _optional_building_manifest_summary(package: TownPackage) -> dict[str, object] | None:
+def _optional_building_manifest_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
     try:
-        building_manifest = load_building_manifest()
+        building_manifest = load_building_manifest(town_slug=town_slug, state_root=state_root)
     except MindseyeDataError:
         return None
     if building_manifest.town_package_id != package.package_id:
@@ -270,9 +297,13 @@ def _optional_building_manifest_summary(package: TownPackage) -> dict[str, objec
     return _building_manifest_summary(building_manifest)
 
 
-def _optional_map_rendering_summary(package: TownPackage) -> dict[str, object] | None:
+def _optional_map_rendering_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
     try:
-        rendering_packet = build_map_rendering_packet(package)
+        rendering_packet = build_map_rendering_packet(package, town_slug=town_slug, state_root=state_root)
     except MindseyeDataError:
         return None
     if rendering_packet["town_package_id"] != package.package_id:
@@ -318,6 +349,72 @@ def _optional_teacher_interface_summary(package: TownPackage) -> dict[str, objec
     if portal_packet["town_package_id"] != package.package_id:
         return None
     return portal_packet
+
+
+def _optional_community_dashboard_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
+    try:
+        packet = build_community_dashboard_packet(package, town_slug=town_slug, state_root=state_root)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_map_auditor_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
+    try:
+        packet = build_map_auditor_packet(package, town_slug=town_slug, state_root=state_root)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_people_auditor_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
+    try:
+        packet = build_people_auditor_packet(package, town_slug=town_slug, state_root=state_root)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_community_review_summary(
+    package: TownPackage,
+    town_slug: str = "texarkana",
+    state_root: Path | None = None,
+) -> dict[str, object] | None:
+    try:
+        packet = build_community_review_packet(package, town_slug=town_slug, state_root=state_root)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
+
+
+def _optional_campaign_summary(package: TownPackage) -> dict[str, object] | None:
+    try:
+        packet = build_campaign_packet(package)
+    except MindseyeDataError:
+        return None
+    if packet["town_package_id"] != package.package_id:
+        return None
+    return packet
 
 
 def _optional_student_mission_summary(package: TownPackage) -> dict[str, object] | None:
@@ -902,9 +999,9 @@ def _building_manifest_section(raw_manifest: object) -> str:
         )
 
     return f"""
-<section class="band" aria-labelledby="building-title">
+<section class="band" id="building-auditor" aria-labelledby="building-title">
   <div class="section-heading">
-    <p class="eyebrow">Building Review Contract</p>
+    <p class="eyebrow">Building Auditor</p>
     <h2 id="building-title">{_text(manifest["title"])}</h2>
     <div class="badge-row">
       {_badge(f"{manifest['record_count']} building anchors")}
@@ -1447,6 +1544,1578 @@ def _teacher_interface_section(raw_portal: object) -> str:
       <ul class="check-list">{''.join(action_rows)}</ul>
     </article>
   </div>
+</section>"""
+
+
+def _community_dashboard_section(raw_dashboard: object) -> str:
+    if raw_dashboard is None:
+        return ""
+
+    dashboard = _expect_dict(raw_dashboard)
+    status_chips = _expect_list(dashboard["status_chips"])
+    navigation_links = _expect_list(dashboard["navigation_links"]) if dashboard.get("navigation_links") is not None else []
+    scope_ladder = _expect_list(dashboard["scope_ladder"])
+    review_domains = _expect_list(dashboard["review_domains"])
+    review_history = _expect_list(dashboard["review_history"])
+    release_gate = _expect_dict(dashboard["release_gate"])
+    evidence_inspector = _expect_dict(dashboard["evidence_inspector"])
+    entity_review_panels = _expect_dict(dashboard["entity_review_panels"])
+    community_review = _expect_dict(dashboard["community_review"]) if dashboard.get("community_review") is not None else None
+    year_gate = _expect_dict(dashboard["year_gate"])
+
+    def _state_class(value: object) -> str:
+        label = _text(value).lower()
+        return "".join(character if character.isalnum() else "-" for character in label).strip("-")
+
+    def _chip_value(chip_id: str) -> object:
+        for raw_chip in status_chips:
+            chip = _expect_dict(raw_chip)
+            if chip["chip_id"] == chip_id:
+                return chip["value"]
+        return 0
+
+    def _chip_state(chip_id: str) -> str:
+        for raw_chip in status_chips:
+            chip = _expect_dict(raw_chip)
+            if chip["chip_id"] == chip_id:
+                return _text(chip["state"])
+        return "blocked"
+
+    buildings = _expect_list(entity_review_panels["buildings"])
+    candidates = _expect_list(entity_review_panels["candidates"])
+    people = _expect_list(entity_review_panels["people"])
+    businesses = _expect_list(entity_review_panels["businesses"])
+    year_gate_summary = _expect_dict(entity_review_panels["map_year_gate"])
+    source_issues = _expect_list(community_review["source_issues"]) if community_review is not None else []
+    focus = _expect_dict(evidence_inspector["focus"])
+    focus_editor_form = _building_review_editor_form(
+        focus if _text(focus.get("focus_type", "")) == "building_record" else None,
+        "#community-dashboard",
+    )
+
+    source_count = int(_chip_value("sources-ready")) if isinstance(_chip_value("sources-ready"), int) else 0
+    sheet_review_count = int(_chip_value("sheets-in-review")) if isinstance(_chip_value("sheets-in-review"), int) else 0
+    building_count = int(_chip_value("building-identities-partial")) if isinstance(_chip_value("building-identities-partial"), int) else 0
+    people_business_count = (
+        int(_chip_value("people-businesses-reviewed"))
+        if isinstance(_chip_value("people-businesses-reviewed"), int)
+        else 0
+    )
+
+    reviewed_buildings = sum(
+        1 for building in buildings if _text(building["identity_status"]) in {"reviewed", "approved"}
+    )
+    art_ready_buildings = sum(
+        1 for building in buildings if _text(building["visual_detail_status"]) in {"verified", "inferred"}
+    )
+    people_confirmed = sum(1 for person in people if _text(person["review_status"]) == "confirmed")
+    people_pending = sum(
+        1 for person in people if _text(person["review_status"]) in {"suggested", "under_review", "insufficient_evidence"}
+    )
+    business_confirmed = sum(1 for business in businesses if _text(business["review_status"]) == "confirmed")
+    business_pending = sum(
+        1 for business in businesses if _text(business["review_status"]) in {"suggested", "under_review", "insufficient_evidence"}
+    )
+    total_community_records = len(people) + len(businesses)
+    confirmed_community_records = people_confirmed + business_confirmed
+    unresolved_buildings = sum(
+        1
+        for building in buildings
+        if _text(building["identity_status"]) not in {"reviewed", "approved"}
+        or _text(building["visual_detail_status"]) == "illustrative"
+    )
+    guarded_lanes = sum(
+        1 for raw_domain in review_domains if _text(_expect_dict(raw_domain)["status"]) in {"planned", "guarded"}
+    )
+    release_blockers = _expect_list(release_gate.get("blockers", [])) if isinstance(release_gate.get("blockers"), list) else []
+    unresolved_items = unresolved_buildings + people_pending + business_pending + len(candidates) + len(release_blockers)
+
+    progress_values = []
+    if buildings:
+        progress_values.append(int(round((reviewed_buildings / len(buildings)) * 100)))
+        progress_values.append(int(round((art_ready_buildings / len(buildings)) * 100)))
+    if total_community_records:
+        progress_values.append(int(round((confirmed_community_records / total_community_records) * 100)))
+    if review_history:
+        progress_values.append(int(round((min(len(review_history), 5) / 5) * 100)))
+    overall_percent = int(round(sum(progress_values) / len(progress_values))) if progress_values else 0
+
+    start_year = int(year_gate["start_year"])
+    end_year = int(year_gate["end_year"])
+    map_year = int(year_gate["map_year"])
+    year_ticks = []
+    for year in range(start_year, end_year + 1):
+        year_ticks.append(
+            f'<span class="year-tick {"highlight" if year == map_year else ""}">{year}</span>'
+        )
+
+    release_state = _text(release_gate["state"])
+    release_label = release_state.upper()
+    release_reason = _text(release_gate["reason"])
+    release_badge = _badge(release_label)
+
+    focus_label = _text(focus.get("focus_label", focus.get("focus_type", "Record Focus")))
+    focus_name = _text(focus.get("label", "Unavailable"))
+    focus_id = _text(focus.get("focus_id", "unavailable"))
+    focus_status = _text(focus.get("status", "unavailable"))
+    focus_basis = _text(focus.get("historical_basis", "source_based_inference"))
+    focus_basis_label = {
+        "verified_fact": "Verified Fact",
+        "source_based_inference": "Source-Based Inference",
+        "fictional_gameplay": "Fictional Gameplay",
+    }.get(focus_basis, focus_basis.replace("_", " ").title())
+    raw_confidence = focus.get("confidence", 0)
+    confidence_percent = 50
+    if isinstance(raw_confidence, int) and not isinstance(raw_confidence, bool):
+        confidence_percent = max(0, min(raw_confidence, 100))
+    elif isinstance(raw_confidence, str):
+        confidence_percent = {
+            "high": 92,
+            "medium": 68,
+            "low": 42,
+            "placeholder": 24,
+            "fictional": 12,
+        }.get(raw_confidence.lower(), 50)
+    focus_source_ids = _expect_list(focus.get("source_ids", [])) if isinstance(focus.get("source_ids"), list) else []
+    related_location = _expect_dict(focus["related_location"]) if isinstance(focus.get("related_location"), dict) else None
+    related_location_label = _text(related_location["label"]) if related_location is not None else "No related location selected"
+    related_location_street = _text(related_location["street"]) if related_location is not None else ""
+    related_location_certainty = _text(related_location["certainty"]) if related_location is not None else ""
+
+    map_status = _text(_chip_state("sheets-in-review"))
+    primary_routes = [
+        {
+            "route_id": "map-auditor",
+            "title": "Map Auditor",
+            "summary": "Stitch Sanborn sheets, place control points, draft roads and rail, and validate the base map geometry.",
+            "status": map_status,
+            "stats": [
+                ("Sheets", sheet_review_count),
+                ("Coverage", f"{overall_percent}%"),
+                ("Road / Rail", next((_text(domain["status"]) for domain in review_domains if _expect_dict(domain)["domain_id"] == "roads"), "planned")),
+                ("Labels", next((_expect_dict(domain)["record_count"] for domain in review_domains if _expect_dict(domain)["domain_id"] == "labels"), 0)),
+            ],
+            "button_label": "OPEN MAP AUDITOR",
+            "href": "#map-auditor",
+            "mark": "MA",
+        },
+        {
+            "route_id": "building-auditor",
+            "title": "Building Auditor",
+            "summary": "Review building footprints, identities, uses, and art. Link to sources and approve for downstream use.",
+            "status": "partial" if building_count else "blocked",
+            "stats": [
+                ("Identities", f"{reviewed_buildings}/{len(buildings)}"),
+                ("Footprints", len(buildings)),
+                ("Art Approved", art_ready_buildings),
+                ("Queue", len(candidates)),
+            ],
+            "button_label": "OPEN BUILDING AUDITOR",
+            "href": "#building-auditor",
+            "mark": "BA",
+        },
+        {
+            "route_id": "people-auditor",
+            "title": "People Auditor",
+            "summary": "Review people and businesses, normalize names, link to source issues, and validate identities.",
+            "status": _text(community_review["review_queue_status"]) if community_review is not None else "blocked",
+            "stats": [
+                ("People", len(people)),
+                ("Businesses", len(businesses)),
+                ("Unresolved", people_pending + business_pending),
+                ("Source Issues", len(source_issues)),
+            ],
+            "button_label": "OPEN PEOPLE AUDITOR",
+            "href": "#people-auditor",
+            "mark": "PA",
+        },
+    ]
+
+    status_cards = [
+        {
+            "label": "Sources Ready",
+            "value": source_count,
+            "state": _chip_state("sources-ready"),
+            "note": "Source intake",
+        },
+        {
+            "label": "Sanborn Sheets In Review",
+            "value": sheet_review_count,
+            "state": _chip_state("sheets-in-review"),
+            "note": "Sheet review lane",
+        },
+        {
+            "label": "Building Identities Partial",
+            "value": building_count,
+            "state": _chip_state("building-identities-partial"),
+            "note": "Building anchors",
+        },
+        {
+            "label": "People / Businesses Reviewed",
+            "value": people_business_count,
+            "state": _chip_state("people-businesses-reviewed"),
+            "note": "People and businesses",
+        },
+        {
+            "label": "Unresolved Items",
+            "value": unresolved_items,
+            "state": "blocked" if unresolved_items else "ready",
+            "note": "Needs attention",
+        },
+        {
+            "label": "Release Gate",
+            "value": release_label,
+            "state": release_state,
+            "note": release_reason,
+        },
+        {
+            "label": "Guarded Lanes",
+            "value": guarded_lanes,
+            "state": "guarded" if guarded_lanes else "ready",
+            "note": "Restricted lanes",
+        },
+    ]
+
+    unresolved_cards = [
+        {"label": "Buildings", "count": unresolved_buildings},
+        {"label": "People", "count": people_pending},
+        {"label": "Businesses", "count": business_pending},
+        {"label": "Sources", "count": len(source_issues)},
+        {"label": "Claims", "count": next((_expect_dict(domain)["record_count"] for domain in review_domains if _expect_dict(domain)["domain_id"] == "claims"), 0)},
+        {"label": "Other", "count": len(release_blockers) + guarded_lanes},
+    ]
+
+    diagnostics_cards = [
+        {"label": "Source Rights", "value": "Verified for Educational Use", "note": "Source rights and use remain visible."},
+        {"label": "No PII", "value": "No personal data stored", "note": "Community review stays data-minimized."},
+        {"label": "Package ID", "value": _text(dashboard["town_package_id"]).replace("_", "-").upper(), "note": "Town package identifier."},
+        {"label": "Data Integrity", "value": "Immutable audit trail", "note": "Claims and source links remain traceable."},
+        {"label": "Last Audit", "value": "Local build snapshot", "note": "Read-only render of the current package."},
+        {"label": "Community Review Only", "value": "Not for public release", "note": "Teacher and community review remain upstream."},
+    ]
+
+    status_cards_html = []
+    for card in status_cards:
+        status_cards_html.append(
+            f"""
+<article class="status-card status-{_state_class(card["state"])}">
+  <p class="status-card-label">{_text(card["label"])}</p>
+  <strong class="status-card-value">{_text(card["value"])}</strong>
+  <p class="status-card-note">{_text(card["note"])}</p>
+</article>"""
+        )
+
+    scope_rows = []
+    for raw_scope in scope_ladder:
+        scope = _expect_dict(raw_scope)
+        scope_rows.append(
+            f"""
+<article class="scope-card scope-{_state_class(scope["scope_state"])}">
+  <div class="scope-index">{_badge(scope["scope_id"])}</div>
+  <h4>{_text(scope["label"])}</h4>
+  <p class="note">{_text(scope["notes"])}</p>
+</article>"""
+        )
+
+    route_rows = []
+    for route in primary_routes:
+        stat_rows = []
+        for stat_label, stat_value in route["stats"]:
+            stat_rows.append(
+                f"""
+<div class="route-stat">
+  <span>{_text(stat_label)}</span>
+  <strong>{_text(stat_value)}</strong>
+</div>"""
+            )
+        route_rows.append(
+            f"""
+<article class="route-card route-{_state_class(route["status"])}">
+  <div class="route-hero">
+    <div class="route-mark" aria-hidden="true">{_text(route["mark"])}</div>
+    <div>
+      <p class="eyebrow">{_text(route["title"])}</p>
+      <h4>{_text(route["title"])}</h4>
+      <p class="note">{_text(route["summary"])}</p>
+    </div>
+  </div>
+  <div class="route-status">{_badge(route["status"])}</div>
+  <div class="route-stats">{''.join(stat_rows)}</div>
+  <a class="action-button action-primary route-button" href="{_attr(route["href"])}">{_text(route["button_label"])}</a>
+</article>"""
+        )
+
+    unresolved_rows = []
+    for card in unresolved_cards:
+        unresolved_rows.append(
+            f"""
+<article class="mini-card">
+  <p class="mini-card-label">{_text(card["label"])}</p>
+  <strong class="mini-card-value">{_text(card["count"])}</strong>
+</article>"""
+        )
+
+    history_rows = []
+    for index, raw_item in enumerate(review_history, start=1):
+        item = _expect_dict(raw_item)
+        history_rows.append(
+            f"""
+<article class="history-card">
+  <div class="record-title">
+    <h4>{index}. {_text(item["label"])}</h4>
+    <div class="badge-row">{_badge(item["status"])}</div>
+  </div>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    nav_rows = []
+    for raw_link in navigation_links:
+        link = _expect_dict(raw_link)
+        nav_rows.append(
+            f'<a class="badge link-badge" href="{_attr(link["href"])}">{_text(link["label"])}</a>'
+        )
+
+    year_tick_rows = "".join(year_ticks)
+    status_card_rows = "".join(status_cards_html)
+    route_card_rows = "".join(route_rows)
+    unresolved_card_rows = "".join(unresolved_rows)
+    history_card_rows = "".join(history_rows)
+
+    focus_source_rows = "".join(_badge(source_id) for source_id in focus_source_ids)
+    release_blocker_rows = []
+    blocker_labels = {
+        "building_identity_status": "Buildings need more evidence",
+        "candidate_queue": "Candidate queue still needs promotion",
+        "teacher_release": "Teacher review still pending",
+    }
+    for blocker in release_blockers:
+        release_blocker_rows.append(
+            f"""
+<li>{_text(blocker_labels.get(_text(blocker), _text(blocker).replace("_", " ").title()))}</li>"""
+        )
+    release_blocker_rows_html = "".join(release_blocker_rows)
+
+    return f"""
+<section class="band community-console" id="community-dashboard" aria-labelledby="community-title">
+  <div class="community-shell">
+    <header class="community-hero">
+      <div class="brand-plate">
+        <div class="brand-mark" aria-hidden="true">ME</div>
+        <div>
+          <p class="eyebrow">Community Verification Console</p>
+          <h2 id="community-title">{_text(dashboard["dashboard_title"])}</h2>
+          <p class="brand-subtitle">The Mind's Eye Historical Towns</p>
+        </div>
+      </div>
+      <div class="hero-meta-grid">
+        <article class="hero-meta-card">
+          <p class="hero-meta-label">Town / Dataset</p>
+          <strong>{_text(dashboard["town_name"]).upper()}, {_text(dashboard["state_region"]).replace(" / ", " & ").replace(" Region", "").upper()}</strong>
+          <span>Sanborn Fire Insurance Maps</span>
+        </article>
+        <article class="hero-meta-card">
+          <p class="hero-meta-label">Package ID</p>
+          <strong>{_text(dashboard["town_package_id"]).replace("_", "-").upper()}</strong>
+          <span>Community package</span>
+        </article>
+        <article class="hero-meta-card">
+          <p class="hero-meta-label">State / Region</p>
+          <strong>{_text(dashboard["state_region"])}</strong>
+          <span>Town scope</span>
+        </article>
+        <article class="hero-meta-card">
+          <p class="hero-meta-label">Viewer Role</p>
+          <strong>Community Reviewer</strong>
+          <span>Review-only access</span>
+        </article>
+        <article class="hero-meta-card hero-meta-alert">
+          <p class="hero-meta-label">Release State</p>
+          <strong>{release_label}</strong>
+          <span>{release_reason}</span>
+        </article>
+        <article class="hero-meta-card">
+          <p class="hero-meta-label">Last Sync</p>
+          <strong>Local build snapshot</strong>
+          <span>Read-only render</span>
+        </article>
+      </div>
+    </header>
+
+    <section class="panel year-gate-panel" id="community-year-gate">
+      <div class="year-gate-copy">
+        <p class="eyebrow">Year Gate</p>
+        <h3>20-Year Window</h3>
+        <p>{_text(year_gate["rule"])}</p>
+      </div>
+      <div class="year-gate-track">
+        <div class="year-track">{year_tick_rows}</div>
+        <div class="year-track-meta">
+          <span>Window start {start_year}</span>
+          <span class="year-pin">{map_year}</span>
+          <span>Window end {end_year}</span>
+        </div>
+      </div>
+      <div class="year-gate-note">
+        <p>All records, claims, and evidence outside this window are blocked from review.</p>
+      </div>
+    </section>
+
+    <section class="panel status-overview-panel" id="community-status">
+      <div class="section-heading compact-heading">
+        <p class="eyebrow">Review Status Overview</p>
+        <h3>Town verification progress and release readiness</h3>
+      </div>
+      <div class="status-overview-grid">
+        <div class="status-card-grid">{status_card_rows}</div>
+        <article class="overall-progress-card">
+          <p class="eyebrow">Overall Progress</p>
+          <strong>{overall_percent}%</strong>
+          <p>Community Verification Progress</p>
+          <div class="progress-bar"><span style="width: {overall_percent}%"></span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel scope-ladder-panel" id="community-scope">
+      <div class="section-heading compact-heading">
+        <p class="eyebrow">Scope Ladder</p>
+        <h3>Community review is active; county and state roll-ups are planned</h3>
+      </div>
+      <div class="scope-ladder-grid">{''.join(scope_rows)}</div>
+    </section>
+
+    <div class="community-layout">
+      <main class="community-main">
+        <section class="panel route-panel" id="community-routes">
+          <div class="section-heading compact-heading">
+            <p class="eyebrow">Primary Routes</p>
+            <h3>Move from town review into the specialized auditors</h3>
+          </div>
+          <div class="route-grid">{route_card_rows}</div>
+        </section>
+
+        <div class="community-bottom-grid">
+          <article class="panel summary-panel" id="community-unresolved">
+            <div class="section-heading compact-heading">
+              <p class="eyebrow">Unresolved Summary</p>
+              <h3>What still needs human review</h3>
+            </div>
+            <div class="mini-card-grid">{unresolved_card_rows}</div>
+            <a class="action-button action-secondary" href="#community-release">View All Unresolved Items</a>
+          </article>
+
+          <article class="panel release-panel release-{_state_class(release_state)}" id="community-release">
+            <div class="section-heading compact-heading">
+              <p class="eyebrow">Release Gate</p>
+              <h3>{release_label}</h3>
+            </div>
+            <p class="note">{release_reason}</p>
+            <div class="release-badge-row">{release_badge}</div>
+            <div class="release-blocker-card">
+              <p><strong>Top Blocking Reasons</strong></p>
+              <ul class="details-list">{release_blocker_rows_html or '<li>Community review remains upstream of classroom release.</li>'}</ul>
+            </div>
+            <a class="action-button action-secondary" href="#community-history">View Blocking Items ({len(release_blockers) or unresolved_items})</a>
+          </article>
+
+          <article class="panel actions-panel" id="community-actions">
+            <div class="section-heading compact-heading">
+              <p class="eyebrow">Quick Actions</p>
+              <h3>Fast review operations</h3>
+            </div>
+            <div class="action-stack">
+              <a class="action-button action-secondary" href="#community-status">Run Data Quality Check</a>
+              <a class="action-button action-secondary" href="#community-evidence">Bulk Link Source Issues</a>
+              <a class="action-button action-secondary" href="#community-history">Export Review Report</a>
+              <a class="action-button action-secondary" href="#community-diagnostics">View Audit Log</a>
+            </div>
+            <p class="note">These actions stay inside review and do not publish classroom content.</p>
+          </article>
+        </div>
+      </main>
+
+      <aside class="community-sidebar">
+        <article class="panel evidence-panel" id="community-evidence">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Evidence Inspector</p>
+              <h3>{focus_label}</h3>
+            </div>
+            <div class="fake-select">{focus_label}</div>
+          </div>
+          <div class="evidence-grid">
+            <article class="evidence-summary">
+              <div class="evidence-summary-head">
+                <div>
+                  <p class="label">Label / Name</p>
+                  <h4>{focus_name}</h4>
+                </div>
+                <div class="score-card">
+                  <div class="score-ring" style="--score: {confidence_percent}">
+                    <strong>{confidence_percent}%</strong>
+                  </div>
+                  <small>Confidence</small>
+                </div>
+              </div>
+              <div class="field-grid">
+                <div><p class="label">Record ID</p><p>{focus_id}</p></div>
+                <div><p class="label">Status</p><p>{focus_basis_label}</p></div>
+                <div><p class="label">Reviewed status</p><p>{focus_status}</p></div>
+                <div><p class="label">Related Location</p><p>{related_location_label}</p><p class="note">{related_location_street}{f" · {related_location_certainty}" if related_location_certainty else ""}</p></div>
+              </div>
+            </article>
+            <article class="evidence-notes">
+              <p class="label">Source IDs</p>
+              <div class="badge-row">{focus_source_rows or _badge("none")}</div>
+              <p class="label">Review Notes</p>
+              <p class="note">{_text(focus.get("notes", ""))}</p>
+              {focus_editor_form}
+              <a class="action-button action-primary" href="#community-history">View Full Record</a>
+            </article>
+          </div>
+          <p class="note">Selected scope: {_text(evidence_inspector["selected_scope"])} | Selected town: {_text(evidence_inspector["selected_town"])}</p>
+        </article>
+
+        <article class="panel history-panel" id="community-history">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Review History</p>
+              <h3>Latest activity</h3>
+            </div>
+            <a class="badge link-badge" href="#community-diagnostics">View Full History</a>
+          </div>
+          <div class="records">{history_card_rows}</div>
+        </article>
+      </aside>
+    </div>
+
+    <article class="panel diagnostics-panel" id="community-diagnostics">
+      <div class="section-heading compact-heading">
+        <p class="eyebrow">Diagnostics &amp; Safeguards</p>
+        <h3>Review-only protections and provenance guardrails</h3>
+      </div>
+      <div class="diagnostics-grid">
+        {''.join(
+            f"""
+<article class="diagnostic-card">
+  <p class="diagnostic-label">{_text(card["label"])}</p>
+  <strong>{_text(card["value"])}</strong>
+  <p class="note">{_text(card["note"])}</p>
+</article>"""
+            for card in diagnostics_cards
+        )}
+      </div>
+      <div class="link-strip">{''.join(nav_rows)}</div>
+      <p class="note">Primary navigation remains available for the map, building, and people auditors.</p>
+    </article>
+  </div>
+</section>"""
+
+
+def _map_auditor_section(raw_auditor: object) -> str:
+    if raw_auditor is None:
+        return ""
+
+    auditor = _expect_dict(raw_auditor)
+    status_chips = _expect_list(auditor["status_chips"])
+    navigation_links = _expect_list(auditor["navigation_links"])
+    progress_summary = _expect_dict(auditor["progress_summary"])
+    sheet_selector = _expect_list(auditor["sheet_selector"])
+    coverage_grid = _expect_list(auditor["coverage_grid"])
+    selected_sheet = _expect_dict(auditor["selected_sheet"]) if auditor.get("selected_sheet") is not None else None
+    stitch_workspace = _expect_dict(auditor["stitch_workspace"])
+    design_tools = _expect_list(auditor["design_tools"])
+    layer_stack = _expect_list(auditor["layer_stack"])
+    selected_building = _expect_dict(auditor["selected_building"]) if auditor.get("selected_building") is not None else None
+    building_workspace = _expect_dict(auditor["building_workspace"])
+    art_preview = _expect_dict(auditor["art_preview"])
+    interior_notes = _expect_dict(auditor["interior_notes"])
+    provenance_trail = _expect_dict(auditor["provenance_trail"])
+    people_review = _expect_list(auditor["people_review"])
+    businesses_review = _expect_list(auditor["businesses_review"])
+    review_legend = _expect_list(auditor["review_legend"])
+    review_history = _expect_list(auditor["review_history"])
+    unresolved_summary = _expect_list(auditor["unresolved_summary"])
+    quick_actions = _expect_list(auditor["quick_actions"])
+    year_gate = _expect_dict(auditor["year_gate"])
+
+    chip_rows = []
+    for raw_chip in status_chips:
+        chip = _expect_dict(raw_chip)
+        chip_rows.append(_badge(f"{_text(chip['label'])}: {_text(chip['value'])}"))
+
+    nav_rows = []
+    for raw_link in navigation_links:
+        link = _expect_dict(raw_link)
+        nav_rows.append(f'<a class="badge link-badge" href="{_attr(link["href"])}">{_text(link["label"])}</a>')
+
+    progress_segments = []
+    for raw_segment in _expect_list(progress_summary["segments"]):
+        segment = _expect_dict(raw_segment)
+        progress_segments.append(
+            f"""
+<div class="progress-segment">
+  <strong>{_text(segment["label"])}</strong>
+  <span>{_text(segment["value"])}</span>
+  <span class="progress-bar"><span style="width: {_text(segment["percent"])}%"></span></span>
+</div>"""
+        )
+
+    sheet_rows = []
+    for raw_sheet in sheet_selector:
+        sheet = _expect_dict(raw_sheet)
+        sheet_rows.append(
+            f"""
+<article class="record sheet-card {'selected' if sheet['is_anchor'] else ''}">
+  <div class="record-title">
+    <h4>Sheet {_text(sheet["sheet_label"])}</h4>
+    <div class="badge-row">
+      {_badge(sheet["review_status"])}
+      {_badge("anchor" if sheet["is_anchor"] else "reviewed")}
+    </div>
+  </div>
+  <p><strong>Role:</strong> {_text(sheet["sheet_role"])}</p>
+  <p><strong>Observed labels:</strong> {_text(sheet["observed_label_count"])}</p>
+  <p class="note">{_text(sheet["notes"])}</p>
+</article>"""
+        )
+
+    selected_sheet_labels = []
+    if selected_sheet is not None:
+        for label in selected_sheet["observed_labels"]:
+            selected_sheet_labels.append(_badge(str(label)))
+
+    selected_sheet_features = []
+    if selected_sheet is not None:
+        for feature in selected_sheet["visible_features"]:
+            selected_sheet_features.append(f"<li>{_text(feature)}</li>")
+
+    selected_sheet_deferred = []
+    if selected_sheet is not None:
+        for item in selected_sheet["deferred_work"]:
+            selected_sheet_deferred.append(f"<li>{_text(item)}</li>")
+
+    layer_rows = []
+    for raw_layer in layer_stack:
+        layer = _expect_dict(raw_layer)
+        layer_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(layer["label"])}</h4>
+    <div class="badge-row">{_badge(layer["status"])}</div>
+  </div>
+  <p class="note">{_text(layer["notes"])}</p>
+</article>"""
+        )
+
+    tool_rows = []
+    for raw_tool in design_tools:
+        tool = _expect_dict(raw_tool)
+        tool_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(tool["label"])}</h4>
+    <div class="badge-row">{_badge(tool["status"])}</div>
+  </div>
+  <p class="note">{_text(tool["notes"])}</p>
+</article>"""
+        )
+
+    art_layer_rows = []
+    for raw_layer in _expect_list(art_preview["layers"]):
+        layer = _expect_dict(raw_layer)
+        art_layer_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(layer["label"])}</h4>
+    <div class="badge-row">{_badge(layer["status"])}</div>
+  </div>
+  <p class="note">{_text(layer["notes"])}</p>
+</article>"""
+        )
+
+    people_rows = []
+    for raw_person in people_review:
+        person = _expect_dict(raw_person)
+        source_issue = _expect_dict(person["source_issue"])
+        people_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(person["display_name"])}</h4>
+    <div class="badge-row">{_badge(person["review_status"])}{_badge(person["historical_basis"])}</div>
+  </div>
+  <p><strong>Issue:</strong> {_text(source_issue["publication_title"])} / {_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p>
+  <p class="note">{_text(person["notes"])}</p>
+</article>"""
+        )
+
+    business_rows = []
+    for raw_business in businesses_review:
+        business = _expect_dict(raw_business)
+        source_issue = _expect_dict(business["source_issue"])
+        business_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(business["display_name"])}</h4>
+    <div class="badge-row">{_badge(business["review_status"])}{_badge(business["historical_basis"])}</div>
+  </div>
+  <p><strong>Issue:</strong> {_text(source_issue["publication_title"])} / {_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p>
+  <p class="note">{_text(business["notes"])}</p>
+</article>"""
+        )
+
+    legend_rows = []
+    for raw_item in review_legend:
+        item = _expect_dict(raw_item)
+        legend_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["label"])}</h4>
+    <div class="badge-row">{_badge(item["status"])}</div>
+  </div>
+  <p><strong>Count:</strong> {_text(item["count"])}</p>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    history_rows = []
+    for raw_item in review_history:
+        item = _expect_dict(raw_item)
+        history_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["label"])}</h4>
+    <div class="badge-row">{_badge(str(item["status"]))}</div>
+  </div>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    unresolved_rows = []
+    for raw_item in unresolved_summary:
+        item = _expect_dict(raw_item)
+        unresolved_rows.append(
+            f"""
+<li>
+  <strong>{_text(item["label"])}</strong>
+  <span>{_text(item["count"])}</span>
+</li>"""
+        )
+
+    quick_action_rows = []
+    for raw_action in quick_actions:
+        action = _expect_dict(raw_action)
+        href = action.get("href", "#")
+        quick_action_rows.append(
+            f'<a class="action-button action-{_text(action["kind"])}" href="{_attr(str(href))}">{_text(action["label"])}</a>'
+        )
+
+    source_issue = provenance_trail.get("source_issue")
+    source_issue_card = ""
+    if isinstance(source_issue, dict):
+        source_issue_card = f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(source_issue["publication_title"])}</h4>
+    <div class="badge-row">
+      {_badge(_text(source_issue["issue_date"]))}
+      {_badge(f"p. {_text(source_issue['page'])}")}
+    </div>
+  </div>
+  <p><strong>Issue ID:</strong> {_text(source_issue["source_issue_id"])}</p>
+  <p><strong>Citation:</strong> {_text(source_issue["citation"])}</p>
+  <p><strong>OCR Excerpt:</strong> {_text(source_issue["ocr_excerpt"])}</p>
+  <p class="note"><a href="{_attr(source_issue["page_url"])}">Open source page</a></p>
+</article>"""
+
+    selected_building_editor_form = _building_review_editor_form(selected_building, "#map-auditor")
+
+    selected_building_block = ""
+    if selected_building is not None:
+        selected_building_block = f"""
+<article class="record building-focus-card">
+  <div class="record-title">
+    <h4>{_text(selected_building["building_id"])}</h4>
+    <div class="badge-row">
+      {_badge(selected_building["identity_status"])}
+      {_badge(selected_building["visual_detail_status"])}
+      {_badge(selected_building["default_render_mode"])}
+    </div>
+  </div>
+  <div class="field-grid source-issue-grid">
+    <div><p class="label">Student-safe name</p><p>{_text(selected_building["student_safe_name"])}</p></div>
+    <div><p class="label">Reviewed label</p><p>{_text(selected_building["reviewed_label"] or selected_building["student_safe_name"])}</p></div>
+    <div><p class="label">Location anchor</p><p>{_text(selected_building["location_id"])}</p></div>
+    <div><p class="label">Review record</p><p>{_text(selected_building["review_record_id"])}</p></div>
+    <div><p class="label">Reviewed sheet</p><p>{_text(selected_building["sheet_id"])} / {_text(selected_building["sheet_number"])}</p></div>
+    <div><p class="label">Historical function</p><p>{_text(selected_building["historical_function"])}</p></div>
+  </div>
+  <p><strong>Anchor status:</strong> {_text(selected_building["anchor_status"])}</p>
+  <p><strong>Existence status:</strong> {_text(selected_building["existence_status"])}</p>
+  <p><strong>Source IDs:</strong> {_joined_ids(selected_building["source_ids"])}</p>
+  <p><strong>Supporting claims:</strong> {_joined_ids(selected_building["supporting_claim_ids"])}</p>
+  <p><strong>Suggestion IDs:</strong> {_joined_ids(selected_building["suggestion_ids"])}</p>
+  <p class="note">{_text(selected_building["notes"])}</p>
+  {selected_building_editor_form}
+</article>"""
+
+    return f"""
+<section class="band map-auditor" id="map-auditor" aria-labelledby="map-auditor-title">
+  <div class="section-heading">
+    <p class="eyebrow">Map Auditor</p>
+    <h2 id="map-auditor-title">{_text(auditor["dashboard_title"])}</h2>
+    <div class="status-strip">{''.join(chip_rows)}</div>
+    <div class="progress-shell">{''.join(progress_segments)}</div>
+    <div class="link-strip">{''.join(nav_rows)}</div>
+    <p>{_text(auditor["notes"])}</p>
+    <p class="note">{_text(year_gate["rule"])}</p>
+  </div>
+  <div class="auditor-grid">
+    <article class="panel auditor-sheet-panel">
+      <h3>Sanborn Map Review</h3>
+      <p><strong>Map year:</strong> {_text(year_gate["map_year"])}</p>
+      <p><strong>Stitching status:</strong> {_text(stitch_workspace["stitching_status"])}</p>
+      <p><strong>Georeferencing status:</strong> {_text(stitch_workspace["georeferencing_status"])}</p>
+      <p><strong>Selected sheet:</strong> {_text(selected_sheet["sheet_label"] if selected_sheet is not None else "None")}</p>
+      <div class="records">{''.join(sheet_rows)}</div>
+      <h4>Selected Sheet Workspace</h4>
+      <div class="map-stage">
+        <div class="map-stage-header">
+          <strong>{_text(selected_sheet["sheet_label"]) if selected_sheet is not None else "No sheet selected"}</strong>
+          <span>{_text(selected_sheet["sheet_role"]) if selected_sheet is not None else "unavailable"}</span>
+        </div>
+        <p><strong>Observed labels:</strong> {''.join(selected_sheet_labels) if selected_sheet_labels else "None"}</p>
+        <p><strong>Visible features:</strong></p>
+        <ul class="details-list">{''.join(selected_sheet_features) if selected_sheet_features else '<li>No visible features loaded.</li>'}</ul>
+        <p><strong>Deferred work:</strong></p>
+        <ul class="details-list">{''.join(selected_sheet_deferred) if selected_sheet_deferred else '<li>No deferred work loaded.</li>'}</ul>
+      </div>
+      <h4>Layer Stack</h4>
+      <div class="records">{''.join(layer_rows)}</div>
+      <h4>Drafting Tools</h4>
+      <div class="records">{''.join(tool_rows)}</div>
+    </article>
+    <article class="panel auditor-building-panel">
+      <h3>Building Handoff Workspace</h3>
+      <p><strong>Selected building:</strong> {_text(building_workspace.get("building_id", "None"))}</p>
+      <p><strong>Footprint status:</strong> {_text(building_workspace.get("footprint_status", "unavailable"))}</p>
+      <p><strong>Geometry basis:</strong> {_text(building_workspace.get("geometry_basis", "unavailable"))}</p>
+      {selected_building_block}
+      <h4>Extracted Text Review</h4>
+      <div class="badge-row">{''.join(selected_sheet_labels) if selected_sheet_labels else _badge("No extracted labels loaded")}</div>
+      <h4>Footprint Review</h4>
+      <article class="record">
+        <div class="record-title">
+          <h4>{_text(building_workspace["building_id"] if building_workspace.get("building_id") else "No building selected")}</h4>
+          <div class="badge-row">
+            {_badge(building_workspace["identity_status"]) if building_workspace.get("identity_status") else _badge("blocked")}
+            {_badge(building_workspace["visual_detail_status"]) if building_workspace.get("visual_detail_status") else _badge("unknown")}
+          </div>
+        </div>
+        <p><strong>Location:</strong> {_text(building_workspace.get("location_id", ""))}</p>
+        <p><strong>Review record:</strong> {_text(building_workspace.get("review_record_id", "")) or "None"}</p>
+        <p><strong>Historical function:</strong> {_text(building_workspace.get("historical_function", "")) or "Unknown"}</p>
+        <p class="note">{_text(building_workspace["notes"])}</p>
+      </article>
+      <h4>Art Preview</h4>
+      <div class="records">{''.join(art_layer_rows)}</div>
+      <div class="map-stage">
+        <p><strong>Preview status:</strong> {_text(art_preview["preview_status"])}</p>
+        <p><strong>Transparent background:</strong> {_text(art_preview["transparent_background"])}</p>
+        <p class="note">{_text(art_preview["notes"])}</p>
+      </div>
+      <h4>Interior / Use Notes</h4>
+      <article class="record">
+        <div class="record-title">
+          <h4>{_text(interior_notes["historical_basis"])}</h4>
+          <div class="badge-row">{_badge(interior_notes["historical_basis"])}</div>
+        </div>
+        <p>{_text(interior_notes["text"])}</p>
+      </article>
+      <div class="button-row">
+        <span class="action-button action-primary">Approve Building Record</span>
+        <span class="action-button action-secondary">Needs More Evidence</span>
+        <span class="action-button action-secondary">Defer</span>
+        <span class="action-button action-danger">Reject Building</span>
+      </div>
+    </article>
+    <article class="panel auditor-provenance-panel">
+      <h3>Provenance & Review Records</h3>
+      <h4>Source Issue / Page Trail</h4>
+      {source_issue_card or '<p class="note">No source issue trail available.</p>'}
+      <h4>People Review</h4>
+      <div class="records">{''.join(people_rows) if people_rows else '<p class="note">No people records loaded.</p>'}</div>
+      <h4>Businesses Review</h4>
+      <div class="records">{''.join(business_rows) if business_rows else '<p class="note">No business records loaded.</p>'}</div>
+      <h4>Provenance Legend</h4>
+      <div class="records">{''.join(legend_rows)}</div>
+      <h4>Review History</h4>
+      <div class="records">{''.join(history_rows)}</div>
+      <h4>Reviewer Notes</h4>
+      <article class="record">
+        <p class="note">{_text(provenance_trail["notes"])}</p>
+      </article>
+    </article>
+  </div>
+  <div class="auditor-bottom">
+    <article class="panel">
+      <h3>Sheet Coverage</h3>
+      <table class="coverage-table">
+        <thead>
+          <tr>
+            <th>Sheet</th>
+            <th>Coverage</th>
+            <th>Status</th>
+            <th>Buildings Tagged</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(f'<tr><td>{_text(row["sheet_label"])}</td><td>{_text(row["coverage_percent"])}%</td><td>{_text(row["status"])}</td><td>{_text(row["buildings_tagged"])}</td></tr>' for row in coverage_grid)}
+        </tbody>
+      </table>
+    </article>
+    <article class="panel">
+      <h3>Unresolved Summary</h3>
+      <ul class="check-list">{''.join(unresolved_rows)}</ul>
+    </article>
+    <article class="panel">
+      <h3>Quick Actions</h3>
+      <div class="action-stack">{''.join(quick_action_rows)}</div>
+    </article>
+  </div>
+</section>"""
+
+
+def _people_auditor_section(raw_auditor: object) -> str:
+    if raw_auditor is None:
+        return ""
+
+    auditor = _expect_dict(raw_auditor)
+    status_chips = _expect_list(auditor["status_chips"])
+    navigation_links = _expect_list(auditor["navigation_links"])
+    progress_summary = _expect_dict(auditor["progress_summary"])
+    source_issue_browser = _expect_list(auditor["source_issue_browser"])
+    selected_issue = _expect_dict(auditor["selected_issue"]) if auditor.get("selected_issue") is not None else None
+    people_review = _expect_list(auditor["people_review"])
+    selected_person = _expect_dict(auditor["selected_person"]) if auditor.get("selected_person") is not None else None
+    businesses_review = _expect_list(auditor["businesses_review"])
+    selected_business = _expect_dict(auditor["selected_business"]) if auditor.get("selected_business") is not None else None
+    review_scope = _expect_dict(auditor["review_scope"])
+    review_legend = _expect_list(auditor["review_legend"])
+    review_history = _expect_list(auditor["review_history"])
+    unresolved_summary = _expect_list(auditor["unresolved_summary"])
+    quick_actions = _expect_list(auditor["quick_actions"])
+    year_gate = _expect_dict(auditor["year_gate"])
+    review_queue_status = _text(auditor["review_queue_status"])
+    promotion_rule = _text(auditor["promotion_rule"])
+    record_count = _text(auditor["record_count"])
+    source_issue_count = _text(auditor["source_issue_count"])
+    claim_boundary = _expect_dict(auditor["claim_boundary"]) if auditor.get("claim_boundary") else {}
+
+    def _confidence_profile(record: dict[str, object] | None) -> dict[str, object]:
+        if record is None:
+            return {"score": 0, "label": "Low", "reason": "No record selected."}
+
+        review_status = str(record.get("review_status", ""))
+        historical_basis = str(record.get("historical_basis", ""))
+        score = 50
+        if review_status == "confirmed":
+            score = 88
+        elif review_status == "under_review":
+            score = 72
+        elif review_status == "rejected":
+            score = 18
+        elif review_status == "insufficient_evidence":
+            score = 34
+
+        if historical_basis == "verified_fact":
+            score += 4
+        elif historical_basis == "fictional_gameplay":
+            score -= 25
+
+        score = max(0, min(score, 100))
+        if score >= 80:
+            label = "High"
+        elif score >= 50:
+            label = "Moderate"
+        else:
+            label = "Low"
+        reason = "Confidence reflects the current review status and historical basis."
+        return {"score": score, "label": label, "reason": reason}
+
+    def _initials(display_name: str) -> str:
+        parts = [part for part in display_name.replace("(", " ").replace(")", " ").replace("&", " ").split() if part]
+        if not parts:
+            return "?"
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return "".join(part[0].upper() for part in parts[:2])
+
+    def _classification_cards(selected_basis: str) -> str:
+        options = [
+            ("verified_fact", "Verified Fact", "Directly supported by primary source review."),
+            ("source_based_inference", "Source-Based Inference", "Reasonable historical interpretation."),
+            ("fictional_gameplay", "Fictional Gameplay", "Never used for historical identity claims."),
+        ]
+        rows = []
+        for basis, label, note in options:
+            active = basis == selected_basis
+            rows.append(
+                f"""
+<article class="classification-card {'active' if active else ''}">
+  <div class="record-title">
+    <h4>{_text(label)}</h4>
+    <div class="badge-row">{_badge('selected' if active else 'available')}</div>
+  </div>
+  <p class="note">{_text(note)}</p>
+</article>"""
+            )
+        return "".join(rows)
+
+    chip_rows = []
+    for raw_chip in status_chips:
+        chip = _expect_dict(raw_chip)
+        chip_rows.append(_badge(f"{_text(chip['label'])}: {_text(chip['value'])}"))
+
+    nav_rows = []
+    for raw_link in navigation_links:
+        link = _expect_dict(raw_link)
+        nav_rows.append(f'<a class="badge link-badge" href="{_attr(link["href"])}">{_text(link["label"])}</a>')
+
+    progress_segments = []
+    for raw_segment in _expect_list(progress_summary["segments"]):
+        segment = _expect_dict(raw_segment)
+        progress_segments.append(
+            f"""
+<div class="progress-segment">
+  <strong>{_text(segment["label"])}</strong>
+  <span>{_text(segment["value"])}</span>
+  <span class="progress-bar"><span style="width: {_text(segment["percent"])}%"></span></span>
+</div>"""
+        )
+
+    issue_rows = []
+    for raw_issue in source_issue_browser:
+        issue = _expect_dict(raw_issue)
+        issue_initials = _initials(_text(issue["publication_title"]))
+        issue_rows.append(
+            f"""
+<article class="record source-issue-card">
+  <div class="issue-media">
+    <div class="issue-thumb" aria-hidden="true">
+      <span>{issue_initials}</span>
+    </div>
+    <div class="issue-meta">
+      <p class="eyebrow">Source Issue</p>
+      <h4>{_text(issue["publication_title"])}</h4>
+      <p class="note">{_text(issue["issue_date"])} / page {_text(issue["page"])}</p>
+    </div>
+  </div>
+  <div class="issue-body">
+    <div class="record-title">
+      <div class="badge-row">
+        {_badge(f"{issue['linked_people_count']} people")}
+        {_badge(f"{issue['linked_business_count']} businesses")}
+      </div>
+      <div class="badge-row">{_badge(issue["source_issue_id"])}</div>
+    </div>
+    <p><strong>OCR:</strong> {_text(issue["ocr_excerpt"])}</p>
+    <p class="note">{_text(issue["notes"])}</p>
+    <div class="button-row">
+      <span class="action-button action-primary issue-action">Attach to Person or Business</span>
+    </div>
+  </div>
+</article>"""
+        )
+
+    selected_issue_block = ""
+    if selected_issue is not None:
+        selected_issue_initials = _initials(_text(selected_issue["publication_title"]))
+        selected_issue_block = f"""
+<article class="record source-issue-card selected-issue-card">
+  <div class="issue-media">
+    <div class="issue-thumb" aria-hidden="true">
+      <span>{selected_issue_initials}</span>
+    </div>
+    <div class="issue-meta">
+      <p class="eyebrow">Selected Issue Trail</p>
+      <h4>{_text(selected_issue["publication_title"])}</h4>
+      <p class="note">{_text(selected_issue["issue_date"])} / page {_text(selected_issue["page"])}</p>
+      <div class="badge-row">
+        {_badge(_text(selected_issue["source_issue_id"]))}
+        {_badge(f"{len(selected_issue['linked_people_names'])} people")}
+        {_badge(f"{len(selected_issue['linked_business_names'])} businesses")}
+      </div>
+    </div>
+  </div>
+  <div class="issue-body">
+    <div class="field-grid source-issue-grid">
+      <div><p class="label">Issue ID</p><p>{_text(selected_issue["source_issue_id"])}</p></div>
+      <div><p class="label">Citation</p><p>{_text(selected_issue["citation"])}</p></div>
+      <div><p class="label">Linked people</p><p>{_joined_ids(selected_issue["linked_people_names"])}</p></div>
+      <div><p class="label">Linked businesses</p><p>{_joined_ids(selected_issue["linked_business_names"])}</p></div>
+    </div>
+    <p><strong>OCR Excerpt:</strong> {_text(selected_issue["ocr_excerpt"])}</p>
+    <div class="button-row">
+      <span class="action-button action-primary issue-action">View Full Issue</span>
+    </div>
+  </div>
+</article>"""
+
+    review_scope_block = f"""
+<article class="record">
+  <div class="record-title">
+    <h4>Review Scope</h4>
+    <div class="badge-row">
+      {_badge(review_queue_status)}
+      {_badge(f"{record_count} records")}
+      {_badge(f"{source_issue_count} source issues")}
+    </div>
+  </div>
+  <p class="note">{promotion_rule}</p>
+  {_details_list(review_scope)}
+  {_details_list(claim_boundary)}
+</article>"""
+
+    selected_person_block = ""
+    if selected_person is not None:
+        source_issue = _expect_dict(selected_person["source_issue"])
+        person_profile = _confidence_profile(selected_person)
+        person_initials = _initials(_text(selected_person["display_name"]))
+        selected_person_block = f"""
+<article class="record profile-card">
+  <div class="profile-shell">
+    <div class="profile-media">
+      <div class="portrait-frame">
+        <div class="portrait-badge">{person_initials}</div>
+        <p class="eyebrow">AI Generated Portrait</p>
+        <p class="note">Transparent Background</p>
+      </div>
+      <div class="score-card">
+        <div class="score-ring" style="--score: {person_profile['score']}">
+          <strong>{person_profile['score']}%</strong>
+        </div>
+        <small>{_text(person_profile["label"])} Confidence</small>
+        <p class="note">{_text(person_profile["reason"])}</p>
+      </div>
+    </div>
+    <div class="profile-main">
+      <div class="record-title">
+        <div>
+          <p class="eyebrow">Person Record</p>
+          <h4>{_text(selected_person["display_name"])}</h4>
+        </div>
+        <div class="badge-row">
+          {_badge(selected_person["review_status"])}
+          {_badge(selected_person["historical_basis"])}
+        </div>
+      </div>
+      <div class="field-grid">
+        <div><p class="label">Record ID</p><p>{_text(selected_person["review_record_id"])}</p></div>
+        <div><p class="label">Entity ID</p><p>{_text(selected_person["entity_id"])}</p></div>
+        <div><p class="label">Source issue</p><p>{_text(source_issue["publication_title"])}</p><p class="note">{_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p></div>
+        <div><p class="label">Related locations</p><p>{_joined_ids(selected_person["related_location_ids"])}</p></div>
+        <div><p class="label">Sources</p><p>{_joined_ids(selected_person["source_ids"])}</p></div>
+      </div>
+      <div class="classification-grid">{_classification_cards(_text(selected_person["historical_basis"]))}</div>
+      <div class="duplicate-check">
+        <p class="eyebrow">Source Trail</p>
+        <p class="note">{_text(selected_person["notes"])}</p>
+      </div>
+    </div>
+  </div>
+  {_community_review_editor_form(selected_person, "people", "#people-auditor")}
+</article>"""
+
+    person_rows = []
+    for raw_person in people_review:
+        person = _expect_dict(raw_person)
+        source_issue = _expect_dict(person["source_issue"])
+        person_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(person["display_name"])}</h4>
+    <div class="badge-row">
+      {_badge(person["review_status"])}
+      {_badge(person["historical_basis"])}
+    </div>
+  </div>
+  <p><strong>Issue:</strong> {_text(source_issue["publication_title"])} / {_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p>
+  <p><strong>Related locations:</strong> {_joined_ids(person["related_location_ids"])}</p>
+  <p class="note">{_text(person["notes"])}</p>
+</article>"""
+        )
+
+    selected_business_block = ""
+    if selected_business is not None:
+        source_issue = _expect_dict(selected_business["source_issue"])
+        business_profile = _confidence_profile(selected_business)
+        business_initials = _initials(_text(selected_business["display_name"]))
+        selected_business_block = f"""
+<article class="record profile-card">
+  <div class="profile-shell">
+    <div class="profile-media">
+      <div class="portrait-frame">
+        <div class="portrait-badge">{business_initials}</div>
+        <p class="eyebrow">Business Seal</p>
+        <p class="note">Source-linked record</p>
+      </div>
+      <div class="score-card">
+        <div class="score-ring" style="--score: {business_profile['score']}">
+          <strong>{business_profile['score']}%</strong>
+        </div>
+        <small>{_text(business_profile["label"])} Confidence</small>
+        <p class="note">{_text(business_profile["reason"])}</p>
+      </div>
+    </div>
+    <div class="profile-main">
+      <div class="record-title">
+        <div>
+          <p class="eyebrow">Business Record</p>
+          <h4>{_text(selected_business["display_name"])}</h4>
+        </div>
+        <div class="badge-row">
+          {_badge(selected_business["review_status"])}
+          {_badge(selected_business["historical_basis"])}
+        </div>
+      </div>
+      <div class="field-grid">
+        <div><p class="label">Record ID</p><p>{_text(selected_business["review_record_id"])}</p></div>
+        <div><p class="label">Entity ID</p><p>{_text(selected_business["entity_id"])}</p></div>
+        <div><p class="label">Source issue</p><p>{_text(source_issue["publication_title"])}</p><p class="note">{_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p></div>
+        <div><p class="label">Related locations</p><p>{_joined_ids(selected_business["related_location_ids"])}</p></div>
+        <div><p class="label">Sources</p><p>{_joined_ids(selected_business["source_ids"])}</p></div>
+      </div>
+      <div class="classification-grid">{_classification_cards(_text(selected_business["historical_basis"]))}</div>
+      <div class="duplicate-check">
+        <p class="eyebrow">Source Trail</p>
+        <p class="note">{_text(selected_business["notes"])}</p>
+      </div>
+    </div>
+  </div>
+  {_community_review_editor_form(selected_business, "businesses", "#people-auditor")}
+</article>"""
+
+    business_rows = []
+    for raw_business in businesses_review:
+        business = _expect_dict(raw_business)
+        source_issue = _expect_dict(business["source_issue"])
+        business_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(business["display_name"])}</h4>
+    <div class="badge-row">
+      {_badge(business["review_status"])}
+      {_badge(business["historical_basis"])}
+    </div>
+  </div>
+  <p><strong>Issue:</strong> {_text(source_issue["publication_title"])} / {_text(source_issue["issue_date"])} / p. {_text(source_issue["page"])}</p>
+  <p><strong>Related locations:</strong> {_joined_ids(business["related_location_ids"])}</p>
+  <p class="note">{_text(business["notes"])}</p>
+</article>"""
+        )
+
+    legend_rows = []
+    for raw_item in review_legend:
+        item = _expect_dict(raw_item)
+        legend_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["label"])}</h4>
+    <div class="badge-row">{_badge(item["status"])}</div>
+  </div>
+  <p><strong>Count:</strong> {_text(item["count"])}</p>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    history_rows = []
+    for raw_item in review_history:
+        item = _expect_dict(raw_item)
+        history_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(item["label"])}</h4>
+    <div class="badge-row">{_badge(str(item["status"]))}</div>
+  </div>
+  <p class="note">{_text(item["notes"])}</p>
+</article>"""
+        )
+
+    unresolved_rows = []
+    for raw_item in unresolved_summary:
+        item = _expect_dict(raw_item)
+        unresolved_rows.append(
+            f"""
+<li>
+  <strong>{_text(item["label"])}</strong>
+  <span>{_text(item["count"])}</span>
+</li>"""
+        )
+
+    quick_action_rows = []
+    for raw_action in quick_actions:
+        action = _expect_dict(raw_action)
+        href = action.get("href", "#")
+        quick_action_rows.append(
+            f'<a class="action-button action-{_text(action["kind"])}" href="{_attr(str(href))}">{_text(action["label"])}</a>'
+        )
+
+    return f"""
+<section class="band people-auditor" id="people-auditor" aria-labelledby="people-auditor-title">
+  <div class="section-heading">
+    <p class="eyebrow">People Auditor</p>
+    <h2 id="people-auditor-title">{_text(auditor["dashboard_title"])}</h2>
+    <div class="status-strip">{''.join(chip_rows)}</div>
+    <div class="progress-shell">{''.join(progress_segments)}</div>
+    <div class="link-strip">{''.join(nav_rows)}</div>
+    <p>{_text(auditor["notes"])}</p>
+    <p class="note">{_text(year_gate["rule"])}</p>
+  </div>
+  <div class="auditor-grid">
+    <article class="panel auditor-source-panel">
+      <h3>Source Issue Browser</h3>
+      <p><strong>Review queue:</strong> {_text(review_queue_status)}</p>
+      <p><strong>Issue count:</strong> {source_issue_count}</p>
+      <p><strong>Record count:</strong> {record_count}</p>
+      <p class="note">{promotion_rule}</p>
+      <div class="records">{''.join(issue_rows)}</div>
+      <h4>Selected Issue Trail</h4>
+      {selected_issue_block or '<p class="note">No selected issue is available.</p>'}
+      <h4>Review Scope</h4>
+      {review_scope_block}
+    </article>
+    <article class="panel auditor-people-panel">
+      <h3>People Review Workspace</h3>
+      <p><strong>Selected person:</strong> {_text(selected_person["display_name"]) if selected_person is not None else "None"}</p>
+      <p><strong>Selected status:</strong> {_text(selected_person["review_status"]) if selected_person is not None else "unavailable"}</p>
+      <p><strong>Selected basis:</strong> {_text(selected_person["historical_basis"]) if selected_person is not None else "unavailable"}</p>
+      {selected_person_block or '<p class="note">No person record is available.</p>'}
+      <h4>People Queue</h4>
+      <div class="records">{''.join(person_rows) if person_rows else '<p class="note">No people records loaded.</p>'}</div>
+    </article>
+    <article class="panel auditor-business-panel">
+      <h3>Business Review Workspace</h3>
+      <p><strong>Selected business:</strong> {_text(selected_business["display_name"]) if selected_business is not None else "None"}</p>
+      <p><strong>Selected status:</strong> {_text(selected_business["review_status"]) if selected_business is not None else "unavailable"}</p>
+      <p><strong>Selected basis:</strong> {_text(selected_business["historical_basis"]) if selected_business is not None else "unavailable"}</p>
+      {selected_business_block or '<p class="note">No business record is available.</p>'}
+      <h4>Business Queue</h4>
+      <div class="records">{''.join(business_rows) if business_rows else '<p class="note">No business records loaded.</p>'}</div>
+    </article>
+  </div>
+  <div class="auditor-bottom">
+    <article class="panel">
+      <h3>Provenance Legend</h3>
+      <div class="records">{''.join(legend_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Review History</h3>
+      <div class="records">{''.join(history_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Unresolved Summary</h3>
+      <ul class="check-list">{''.join(unresolved_rows)}</ul>
+      <h3>Quick Actions</h3>
+      <div class="action-stack">{''.join(quick_action_rows)}</div>
+    </article>
+  </div>
+</section>"""
+
+
+def _option_tags(options: list[tuple[str, str]], current_value: str) -> str:
+    return "".join(
+        f'<option value="{_attr(value)}"{" selected" if value == current_value else ""}>{_text(label)}</option>'
+        for value, label in options
+    )
+
+
+def _community_review_editor_form(
+    record: dict[str, object] | None,
+    record_group: str,
+    return_to: str,
+) -> str:
+    if record is None:
+        return ""
+
+    record_id = _text(record.get("review_record_id", ""))
+    current_status = _text(record.get("review_status", "under_review"))
+    current_basis = _text(record.get("historical_basis", "source_based_inference"))
+    current_notes = _text(record.get("notes", ""))
+    status_options = [
+        ("suggested", "Suggested"),
+        ("under_review", "Under Review"),
+        ("confirmed", "Confirmed"),
+        ("rejected", "Rejected"),
+        ("insufficient_evidence", "Insufficient Evidence"),
+    ]
+    basis_options = [
+        ("verified_fact", "Verified Fact"),
+        ("source_based_inference", "Source-Based Inference"),
+    ]
+
+    return f"""
+<form class="review-editor" method="post" action="/api/review-action">
+  <input type="hidden" name="record_domain" value="community_review">
+  <input type="hidden" name="record_group" value="{_attr(record_group)}">
+  <input type="hidden" name="record_id" value="{_attr(record_id)}">
+  <input type="hidden" name="return_to" value="{_attr(return_to)}">
+  <label>
+    Review Status
+    <select name="review_status">{_option_tags(status_options, current_status)}</select>
+  </label>
+  <label>
+    Historical Basis
+    <select name="historical_basis">{_option_tags(basis_options, current_basis)}</select>
+  </label>
+  <label>
+    Notes
+    <textarea name="notes" rows="3">{_text(current_notes)}</textarea>
+  </label>
+  <div class="button-row">
+    <button class="action-button action-primary" type="submit">Save Review</button>
+  </div>
+</form>"""
+
+
+def _building_review_editor_form(record: dict[str, object] | None, return_to: str) -> str:
+    if record is None:
+        return ""
+
+    building_id = _text(record.get("building_id", ""))
+    if _text(record.get("review_record_id", "")) == "" or _text(record.get("identity_status", "")) not in {"reviewed", "approved"}:
+        return ""
+    current_identity = _text(record.get("identity_status", "suggested"))
+    current_basis = _text(record.get("identity_basis", "source_based_inference"))
+    current_visual = _text(record.get("visual_detail_status", "illustrative"))
+    current_notes = _text(record.get("notes", ""))
+    identity_options = [
+        ("reviewed", "Reviewed"),
+        ("approved", "Approved"),
+    ]
+    basis_options = [
+        ("verified_fact", "Verified Fact"),
+        ("source_based_inference", "Source-Based Inference"),
+    ]
+    visual_options = [
+        ("verified", "Verified"),
+        ("inferred", "Inferred"),
+        ("illustrative", "Illustrative"),
+    ]
+
+    return f"""
+<form class="review-editor" method="post" action="/api/review-action">
+  <input type="hidden" name="record_domain" value="building">
+  <input type="hidden" name="record_id" value="{_attr(building_id)}">
+  <input type="hidden" name="return_to" value="{_attr(return_to)}">
+  <label>
+    Identity Status
+    <select name="identity_status">{_option_tags(identity_options, current_identity)}</select>
+  </label>
+  <label>
+    Identity Basis
+    <select name="identity_basis">{_option_tags(basis_options, current_basis)}</select>
+  </label>
+  <label>
+    Visual Detail
+    <select name="visual_detail_status">{_option_tags(visual_options, current_visual)}</select>
+  </label>
+  <label>
+    Notes
+    <textarea name="notes" rows="3">{_text(current_notes)}</textarea>
+  </label>
+  <div class="button-row">
+    <button class="action-button action-primary" type="submit">Save Building Review</button>
+  </div>
+</form>"""
+
+
+def _community_review_section(raw_review: object) -> str:
+    return _people_auditor_section(raw_review)
+
+
+def _campaign_section(raw_campaign: object) -> str:
+    if raw_campaign is None:
+        return ""
+
+    campaign = _expect_dict(raw_campaign)
+    bands = _expect_list(campaign["mastery_bands"])
+    checkpoints = _expect_list(campaign["mastery_checkpoints"])
+    placement = _expect_dict(campaign["preassessment_placement"])
+    year_gate = _expect_dict(campaign["year_gate"])
+
+    band_rows = []
+    for raw_band in bands:
+        band = _expect_dict(raw_band)
+        band_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(band["band_number"])}. {_text(band["band_label"])}</h4>
+    <div class="badge-row">{_badge(_text(band["checkpoint_range"][0]) + "-" + _text(band["checkpoint_range"][1]))}</div>
+  </div>
+  <p class="note">{_text(band["purpose"])}</p>
+</article>"""
+        )
+
+    checkpoint_rows = []
+    for raw_checkpoint in checkpoints:
+        checkpoint = _expect_dict(raw_checkpoint)
+        checkpoint_rows.append(
+            f"""
+<article class="record">
+  <div class="record-title">
+    <h4>{_text(checkpoint["checkpoint_number"])}. {_text(checkpoint["band_label"])}</h4>
+    <div class="badge-row">
+      {_badge(_text(checkpoint["mission_role"]))}
+      {_badge(_text(checkpoint["assessment_mode"]))}
+    </div>
+  </div>
+  <p class="note">{_text(checkpoint["notes"])}</p>
+</article>"""
+        )
+
+    return f"""
+<section class="band campaign-section" aria-labelledby="campaign-title">
+  <div class="section-heading">
+    <p class="eyebrow">Campaign Framework</p>
+    <h2 id="campaign-title">{_text(campaign["campaign_title"])}</h2>
+    <div class="badge-row">
+      {_badge(f"{_text(campaign['mastery_checkpoint_count'])} checkpoints")}
+      {_badge(f"{_text(year_gate['start_year'])} to {_text(year_gate['end_year'])}")}
+    </div>
+    <p>{_text(campaign["mission_granularity_rule"])}</p>
+    <p class="note">{_text(year_gate["rule"])}</p>
+  </div>
+  <div class="split">
+    <article class="panel">
+      <h3>Mastery Bands</h3>
+      <div class="records">{''.join(band_rows)}</div>
+    </article>
+    <article class="panel">
+      <h3>Preassessment Placement</h3>
+      <p><strong>Placement rule:</strong> {_text(placement["placement_rule"])}</p>
+      <p><strong>Entry points:</strong> {_joined_ids([str(point) for point in placement["entry_points"]])}</p>
+      <p><strong>Teacher override:</strong> {_text(placement["teacher_override_allowed"])}</p>
+      <p class="note">{_text(placement["mission_span_rule"])}</p>
+    </article>
+  </div>
+  <article class="panel campaign-checkpoints">
+    <h3>Mastery Checkpoints</h3>
+    <div class="records">{''.join(checkpoint_rows)}</div>
+  </article>
 </section>"""
 
 
@@ -2380,10 +4049,1176 @@ h4 { font-size: 15px; margin-bottom: 8px; }
 .citations { margin-bottom: 0; padding-left: 20px; }
 .check-list, .details-list { margin-bottom: 0; padding-left: 20px; }
 .check-list li + li { margin-top: 10px; }
+.status-strip, .tab-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.link-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.console-grid { display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(0, 2fr); gap: 14px; margin-top: 12px; }
+.console-main > .split, .community-console > .split { margin-top: 12px; }
+.console-nav .records, .console-main .records { margin-top: 10px; }
+.console-nav .panel + .panel, .console-main .panel + .panel { margin-top: 12px; }
+.tab-strip .badge { background: #f8fafc; }
+.community-console { background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%); border-color: #d8c79b; }
+.community-console .panel { background: #fffef9; }
+.community-console .badge { background: #fff; }
+.community-console .status-strip .badge { background: #fff7e8; }
+.community-console .records { gap: 10px; }
+.community-console {
+  background: linear-gradient(180deg, #f5ead1 0%, #fff6e6 100%);
+  border-color: #cdb88b;
+  padding: 20px;
+}
+.community-shell {
+  display: grid;
+  gap: 14px;
+}
+.community-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 2.15fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.brand-plate {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #4e3b1d;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #1a2430 0%, #101722 100%);
+  color: #f5dfb2;
+  box-shadow: inset 0 0 0 1px rgba(245, 223, 178, 0.08);
+}
+.brand-mark {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: 2px solid #cfad68;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.18));
+}
+.brand-plate .eyebrow,
+.brand-subtitle {
+  color: #f0d59c;
+}
+.brand-subtitle {
+  margin-bottom: 0;
+}
+.hero-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.hero-meta-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 102px;
+  padding: 12px 14px;
+  border: 1px solid #d7c29a;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f9efd9 0%, #efe0bd 100%);
+}
+.hero-meta-card strong {
+  font-size: 16px;
+  line-height: 1.25;
+}
+.hero-meta-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.hero-meta-label {
+  margin: 0;
+  color: #7b5a2d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hero-meta-alert {
+  background: linear-gradient(180deg, #73321d 0%, #4d2016 100%);
+  border-color: #ca6e35;
+  color: #f7d9b1;
+}
+.hero-meta-alert .hero-meta-label,
+.hero-meta-alert span {
+  color: #f3c692;
+}
+.year-gate-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2.2fr) minmax(220px, 0.9fr);
+  gap: 14px;
+  align-items: center;
+  background: linear-gradient(180deg, #f9eed7 0%, #f1e0bf 100%);
+  border-color: #d2bf95;
+}
+.year-gate-copy h3,
+.year-gate-copy p {
+  margin-bottom: 8px;
+}
+.year-track {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 12px 0;
+}
+.year-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: rgba(94, 75, 35, 0.45);
+  transform: translateY(-50%);
+}
+.year-tick {
+  position: relative;
+  z-index: 1;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 249, 237, 0.88);
+  color: #725729;
+  font-size: 12px;
+}
+.year-tick.highlight {
+  border-color: #d5b36d;
+  background: #1f3d45;
+  color: #f8e4b6;
+  font-weight: 700;
+  transform: scale(1.08);
+}
+.year-track-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.year-pin {
+  padding: 4px 10px;
+  border: 1px solid #d6b36e;
+  border-radius: 999px;
+  background: #17353e;
+  color: #f8e3b0;
+  font-weight: 700;
+}
+.year-gate-note {
+  border: 1px solid #d8c6a1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 12px;
+}
+.status-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.34fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.status-card-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 106px;
+  padding: 12px;
+  border: 1px solid #c9b58b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fffaf1 0%, #f3e4c5 100%);
+}
+.status-card-label,
+.mini-card-label,
+.diagnostic-label,
+.route-stat span,
+.hero-meta-label,
+.label,
+.scope-index .badge {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.status-card-label {
+  margin: 0;
+  color: #7d5b2e;
+  font-size: 11px;
+  font-weight: 700;
+}
+.status-card-value {
+  font-size: 22px;
+  line-height: 1.05;
+}
+.status-card-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status-card.status-blocked {
+  border-color: #c55b3f;
+  background: linear-gradient(180deg, #f9d9cf 0%, #f0c1ad 100%);
+}
+.status-card.status-ready {
+  border-color: #95b78a;
+}
+.status-card.status-guarded {
+  border-color: #c69b42;
+  background: linear-gradient(180deg, #f4e1af 0%, #efd58e 100%);
+}
+.status-card.status-partial {
+  border-color: #c19a53;
+}
+.overall-progress-card {
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  padding: 14px;
+  border: 1px solid #c7b68b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff8ee 0%, #f0e0bf 100%);
+  text-align: center;
+}
+.overall-progress-card strong {
+  font-size: 48px;
+  line-height: 1;
+}
+.overall-progress-card p {
+  margin: 0;
+}
+.scope-ladder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.scope-card {
+  padding: 14px;
+  border: 1px solid #c9b58b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f9f1de 0%, #efe1bf 100%);
+}
+.scope-card.scope-active {
+  border-color: #2e6c73;
+  background: linear-gradient(180deg, #dfeeed 0%, #c9e0dc 100%);
+  box-shadow: 0 0 0 1px rgba(46, 108, 115, 0.12);
+}
+.scope-index {
+  margin-bottom: 10px;
+}
+.community-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(340px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.community-main,
+.community-sidebar {
+  display: grid;
+  gap: 14px;
+}
+.community-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.route-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #c9b58b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fffaf0 0%, #f7edd5 100%);
+}
+.route-hero {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.route-mark {
+  width: 76px;
+  height: 76px;
+  border: 1px solid #b89457;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(45deg, #efe2bf 0 10px, #fff8e7 10px 20px);
+  color: #4c3a1d;
+  font-size: 24px;
+  font-weight: 700;
+}
+.route-status {
+  display: flex;
+  justify-content: flex-start;
+}
+.route-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.route-stat {
+  padding: 8px 10px;
+  border: 1px solid #d7c6a0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.route-stat span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.route-stat strong {
+  font-size: 15px;
+}
+.route-button {
+  justify-content: center;
+}
+.mini-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.mini-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #d9c6a0;
+  border-radius: 8px;
+  background: #fff9ef;
+}
+.mini-card-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.mini-card-value {
+  font-size: 24px;
+  line-height: 1;
+}
+.release-panel {
+  display: grid;
+  gap: 10px;
+}
+.release-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.release-blocker-card {
+  padding: 12px;
+  border: 1px solid #d2b88f;
+  border-radius: 8px;
+  background: #fff9ee;
+}
+.actions-panel .action-stack {
+  display: grid;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.evidence-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.8fr);
+  gap: 12px;
+  align-items: start;
+}
+.evidence-summary,
+.evidence-notes,
+.history-card,
+.diagnostic-card {
+  border: 1px solid #d7c6a0;
+  border-radius: 8px;
+  background: #fffaf2;
+  padding: 12px;
+}
+.evidence-summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.evidence-notes .action-button {
+  width: 100%;
+  justify-content: center;
+}
+.review-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #d8c6a1;
+  border-radius: 8px;
+  background: #fffdf7;
+}
+.review-editor label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.review-editor select,
+.review-editor textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  background: #ffffff;
+}
+.review-editor textarea {
+  resize: vertical;
+  min-height: 76px;
+}
+.history-panel .records {
+  gap: 8px;
+}
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.diagnostic-card {
+  display: grid;
+  gap: 4px;
+  background: linear-gradient(180deg, #fff8ea 0%, #f1e4c9 100%);
+}
+.diagnostic-label {
+  margin: 0;
+  color: #7d5b2e;
+  font-size: 11px;
+  font-weight: 700;
+}
+.compact-heading {
+  max-width: none;
+}
+.compact-heading h3 {
+  font-size: 18px;
+  margin-bottom: 0;
+}
+.link-badge { text-decoration: none; }
+.map-auditor {
+  background: linear-gradient(180deg, #f9f6ef 0%, #fffdf8 100%);
+  border-color: #c7b68b;
+}
+.map-auditor .panel {
+  background: #fffaf0;
+}
+.map-auditor .badge {
+  background: #fffdf8;
+}
+.map-auditor .status-strip .badge {
+  background: #fff3d7;
+}
+.people-auditor {
+  background: linear-gradient(180deg, #f4f8fb 0%, #ffffff 100%);
+  border-color: #b8cad6;
+}
+.people-auditor .panel {
+  background: #f9fcfe;
+}
+.people-auditor .badge {
+  background: #ffffff;
+}
+.people-auditor .status-strip .badge {
+  background: #e9f3f7;
+}
+.people-auditor-bottom {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.05fr) minmax(0, 0.9fr) minmax(0, 0.85fr) minmax(0, 0.95fr);
+}
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 12px;
+}
+.filter-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 8px 10px;
+  color: var(--muted);
+}
+.filter-input::placeholder {
+  color: #7d8892;
+}
+.filter-button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f3ea;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 8px 12px;
+}
+.issue-action {
+  display: inline-flex;
+  margin-top: 10px;
+}
+.focus-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  gap: 12px;
+  align-items: start;
+}
+.focus-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 12px;
+}
+.portrait-frame {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 220px;
+  background: repeating-linear-gradient(45deg, #f2f2f2 0 12px, #ffffff 12px 24px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+}
+.portrait-badge {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 2px solid #a9884c;
+  display: grid;
+  place-items: center;
+  font-size: 42px;
+  font-weight: 700;
+  color: #4a3a24;
+  background: rgba(255, 255, 255, 0.72);
+}
+.score-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 12px;
+  text-align: center;
+}
+.score-ring {
+  --score: 0;
+  width: 112px;
+  height: 112px;
+  margin: 8px auto 10px;
+  border-radius: 50%;
+  background: conic-gradient(#3e7c3a calc(var(--score) * 1%), #d9d9d9 0);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.score-ring::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: #fff;
+}
+.score-ring strong {
+  position: relative;
+  z-index: 1;
+  font-size: 28px;
+}
+.score-ring small {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+}
+.classification-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.classification-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+.classification-card.active {
+  border-color: #7db35a;
+  box-shadow: 0 0 0 1px rgba(125, 179, 90, 0.18);
+}
+.duplicate-check {
+  margin-top: 12px;
+}
+.field-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.fake-select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #59636d;
+  padding: 8px 10px;
+}
+.progress-shell {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.progress-segment {
+  display: grid;
+  gap: 4px;
+}
+.progress-segment strong,
+.progress-segment span {
+  display: block;
+  font-size: 12px;
+}
+.progress-bar {
+  display: block;
+  height: 8px;
+  background: #e5dcc8;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #0f766e 0%, #7cb342 100%);
+}
+.auditor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.1fr) minmax(0, 0.95fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+.auditor-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+.map-stage {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #efe2bb 0%, #f7edd0 100%);
+  padding: 12px;
+}
+.map-stage-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.sheet-card.selected {
+  border-color: #d09c3f;
+  box-shadow: 0 0 0 1px rgba(208, 156, 63, 0.2);
+}
+.coverage-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.coverage-table th,
+.coverage-table td {
+  border: 1px solid var(--line);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.button-row,
+.action-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.action-button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--ink);
+}
+.action-primary {
+  background: #edf6e6;
+  border-color: #9bc47f;
+}
+.action-secondary {
+  background: #f8f4ea;
+}
+.action-danger {
+  background: #fcecec;
+  border-color: #e4a1a1;
+}
+.auditor-bottom .panel { align-self: start; }
+.campaign-checkpoints { display: grid; gap: 12px; }
+.campaign-checkpoints .record { background: #fafcf7; }
+.campaign-section .split { align-items: start; }
+
+body {
+  color: var(--ink);
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  background:
+    radial-gradient(circle at top, rgba(70, 94, 124, 0.42) 0%, rgba(11, 17, 24, 0) 45%),
+    linear-gradient(180deg, #0b1118 0%, #111923 100%);
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.018) 1px, transparent 1px, transparent 6px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.014), rgba(255, 255, 255, 0.014) 1px, transparent 1px, transparent 8px);
+  opacity: 0.55;
+  mix-blend-mode: overlay;
+}
+a {
+  color: #294f8c;
+}
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Georgia", "Times New Roman", serif;
+  letter-spacing: 0.02em;
+}
+.topbar {
+  background: linear-gradient(180deg, #121c27 0%, #0b1118 100%);
+  border-bottom: 1px solid #3f2e18;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  color: #f0d8a4;
+}
+.topbar h1,
+.topbar p {
+  color: inherit;
+}
+.topbar .status {
+  background: linear-gradient(180deg, #5a2519 0%, #35150f 100%);
+  border-color: #cd7449;
+  color: #f6d1a0;
+}
+.layout {
+  gap: 16px;
+  margin: 0 auto;
+  max-width: 1720px;
+  padding: 16px clamp(12px, 2vw, 24px) 60px;
+}
+.band {
+  background: linear-gradient(180deg, #f7ebd2 0%, #f0dfb9 100%);
+  border: 1px solid #cdb78a;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(21, 14, 7, 0.14);
+  padding: 20px;
+}
+.panel,
+.record {
+  background: linear-gradient(180deg, #fff8ed 0%, #f3e6cc 100%);
+  border: 1px solid #cbb58a;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.badge {
+  background: linear-gradient(180deg, #fffef8 0%, #efe0bc 100%);
+  border-color: #c8b37c;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: #3c2f1e;
+}
+.action-button {
+  background: linear-gradient(180deg, #fff8ec 0%, #e5d2a9 100%);
+  border-color: #bc9c67;
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: #2f2518;
+}
+.action-primary {
+  background: linear-gradient(180deg, #2b6266 0%, #17383c 100%);
+  border-color: #143639;
+  color: #f7e5bd;
+}
+.action-secondary {
+  background: linear-gradient(180deg, #f7eddc 0%, #e8d6af 100%);
+}
+.action-danger {
+  background: linear-gradient(180deg, #7d281d 0%, #581811 100%);
+  border-color: #c65f4a;
+  color: #f8dfd5;
+}
+.section-heading {
+  max-width: none;
+}
+.section-heading h2 {
+  font-size: 26px;
+}
+.compact-heading h3 {
+  font-size: 18px;
+}
+.note,
+.citation,
+.readiness {
+  color: #6c5d47;
+}
+.community-console {
+  background: linear-gradient(180deg, #f4e5c9 0%, #efddb4 100%);
+  border-color: #c8b184;
+}
+.community-console .panel {
+  background: linear-gradient(180deg, #fff8ee 0%, #f4e3bf 100%);
+}
+.community-console .record {
+  background: linear-gradient(180deg, #fffdf8 0%, #f6ebd3 100%);
+}
+.community-console .badge {
+  background: linear-gradient(180deg, #fff8ee 0%, #eeddb5 100%);
+  border-color: #c9b27b;
+  color: #433625;
+}
+.community-console .status-strip .badge {
+  background: linear-gradient(180deg, #fff4d9 0%, #edd39f 100%);
+}
+.community-shell {
+  display: grid;
+  gap: 16px;
+}
+.community-hero {
+  gap: 14px;
+  grid-template-columns: minmax(300px, 0.96fr) minmax(0, 2.04fr);
+}
+.brand-plate {
+  min-height: 128px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #121b26 0%, #09111a 100%);
+  box-shadow: inset 0 0 0 1px rgba(240, 215, 160, 0.08), 0 18px 30px rgba(22, 14, 7, 0.18);
+}
+.hero-meta-grid {
+  gap: 10px;
+}
+.hero-meta-card {
+  min-height: 108px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f9efda 0%, #ecd6a9 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+.hero-meta-alert {
+  background: linear-gradient(180deg, #7a2f1a 0%, #471d14 100%);
+  border-color: #cf7a47;
+  color: #f7d9b4;
+}
+.year-gate-panel {
+  grid-template-columns: minmax(230px, 0.9fr) minmax(0, 2.2fr) minmax(230px, 0.9fr);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8ecd1 0%, #efdeb7 100%);
+}
+.year-track {
+  padding: 14px 0 12px;
+}
+.status-overview-grid {
+  gap: 14px;
+}
+.status-card-grid {
+  gap: 10px;
+}
+.status-card {
+  border-radius: 12px;
+}
+.overall-progress-card {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff7e9 0%, #eedcb4 100%);
+}
+.scope-card {
+  border-radius: 12px;
+}
+.scope-card.scope-active {
+  background: linear-gradient(180deg, #dceeed 0%, #bfd8d2 100%);
+}
+.community-layout {
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.8fr) minmax(360px, 0.98fr);
+}
+.community-main,
+.community-sidebar {
+  gap: 16px;
+}
+.community-bottom-grid {
+  gap: 16px;
+}
+.route-grid {
+  gap: 14px;
+}
+.route-card {
+  border-radius: 14px;
+}
+.route-mark {
+  border-radius: 10px;
+}
+.route-stat {
+  border-radius: 8px;
+}
+.mini-card {
+  border-radius: 10px;
+}
+.release-panel,
+.summary-panel,
+.actions-panel,
+.diagnostics-panel {
+  border-radius: 14px;
+}
+.release-panel.release-blocked {
+  background: linear-gradient(180deg, #f4d9d0 0%, #e8bda8 100%);
+  border-color: #c05e43;
+}
+.release-panel.release-ready {
+  background: linear-gradient(180deg, #e1f0dd 0%, #c3ddba 100%);
+  border-color: #79a864;
+}
+.release-panel .release-badge-row .badge {
+  background: rgba(255, 255, 255, 0.6);
+}
+.evidence-summary,
+.evidence-notes,
+.history-card,
+.diagnostic-card,
+.release-blocker-card {
+  border-radius: 12px;
+}
+.diagnostics-panel {
+  background: linear-gradient(180deg, #e8d7b0 0%, #d6bd8f 100%);
+}
+.link-badge {
+  text-decoration: none;
+}
+.map-auditor,
+.people-auditor {
+  background: linear-gradient(180deg, #0f1721 0%, #081018 100%);
+  border-color: #2a3947;
+  border-radius: 18px;
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: #f3e2bd;
+  padding: 20px;
+}
+.map-auditor .section-heading,
+.people-auditor .section-heading {
+  max-width: none;
+}
+.map-auditor .section-heading h2,
+.people-auditor .section-heading h2 {
+  color: #f0cf8e;
+}
+.map-auditor .section-heading p,
+.people-auditor .section-heading p,
+.map-auditor .note,
+.people-auditor .note {
+  color: #d0c1a0;
+}
+.map-auditor .badge,
+.people-auditor .badge {
+  background: rgba(15, 24, 34, 0.95);
+  border-color: #4a596b;
+  color: #f1d79c;
+}
+.map-auditor .panel,
+.people-auditor .panel {
+  background: linear-gradient(180deg, #f7ebd6 0%, #eddbb6 100%);
+  border-color: #7f6540;
+}
+.map-auditor .record,
+.people-auditor .record {
+  background: linear-gradient(180deg, #f7edd9 0%, #ead8b4 100%);
+  border-color: #a88d5b;
+}
+.map-auditor .review-editor,
+.people-auditor .review-editor {
+  background: rgba(255, 250, 243, 0.92);
+  border-color: #cdb88e;
+}
+.auditor-grid {
+  gap: 16px;
+  grid-template-columns: minmax(320px, 0.98fr) minmax(0, 1.25fr) minmax(340px, 0.98fr);
+}
+.auditor-bottom {
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr) minmax(0, 0.9fr);
+}
+.auditor-sheet-panel,
+.auditor-building-panel,
+.auditor-provenance-panel {
+  display: grid;
+  gap: 10px;
+}
+.building-focus-card {
+  display: grid;
+  gap: 10px;
+}
+.building-focus-card .field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.map-stage {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #e4d1ac 0%, #cfbb92 100%);
+  border-color: #84683f;
+}
+.map-stage-header {
+  border-bottom: 1px solid rgba(88, 67, 37, 0.28);
+  padding-bottom: 8px;
+}
+.coverage-table {
+  background: rgba(255, 255, 255, 0.22);
+}
+.coverage-table th {
+  background: #1a2430;
+  color: #f4d9a4;
+}
+.coverage-table td {
+  background: rgba(255, 248, 233, 0.72);
+}
+.source-issue-card {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+}
+.issue-media {
+  display: grid;
+  gap: 10px;
+}
+.issue-thumb {
+  min-height: 136px;
+  border: 1px solid #8b7046;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(0deg, rgba(72, 57, 29, 0.1), rgba(72, 57, 29, 0.1) 1px, transparent 1px, transparent 7px),
+    repeating-linear-gradient(90deg, rgba(72, 57, 29, 0.08), rgba(72, 57, 29, 0.08) 1px, transparent 1px, transparent 9px),
+    linear-gradient(180deg, #f3ead7 0%, #decda8 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  display: grid;
+  place-items: center;
+}
+.issue-thumb span {
+  color: #4f3c22;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.issue-meta h4 {
+  margin-bottom: 4px;
+}
+.issue-body {
+  display: grid;
+  gap: 10px;
+}
+.issue-action {
+  justify-content: center;
+  width: 100%;
+}
+.selected-issue-card {
+  box-shadow: 0 0 0 1px rgba(232, 180, 74, 0.18);
+}
+.source-issue-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.map-auditor .building-focus-card {
+  background: linear-gradient(180deg, #fff5e3 0%, #ecdab0 100%);
+}
+.profile-card {
+  background: linear-gradient(180deg, #fff6e9 0%, #efd9b1 100%);
+  border-radius: 14px;
+  padding: 12px;
+}
+.profile-shell {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 0.82fr) minmax(0, 1.18fr);
+}
+.profile-media {
+  display: grid;
+  gap: 12px;
+}
+.profile-main {
+  display: grid;
+  gap: 12px;
+}
+.people-auditor .portrait-frame {
+  min-height: 232px;
+  background: linear-gradient(180deg, #f6f0e6 0%, #fffdf7 100%);
+  border-color: #d1c09d;
+  border-radius: 12px;
+}
+.people-auditor .portrait-badge {
+  border-color: #9c7b47;
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95), rgba(240, 227, 199, 0.8));
+}
+.people-auditor .score-card {
+  background: linear-gradient(180deg, #fff9ef 0%, #efdfbf 100%);
+  border-color: #cdbc90;
+}
+.people-auditor .classification-grid {
+  gap: 10px;
+}
+.people-auditor .classification-card {
+  background: linear-gradient(180deg, #fff8ec 0%, #ead9b8 100%);
+  border-color: #ccb487;
+  border-radius: 12px;
+}
+.people-auditor .classification-card.active {
+  background: linear-gradient(180deg, #edf3e4 0%, #cfe0b8 100%);
+}
+.people-auditor .duplicate-check {
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px dashed rgba(125, 95, 53, 0.4);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+#building-auditor {
+  background: linear-gradient(180deg, #f7ecd1 0%, #efe0b7 100%);
+  border-color: #cdb88b;
+}
+#building-auditor .records {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
 @media (max-width: 760px) {
   .topbar, .overview, .split { grid-template-columns: 1fr; }
+  .console-grid { grid-template-columns: 1fr; }
+  .auditor-grid, .auditor-bottom { grid-template-columns: 1fr; }
   .topbar { display: grid; }
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .record-title { display: grid; }
+  .community-hero,
+  .status-overview-grid,
+  .community-layout,
+  .source-issue-card,
+  .profile-shell {
+    grid-template-columns: 1fr;
+  }
+  .hero-meta-grid,
+  .status-card-grid,
+  .scope-ladder-grid,
+  .route-grid,
+  .community-bottom-grid,
+  .diagnostics-grid,
+  .source-issue-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>"""

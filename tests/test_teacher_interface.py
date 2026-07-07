@@ -19,6 +19,8 @@ class TeacherInterfaceTests(unittest.TestCase):
         self.assertTrue(packet["teacher_scope"]["primary_subject_only"])
         self.assertIn("telegram_review", [module["module_id"] for module in packet["portal_modules"]])
         self.assertIn("postal_review", [module["module_id"] for module in packet["portal_modules"]])
+        self.assertIn("campaign_planner", [module["module_id"] for module in packet["portal_modules"]])
+        self.assertIn("preassessment", [module["module_id"] for module in packet["portal_modules"]])
         self.assertIn("teks_library", [module["module_id"] for module in packet["portal_modules"]])
         self.assertIn("behavior_law_flags", [module["module_id"] for module in packet["portal_modules"]])
         self.assertEqual(len(packet["workflow_steps"]), 7)

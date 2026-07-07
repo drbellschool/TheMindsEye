@@ -196,6 +196,10 @@ data/
 
 For the first prototype, this structure may be lightweight, but the code should avoid hard-coding Texarkana-specific assumptions into the engine.
 
+The historical universe should stay inside a 20-year gate centered on the map
+year, typically 10 years before and 10 years after that Sanborn year, unless a
+town package documents a narrower evidence boundary.
+
 ### Minimum Town Package Fields
 
 A town package should eventually define:

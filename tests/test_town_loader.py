@@ -47,7 +47,11 @@ class TownLoaderTests(unittest.TestCase):
 
         self.assertEqual(
             [source.source_id for source in package.sources],
-            ["source_texarkana_1885_sanborn_loc", "source_texarkana_1885_newspaper_placeholder"],
+            [
+                "source_texarkana_1885_sanborn_loc",
+                "source_texarkana_1885_newspaper_placeholder",
+                "source_texarkana_1893_daily_texarkana_democrat_098_p3",
+            ],
         )
         self.assertEqual(
             [location.location_id for location in package.locations],
