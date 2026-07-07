@@ -7,11 +7,16 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mindseye import (
     load_building_manifest,
+    build_sanborn_composite_manifest,
+    build_sanborn_georeference_workspace,
     load_instructional_alignment_manifest,
+    load_sanborn_control_point_manifest,
     load_sanborn_asset_manifest,
+    load_sanborn_layer_stack_manifest,
     load_sanborn_image_metadata_manifest,
     load_sanborn_sheet_manifest,
     load_sanborn_sheet_review_manifest,
+    load_sanborn_sheet_transform_manifest,
     load_sanborn_stitching_manifest,
     load_town_package,
     load_community_review_manifest,
@@ -27,6 +32,11 @@ def main():
     load_sanborn_image_metadata_manifest(ROOT, "texarkana")
     load_sanborn_sheet_review_manifest(ROOT, "texarkana")
     load_sanborn_stitching_manifest(ROOT, "texarkana")
+    load_sanborn_control_point_manifest(ROOT, "texarkana")
+    load_sanborn_sheet_transform_manifest(ROOT, "texarkana")
+    load_sanborn_layer_stack_manifest(ROOT, "texarkana")
+    build_sanborn_georeference_workspace(ROOT, "texarkana")
+    build_sanborn_composite_manifest(ROOT, "texarkana")
     load_building_manifest(ROOT, "texarkana")
     load_instructional_alignment_manifest(ROOT, "texarkana")
     load_teacher_review_manifest(ROOT, "texarkana")

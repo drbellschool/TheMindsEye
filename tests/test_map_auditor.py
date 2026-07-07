@@ -20,12 +20,17 @@ class MapAuditorTests(unittest.TestCase):
         self.assertEqual(packet["progress_summary"]["building_art_approved"], 2)
         self.assertEqual(packet["selected_sheet"]["sheet_label"], "003")
         self.assertEqual(packet["selected_building"]["building_id"], "building_texarkana_1885_003")
+        self.assertEqual(packet["stitch_workspace"]["manifest_control_point_status"], "not_started")
+        self.assertEqual(packet["stitch_workspace"]["control_point_status"], "partial")
+        self.assertEqual(packet["georeference_workspace"]["control_point_count"], 3)
+        self.assertEqual(packet["composite_manifest"]["release_gate_status"], "blocked")
         self.assertEqual(packet["provenance_trail"]["source_issue"]["publication_title"], "Daily Texarkana Democrat")
         self.assertEqual(packet["people_review"][0]["display_name"], "A. S. Blythe")
         self.assertIn("Open Building Auditor", [link["label"] for link in packet["navigation_links"]])
         self.assertEqual(packet["navigation_links"][2]["href"], "#people-auditor")
         self.assertIn("Community", packet["year_gate"]["rule"])
-        self.assertGreaterEqual(len(packet["layer_stack"]), 1)
+        self.assertEqual(packet["layer_stack"][0]["label"], "Base Map Layer")
+        self.assertEqual(packet["layer_stack"][-1]["label"], "Evidence / Provenance Layer")
         self.assertGreaterEqual(len(packet["coverage_grid"]), 1)
 
 

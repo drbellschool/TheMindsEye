@@ -1,0 +1,89 @@
+{
+  "layer_stack_manifest_id": "sanborn_texarkana_1885_loc_layer_stack_manifest",
+  "manifest_type": "loc_sanborn_layer_stack_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_id": "source_texarkana_1885_sanborn_loc",
+  "sheet_manifest_id": "sanborn_texarkana_1885_loc_sheet_manifest",
+  "sheet_review_manifest_id": "sanborn_texarkana_1885_loc_sheet_review_manifest",
+  "control_point_manifest_id": "sanborn_texarkana_1885_loc_control_point_manifest",
+  "sheet_transform_manifest_id": "sanborn_texarkana_1885_loc_sheet_transform_manifest",
+  "texture_requirements": [
+    "Parchment grain for light review surfaces.",
+    "Dark panel texture for shell surfaces.",
+    "Aged brass border treatment for edges and badges.",
+    "Subtle map-paper grain for the stitched workspace.",
+    "Transparent preview wash for art-layer review."
+  ],
+  "asset_requirements": [
+    "Base map layers must stay separate from road/rail, footprint, art, labels, markers, and provenance.",
+    "Road / rail geometry must stay separate from the historical base scan.",
+    "Building footprints must remain separate from building art.",
+    "Building art must only attach to a reviewed building or reviewed location record.",
+    "Labels must store text and provenance separately from geometry.",
+    "Quest markers must remain runtime overlays and not become historical evidence.",
+    "Evidence / provenance must stay visible to reviewers."
+  ],
+  "layers": [
+    {
+      "layer_id": "base-map",
+      "label": "Base Map Layer",
+      "status": "prep_only",
+      "visual_role": "historical_scan_anchor",
+      "review_state": "unknown",
+      "notes": "Stitched scan placeholder and sheet identity anchor. Do not collapse other layers into it."
+    },
+    {
+      "layer_id": "road-rail",
+      "label": "Road / Rail Layer",
+      "status": "deferred",
+      "visual_role": "route_geometry",
+      "review_state": "unknown",
+      "notes": "Roads and rail remain separate from the base scan until extraction is implemented."
+    },
+    {
+      "layer_id": "building-footprint",
+      "label": "Building Footprint Layer",
+      "status": "deferred",
+      "visual_role": "geometry_only",
+      "review_state": "unknown",
+      "notes": "Footprints hold shape only, not decorative art."
+    },
+    {
+      "layer_id": "building-art",
+      "label": "Building Art Layer",
+      "status": "reviewed_subset_available",
+      "visual_role": "transparent_art_overlay",
+      "review_state": "inferred",
+      "notes": "Transparent-background art should only attach to reviewed anchors and must not become the authoritative source of identity."
+    },
+    {
+      "layer_id": "label-layer",
+      "label": "Label Layer",
+      "status": "ready",
+      "visual_role": "text_overlay",
+      "review_state": "verified",
+      "notes": "Street labels, business labels, and building numbers remain separate from geometry."
+    },
+    {
+      "layer_id": "quest-marker-layer",
+      "label": "Quest Marker Layer",
+      "status": "draft",
+      "visual_role": "runtime_overlay",
+      "review_state": "illustrative",
+      "notes": "Mission markers are runtime overlays and must not rewrite the historical record."
+    },
+    {
+      "layer_id": "evidence-provenance-layer",
+      "label": "Evidence / Provenance Layer",
+      "status": "ready",
+      "visual_role": "audit_overlay",
+      "review_state": "verified",
+      "notes": "Claims, citations, and review status remain visible to reviewers."
+    }
+  ],
+  "layer_count": 7,
+  "status": "prep_only",
+  "warnings": [],
+  "errors": []
+}

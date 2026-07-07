@@ -2125,6 +2125,8 @@ def _map_auditor_section(raw_auditor: object) -> str:
     coverage_grid = _expect_list(auditor["coverage_grid"])
     selected_sheet = _expect_dict(auditor["selected_sheet"]) if auditor.get("selected_sheet") is not None else None
     stitch_workspace = _expect_dict(auditor["stitch_workspace"])
+    georeference_workspace = _expect_dict(auditor["georeference_workspace"]) if auditor.get("georeference_workspace") is not None else {}
+    composite_manifest = _expect_dict(auditor["composite_manifest"]) if auditor.get("composite_manifest") is not None else {}
     design_tools = _expect_list(auditor["design_tools"])
     layer_stack = _expect_list(auditor["layer_stack"])
     selected_building = _expect_dict(auditor["selected_building"]) if auditor.get("selected_building") is not None else None
@@ -2383,7 +2385,13 @@ def _map_auditor_section(raw_auditor: object) -> str:
       <h3>Sanborn Map Review</h3>
       <p><strong>Map year:</strong> {_text(year_gate["map_year"])}</p>
       <p><strong>Stitching status:</strong> {_text(stitch_workspace["stitching_status"])}</p>
+      <p><strong>Manifest control points:</strong> {_text(stitch_workspace.get("manifest_control_point_status", ""))}</p>
+      <p><strong>Workspace control points:</strong> {_text(stitch_workspace.get("control_point_status", ""))}</p>
+      <p><strong>Local alignment:</strong> {_text(stitch_workspace.get("local_alignment_status", ""))}</p>
       <p><strong>Georeferencing status:</strong> {_text(stitch_workspace["georeferencing_status"])}</p>
+      <p><strong>Composite status:</strong> {_text(composite_manifest.get("composite_status", ""))}</p>
+      <p><strong>Release gate:</strong> {_text(composite_manifest.get("release_gate_status", ""))}</p>
+      <p><strong>Missing control points:</strong> {_text(", ".join(str(item) for item in georeference_workspace.get("missing_control_point_sheet_ids", [])) or "none")}</p>
       <p><strong>Selected sheet:</strong> {_text(selected_sheet["sheet_label"] if selected_sheet is not None else "None")}</p>
       <div class="records">{''.join(sheet_rows)}</div>
       <h4>Selected Sheet Workspace</h4>

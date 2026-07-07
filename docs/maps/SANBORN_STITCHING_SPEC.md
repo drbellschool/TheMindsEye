@@ -113,8 +113,10 @@ Candidate links are planning data only. They are not proof of exact geometry.
 When the project is ready, later files may include:
 
 ```text
-data/towns/texarkana/maps/control_points.json
-data/towns/texarkana/maps/stitching_outputs/
+data/towns/texarkana/sanborn_1885_control_points.json
+data/towns/texarkana/sanborn_1885_sheet_transforms.json
+data/towns/texarkana/sanborn_1885_layer_stack.json
+data/towns/texarkana/sanborn_1885_stitching_manifest.json
 docs/maps/NAVIGATION_MODEL.md
 ```
 

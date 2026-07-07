@@ -69,9 +69,10 @@ Future files may include:
 
 ```text
 docs/maps/SANBORN_STITCHING_SPEC.md
-data/towns/texarkana/maps/sheets/
-data/towns/texarkana/maps/stitching_manifest.json
-data/towns/texarkana/maps/control_points.json
+data/towns/texarkana/sanborn_1885_control_points.json
+data/towns/texarkana/sanborn_1885_sheet_transforms.json
+data/towns/texarkana/sanborn_1885_layer_stack.json
+data/towns/texarkana/sanborn_1885_stitching_manifest.json
 ```
 
 ## 3. Map-Building and Navigation Workstream

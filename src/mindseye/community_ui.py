@@ -1471,6 +1471,8 @@ def _render_map_auditor(context: dict[str, Any]) -> str:
     selected_sheet = map_packet.get("selected_sheet") or {}
     selected_building = map_packet.get("selected_building") or {}
     stitch_workspace = map_packet.get("stitch_workspace") or {}
+    georeference_workspace = map_packet.get("georeference_workspace") or {}
+    composite_manifest = map_packet.get("composite_manifest") or {}
     layer_stack = map_packet.get("layer_stack", [])
     coverage_grid = map_packet.get("coverage_grid", [])
     review_history = map_packet.get("review_history", [])
@@ -1527,7 +1529,7 @@ def _render_map_auditor(context: dict[str, Any]) -> str:
     right = [
         _render_panel(
             "Georeference Panel",
-            _render_georef_panel(stitch_workspace, demo_route),
+            _render_georef_panel(stitch_workspace, georeference_workspace, composite_manifest, demo_route),
             subtitle="Control points are not fabricated when they are missing.",
             classes="panel--dark",
         ),
@@ -2245,21 +2247,64 @@ def _render_interior_notes(interior_notes: dict[str, Any]) -> str:
     )
 
 
-def _render_georef_panel(stitch_workspace: dict[str, Any], demo_route: dict[str, Any]) -> str:
+def _render_georef_panel(
+    stitch_workspace: dict[str, Any],
+    georeference_workspace: dict[str, Any],
+    composite_manifest: dict[str, Any],
+    demo_route: dict[str, Any],
+) -> str:
+    control_points = list(georeference_workspace.get("control_points", []))
+    sheet_statuses = list(georeference_workspace.get("sheet_statuses", []))
+    warnings = list(georeference_workspace.get("warnings", []))
+    missing_sheet_ids = list(georeference_workspace.get("missing_control_point_sheet_ids", []))
     rows = [
         ("Stitching", stitch_workspace.get("stitching_status", "")),
-        ("Control points", stitch_workspace.get("control_point_status", "")),
+        ("Manifest control points", stitch_workspace.get("manifest_control_point_status", "")),
+        ("Workspace control points", stitch_workspace.get("control_point_status", "")),
+        ("Local alignment", stitch_workspace.get("local_alignment_status", "")),
         ("Georeferencing", stitch_workspace.get("georeferencing_status", "")),
-        ("Location extraction", stitch_workspace.get("location_extraction_status", "")),
         ("Anchor sheet", stitch_workspace.get("anchor_sheet_id", "")),
-        ("Links", stitch_workspace.get("link_count", "")),
+        ("Composite status", composite_manifest.get("composite_status", "")),
+        ("Release gate", composite_manifest.get("release_gate_status", "")),
     ]
     content = _render_kv_rows(rows)
-    if demo_route.get("control_points"):
+    content += _render_kv_rows(
+        [
+            ("Control point manifest", georeference_workspace.get("control_point_manifest_id", "")),
+            ("Sheet transform manifest", georeference_workspace.get("sheet_transform_manifest_id", "")),
+            ("Layer stack manifest", georeference_workspace.get("layer_stack_manifest_id", "")),
+            ("Missing control point sheets", ", ".join(_sheet_suffix(sheet_id) for sheet_id in missing_sheet_ids) or "none"),
+        ]
+    )
+
+    if control_points:
+        content += _render_list(
+            [
+                f"{point.get('label', '')} ({_sheet_suffix(str(point.get('sheet_id', '')))}): {point.get('status', '')} @ {point.get('local_x', '')}, {point.get('local_y', '')}"
+                for point in control_points
+            ]
+        )
+    else:
+        content += '<p class="small muted">No control points have been recorded yet.</p>'
+
+    if sheet_statuses:
+        content += _render_list(
+            [
+                f"{_sheet_suffix(str(sheet.get('sheet_id', '')))}: {sheet.get('transform_status', '')} / {sheet.get('control_point_count', 0)} control point(s)"
+                for sheet in sheet_statuses
+            ]
+        )
+
+    if warnings:
+        content += _render_list([f"Warning: {_s(warning)}" for warning in warnings])
+    elif demo_route.get("control_points"):
         control_points = demo_route.get("control_points", [])
         content += _render_list([f"{point.get('label', '')}: {point.get('notes', '')}" for point in control_points])
     else:
         content += '<p class="small muted">Control points remain deferred until the live stitching workflow is connected.</p>'
+
+    if composite_manifest.get("release_gate_reason"):
+        content += f'<p class="footnote">{_s(composite_manifest.get("release_gate_reason", ""))}</p>'
     return content
 
 
@@ -2971,6 +3016,10 @@ def _state_class(value: Any) -> str:
 
 def _s(value: Any) -> str:
     return escape("" if value is None else str(value), quote=True)
+
+
+def _sheet_suffix(sheet_id: str) -> str:
+    return sheet_id.rsplit("_", 1)[-1] if sheet_id else ""
 
 
 def _confidence_percent(focus: dict[str, Any]) -> int:

@@ -13,10 +13,15 @@ from .map_rendering import build_map_rendering_packet
 from .models import MindseyeDataError, TownPackage
 from .review_state import history_items_from_events, load_review_state
 from .sanborn import (
+    build_sanborn_composite_manifest,
+    build_sanborn_georeference_workspace,
+    load_sanborn_control_point_manifest,
+    load_sanborn_layer_stack_manifest,
     SanbornSheetReviewManifest,
     SanbornStitchingManifest,
     load_sanborn_sheet_review_manifest,
     load_sanborn_stitching_manifest,
+    load_sanborn_sheet_transform_manifest,
 )
 from .teacher_review import build_teacher_approval_packet
 
@@ -37,6 +42,11 @@ def build_map_auditor_packet(
     building_manifest = _optional_building_manifest(repo_root, town_slug, state_root=state_root)
     sheet_review_manifest = _optional_sheet_review_manifest(repo_root, town_slug)
     stitching_manifest = _optional_stitching_manifest(repo_root, town_slug)
+    control_point_manifest = _optional_control_point_manifest(repo_root, town_slug)
+    sheet_transform_manifest = _optional_sheet_transform_manifest(repo_root, town_slug)
+    layer_stack_manifest = _optional_layer_stack_manifest(repo_root, town_slug)
+    georeference_workspace = _optional_georeference_workspace(repo_root, town_slug)
+    composite_manifest = _optional_composite_manifest(repo_root, town_slug)
     suggestion_manifest = _optional_suggestion_manifest(repo_root, town_slug)
     map_packet = _optional_map_rendering_packet(package, repo_root, town_slug, state_root=state_root)
     teacher_review = _optional_teacher_review_packet(package, repo_root, town_slug)
@@ -70,14 +80,24 @@ def build_map_auditor_packet(
         "sheet_selector": _sheet_selector(sheet_review_manifest, stitching_manifest),
         "coverage_grid": _coverage_grid(sheet_review_manifest),
         "selected_sheet": selected_sheet,
-        "stitch_workspace": _stitch_workspace(stitching_manifest, map_packet, selected_sheet),
+        "stitch_workspace": _stitch_workspace(
+            stitching_manifest,
+            map_packet,
+            selected_sheet,
+            georeference_workspace=georeference_workspace,
+            composite_manifest=composite_manifest,
+        ),
         "design_tools": _design_tools(),
-        "layer_stack": _layer_stack(map_packet),
+        "layer_stack": _layer_stack(map_packet, layer_stack_manifest),
         "selected_building": selected_building,
         "building_workspace": _building_workspace(selected_building),
         "art_preview": _art_preview(selected_building, map_packet),
         "interior_notes": _interior_notes(selected_building),
         "provenance_trail": _provenance_trail(community_review),
+        "control_point_workspace": control_point_manifest or {},
+        "sheet_transform_workspace": sheet_transform_manifest or {},
+        "georeference_workspace": georeference_workspace or {},
+        "composite_manifest": composite_manifest or {},
         "people_review": list(community_review["people"]) if community_review is not None else [],
         "businesses_review": list(community_review["businesses"]) if community_review is not None else [],
         "review_legend": _review_legend(building_manifest, community_review),
@@ -119,6 +139,41 @@ def _optional_sheet_review_manifest(
 def _optional_stitching_manifest(repo_root: Path | None, town_slug: str) -> SanbornStitchingManifest | None:
     try:
         return load_sanborn_stitching_manifest(repo_root, town_slug)
+    except MindseyeDataError:
+        return None
+
+
+def _optional_control_point_manifest(repo_root: Path | None, town_slug: str) -> dict[str, object] | None:
+    try:
+        return load_sanborn_control_point_manifest(repo_root, town_slug)
+    except MindseyeDataError:
+        return None
+
+
+def _optional_sheet_transform_manifest(repo_root: Path | None, town_slug: str) -> dict[str, object] | None:
+    try:
+        return load_sanborn_sheet_transform_manifest(repo_root, town_slug)
+    except MindseyeDataError:
+        return None
+
+
+def _optional_layer_stack_manifest(repo_root: Path | None, town_slug: str) -> dict[str, object] | None:
+    try:
+        return load_sanborn_layer_stack_manifest(repo_root, town_slug)
+    except MindseyeDataError:
+        return None
+
+
+def _optional_georeference_workspace(repo_root: Path | None, town_slug: str) -> dict[str, object] | None:
+    try:
+        return build_sanborn_georeference_workspace(repo_root, town_slug)
+    except MindseyeDataError:
+        return None
+
+
+def _optional_composite_manifest(repo_root: Path | None, town_slug: str) -> dict[str, object] | None:
+    try:
+        return build_sanborn_composite_manifest(repo_root, town_slug)
     except MindseyeDataError:
         return None
 
@@ -529,28 +584,47 @@ def _stitch_workspace(
     stitching_manifest: SanbornStitchingManifest | None,
     map_packet: dict[str, object] | None,
     selected_sheet: dict[str, object] | None,
+    georeference_workspace: dict[str, object] | None = None,
+    composite_manifest: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if stitching_manifest is None:
         return {
             "stitching_status": "unavailable",
             "control_point_status": "unavailable",
             "georeferencing_status": "deferred",
+            "local_alignment_status": "unavailable",
             "anchor_sheet_id": "",
             "sheet_plan_count": 0,
             "link_count": 0,
             "selected_sheet_id": selected_sheet["sheet_id"] if selected_sheet is not None else "",
+            "sheet_statuses": [],
+            "missing_control_point_sheet_ids": [],
+            "warnings": [],
             "notes": "Stitching prep is not available yet.",
         }
 
+    georef = georeference_workspace or {}
+    composite = composite_manifest or {}
     return {
         "stitching_status": stitching_manifest.stitching_status,
-        "control_point_status": stitching_manifest.control_point_status,
+        "manifest_control_point_status": stitching_manifest.control_point_status,
+        "control_point_status": georef.get("control_point_status", stitching_manifest.control_point_status),
+        "local_alignment_status": georef.get("local_alignment_status", stitching_manifest.georeferencing_status),
         "georeferencing_status": stitching_manifest.georeferencing_status,
         "location_extraction_status": stitching_manifest.location_extraction_status,
         "anchor_sheet_id": stitching_manifest.anchor_sheet_id,
         "sheet_plan_count": stitching_manifest.sheet_plan_count,
         "link_count": stitching_manifest.link_count,
         "selected_sheet_id": selected_sheet["sheet_id"] if selected_sheet is not None else stitching_manifest.anchor_sheet_id,
+        "control_point_manifest_id": georef.get("control_point_manifest_id", ""),
+        "sheet_transform_manifest_id": georef.get("sheet_transform_manifest_id", ""),
+        "layer_stack_manifest_id": georef.get("layer_stack_manifest_id", ""),
+        "sheet_statuses": list(georef.get("sheet_statuses", [])),
+        "missing_control_point_sheet_ids": list(georef.get("missing_control_point_sheet_ids", [])),
+        "warnings": list(georef.get("warnings", [])),
+        "composite_manifest_id": composite.get("composite_manifest_id", ""),
+        "composite_status": composite.get("composite_status", "prep_only"),
+        "release_gate_status": composite.get("release_gate_status", "blocked"),
         "candidate_links": [
             {
                 "from_sheet_id": link.from_sheet_id,
@@ -589,7 +663,24 @@ def _design_tools() -> list[dict[str, object]]:
     ]
 
 
-def _layer_stack(map_packet: dict[str, object] | None) -> list[dict[str, object]]:
+def _layer_stack(
+    map_packet: dict[str, object] | None,
+    layer_stack_manifest: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    if layer_stack_manifest is not None:
+        return [
+            {
+                "layer_id": layer.get("layer_id", ""),
+                "label": layer.get("label", ""),
+                "status": layer.get("status", "unknown"),
+                "notes": layer.get("notes", ""),
+                "visual_role": layer.get("visual_role", ""),
+                "review_state": layer.get("review_state", ""),
+            }
+            for layer in layer_stack_manifest.get("layers", [])
+            if isinstance(layer, dict)
+        ]
+
     if map_packet is None:
         return []
 
