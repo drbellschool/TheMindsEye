@@ -1,0 +1,767 @@
+{
+  "town": {
+    "name": "Texarkana",
+    "slug": "texarkana",
+    "year": 1885,
+    "packageId": "texarkana_1885",
+    "stateRegion": "Texas / Arkansas",
+    "scope": "1880-1890 evidence gate",
+    "releaseState": "guarded"
+  },
+  "summary": {
+    "sources": 18,
+    "sheets": 6,
+    "buildings": 24,
+    "people": 19,
+    "businesses": 11,
+    "unresolved": 7,
+    "progressPercent": 42
+  },
+  "statusChips": [
+    {
+      "label": "Sources",
+      "value": "18",
+      "state": "ready"
+    },
+    {
+      "label": "Sheets",
+      "value": "6",
+      "state": "reviewing"
+    },
+    {
+      "label": "Buildings",
+      "value": "24",
+      "state": "partial"
+    },
+    {
+      "label": "People",
+      "value": "19",
+      "state": "reviewing"
+    },
+    {
+      "label": "Businesses",
+      "value": "11",
+      "state": "reviewing"
+    },
+    {
+      "label": "Release",
+      "value": "guarded",
+      "state": "guarded"
+    }
+  ],
+  "routeLinks": [
+    {
+      "href": "/community",
+      "label": "Community"
+    },
+    {
+      "href": "/community/map-auditor",
+      "label": "Map Auditor"
+    },
+    {
+      "href": "/community/building-auditor",
+      "label": "Building Auditor"
+    },
+    {
+      "href": "/community/people-auditor",
+      "label": "People Auditor"
+    },
+    {
+      "href": "/community/source-provenance-inspector",
+      "label": "Source / Provenance Inspector"
+    },
+    {
+      "href": "/community/release-gate",
+      "label": "Release Gate"
+    }
+  ],
+  "routeCards": [
+    {
+      "href": "/community",
+      "label": "Community Dashboard",
+      "title": "Community Verification Console",
+      "text": "Town status, review paths, and readiness blockers.",
+      "statLabel": "Progress",
+      "statValue": "42%",
+      "state": "reviewing"
+    },
+    {
+      "href": "/community/map-auditor",
+      "label": "Map Auditor",
+      "title": "Stitching workspace",
+      "text": "Sheet alignment, control points, and layer order.",
+      "statLabel": "Sheets",
+      "statValue": "6",
+      "state": "reviewing"
+    },
+    {
+      "href": "/community/building-auditor",
+      "label": "Building Auditor",
+      "title": "Building review",
+      "text": "Footprints, extracted labels, and art readiness.",
+      "statLabel": "Buildings",
+      "statValue": "24",
+      "state": "partial"
+    },
+    {
+      "href": "/community/people-auditor",
+      "label": "People Auditor",
+      "title": "Identity queue",
+      "text": "People and businesses stay separate until reviewed.",
+      "statLabel": "Records",
+      "statValue": "30",
+      "state": "reviewing"
+    },
+    {
+      "href": "/community/source-provenance-inspector",
+      "label": "Source / Provenance Inspector",
+      "title": "Provenance drill-down",
+      "text": "Raw source trail, OCR, rights, and linked records.",
+      "statLabel": "Sources",
+      "statValue": "18",
+      "state": "guarded"
+    },
+    {
+      "href": "/community/release-gate",
+      "label": "Release Gate",
+      "title": "Handoff report",
+      "text": "Blockers, criteria, and readiness status.",
+      "statLabel": "State",
+      "statValue": "guarded",
+      "state": "guarded"
+    }
+  ],
+  "reviewLegend": [
+    {
+      "label": "verified_fact",
+      "state": "ready",
+      "note": "Directly supported by source evidence."
+    },
+    {
+      "label": "source_based_inference",
+      "state": "reviewing",
+      "note": "Anchored to sources, but still inferential."
+    },
+    {
+      "label": "illustrative",
+      "state": "partial",
+      "note": "Useful for the product surface, not a factual claim."
+    },
+    {
+      "label": "unknown",
+      "state": "guarded",
+      "note": "Evidence remains thin or missing."
+    },
+    {
+      "label": "rejected",
+      "state": "blocked",
+      "note": "Reviewed and not accepted into the active record."
+    }
+  ],
+  "communityDashboard": {
+    "hero": {
+      "eyebrow": "Community Verification Console",
+      "title": "Texarkana 1885 Community Dashboard",
+      "subtitle": "Review the town package, route into the auditors, and keep the release gate honest."
+    },
+    "yearGate": {
+      "label": "Map window",
+      "value": "1880-1890",
+      "detail": "A 20-year evidence gate centered on the Sanborn map year."
+    },
+    "releaseGate": {
+      "state": "guarded",
+      "reason": "Source review and map stitching are active, but the town is not ready for release."
+    },
+    "overviewCards": [
+      {
+        "label": "Sources",
+        "value": "18",
+        "detail": "The source trail stays visible."
+      },
+      {
+        "label": "Sheets",
+        "value": "6",
+        "detail": "Sanborn sheets in the current review set."
+      },
+      {
+        "label": "Buildings",
+        "value": "24",
+        "detail": "Building records remain review-bound."
+      },
+      {
+        "label": "People",
+        "value": "19",
+        "detail": "Identity work is separated from business records."
+      },
+      {
+        "label": "Businesses",
+        "value": "11",
+        "detail": "Commercial records keep their own queue."
+      },
+      {
+        "label": "Unresolved",
+        "value": "7",
+        "detail": "Items still blocking release."
+      }
+    ],
+    "scopeLadder": [
+      {
+        "label": "Community",
+        "value": "Texarkana",
+        "detail": "Current working town package."
+      },
+      {
+        "label": "County",
+        "value": "Bowie / Miller",
+        "detail": "Future county-level expansion."
+      },
+      {
+        "label": "State",
+        "value": "Texas",
+        "detail": "State manager layer for later."
+      }
+    ],
+    "blockers": [
+      "Missing control points on Sheet 5",
+      "Three building anchors still need human review",
+      "Two source issues remain unresolved"
+    ],
+    "evidenceInspector": {
+      "sourceId": "source_texarkana_1885_sanborn_loc",
+      "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+      "summary": "The key evidence anchor for the community review console.",
+      "fields": [
+        {
+          "label": "Citation",
+          "value": "Library of Congress",
+          "detail": "Primary map citation."
+        },
+        {
+          "label": "Rights",
+          "value": "Reference only",
+          "detail": "Use for review and provenance, not for blanket reuse."
+        },
+        {
+          "label": "Review state",
+          "value": "guarded",
+          "detail": "Human verification still required."
+        },
+        {
+          "label": "Map year",
+          "value": "1885",
+          "detail": "Centered inside the 20-year gate."
+        }
+      ]
+    },
+    "history": [
+      "Sheet review updated for control point coverage.",
+      "Building candidate queue kept separate from verified facts.",
+      "Release gate remains guarded."
+    ]
+  },
+  "mapAuditor": {
+    "sheetStrip": [
+      {
+        "label": "Sheet 1",
+        "status": "confirmed",
+        "notes": "Anchor sheet for local alignment."
+      },
+      {
+        "label": "Sheet 2",
+        "status": "under_review",
+        "notes": "Road and rail overlay still needs review."
+      },
+      {
+        "label": "Sheet 3",
+        "status": "under_review",
+        "notes": "Control point drift remains visible."
+      },
+      {
+        "label": "Sheet 4",
+        "status": "suggested",
+        "notes": "No final promotion yet."
+      },
+      {
+        "label": "Sheet 5",
+        "status": "insufficient_evidence",
+        "notes": "Missing control points."
+      },
+      {
+        "label": "Sheet 6",
+        "status": "suggested",
+        "notes": "Awaiting final pass."
+      }
+    ],
+    "workspace": {
+      "subtitle": "Stitch sheets, verify control points, and keep local alignment separate from final georeferencing.",
+      "calloutLabel": "Current selection",
+      "calloutValue": "Sheet 3 seam line",
+      "calloutDetail": "Local alignment uses a provisional coordinate system only."
+    },
+    "georeference": {
+      "status": "prep_only",
+      "detail": "Local alignment is active, but final georeferencing is not yet complete.",
+      "warning": "Do not treat the workspace as final coordinates."
+    },
+    "controls": [
+      {
+        "label": "Zoom",
+        "state": "ready"
+      },
+      {
+        "label": "Pan",
+        "state": "ready"
+      },
+      {
+        "label": "Reset view",
+        "state": "ready"
+      },
+      {
+        "label": "Seam overlay",
+        "state": "reviewing"
+      },
+      {
+        "label": "Control points",
+        "state": "reviewing"
+      },
+      {
+        "label": "Layer stack",
+        "state": "guarded"
+      }
+    ],
+    "layerStack": [
+      {
+        "label": "Base map",
+        "status": "ready",
+        "note": "Historical paper background."
+      },
+      {
+        "label": "Road / rail",
+        "status": "reviewing",
+        "note": "Separate editable layer."
+      },
+      {
+        "label": "Building footprint",
+        "status": "reviewing",
+        "note": "Footprints stay distinct from art."
+      },
+      {
+        "label": "Building art",
+        "status": "illustrative",
+        "note": "Transparent art placeholders only."
+      },
+      {
+        "label": "Labels",
+        "status": "reviewing",
+        "note": "Street and building text."
+      },
+      {
+        "label": "Quest markers",
+        "status": "guarded",
+        "note": "Runtime overlays only."
+      },
+      {
+        "label": "Evidence",
+        "status": "guarded",
+        "note": "Provenance trail layer."
+      }
+    ],
+    "controlPoints": [
+      {
+        "label": "CP-01",
+        "value": "Stable",
+        "detail": "Anchor control point on Sheet 1."
+      },
+      {
+        "label": "CP-02",
+        "value": "Stable",
+        "detail": "Second anchor near the rail line."
+      },
+      {
+        "label": "CP-03",
+        "value": "Drift",
+        "detail": "Needs review before final handoff."
+      }
+    ],
+    "evidence": {
+      "fields": [
+        {
+          "label": "Anchor sheet",
+          "value": "Sheet 1",
+          "detail": "Stitching starts from the most stable scan."
+        },
+        {
+          "label": "Control points",
+          "value": "3",
+          "detail": "One still drifts."
+        },
+        {
+          "label": "Transform coverage",
+          "value": "83%",
+          "detail": "Not every sheet has a stable transform yet."
+        },
+        {
+          "label": "Alignment scope",
+          "value": "local_only",
+          "detail": "Prep-only local system."
+        }
+      ]
+    },
+    "history": [
+      "Seam overlay reviewed on Sheet 3.",
+      "Control point drift kept visible.",
+      "Final georeferencing remains deferred."
+    ]
+  },
+  "buildingAuditor": {
+    "selectedBuilding": {
+      "title": "Sawmill footprint review",
+      "subtitle": "A reviewed building anchor with a provisional art fit.",
+      "fields": [
+        {
+          "label": "Building ID",
+          "value": "building_texarkana_0012",
+          "detail": "Reviewed anchor record."
+        },
+        {
+          "label": "Sheet anchor",
+          "value": "Sheet 3",
+          "detail": "Shared with the map workspace."
+        },
+        {
+          "label": "Identity status",
+          "value": "reviewed",
+          "detail": "Identity is accepted into the reviewed set."
+        },
+        {
+          "label": "Visual detail",
+          "value": "inferred",
+          "detail": "Some visible features are inferred from source context."
+        },
+        {
+          "label": "Art state",
+          "value": "illustrative",
+          "detail": "Transparent art preview only."
+        }
+      ]
+    },
+    "footprint": {
+      "note": "The footprint stays separate from the art layer so the building can be replaced later without changing the evidence record."
+    },
+    "artPreview": {
+      "title": "Transparent building mockup",
+      "detail": "The rendered art should fit inside the footprint without flattening the historical layer stack.",
+      "tags": [
+        {
+          "label": "Transparent background",
+          "state": "ready"
+        },
+        {
+          "label": "Anchored to footprint",
+          "state": "reviewing"
+        },
+        {
+          "label": "Illustrative detail",
+          "state": "partial"
+        }
+      ]
+    },
+    "extractedLabels": [
+      {
+        "label": "Label",
+        "value": "SAWMILL",
+        "detail": "Text box awaiting approval."
+      },
+      {
+        "label": "Footprint size",
+        "value": "24 x 18 ft",
+        "detail": "Demo geometry only."
+      },
+      {
+        "label": "Interior hint",
+        "value": "Raw timber, sawdust, tools",
+        "detail": "Source-based guess, not a verified fact."
+      }
+    ],
+    "provenance": {
+      "fields": [
+        {
+          "label": "Reviewed building",
+          "value": "Yes",
+          "detail": "Anchor record is human-reviewed."
+        },
+        {
+          "label": "Source issue",
+          "value": "Texarkana review packet 1885-03",
+          "detail": "Traceable issue trail."
+        },
+        {
+          "label": "Citation",
+          "value": "Library of Congress / Sanborn",
+          "detail": "Primary map evidence."
+        },
+        {
+          "label": "Reviewer note",
+          "value": "Needs art pass",
+          "detail": "The next step is visual, not factual, approval."
+        }
+      ]
+    },
+    "reviewStates": [
+      {
+        "label": "verified_fact",
+        "state": "ready"
+      },
+      {
+        "label": "source_based_inference",
+        "state": "reviewing"
+      },
+      {
+        "label": "illustrative",
+        "state": "partial"
+      },
+      {
+        "label": "unknown",
+        "state": "guarded"
+      }
+    ]
+  },
+  "peopleAuditor": {
+    "sourceIssues": [
+      {
+        "label": "Issue 1",
+        "value": "Daily newspaper page 4",
+        "detail": "Person and business candidates extracted from OCR."
+      },
+      {
+        "label": "Issue 2",
+        "value": "Directory entry",
+        "detail": "Occupation and address still need review."
+      },
+      {
+        "label": "Issue 3",
+        "value": "Postal notice",
+        "detail": "Business clue only."
+      }
+    ],
+    "personReview": {
+      "title": "Person review",
+      "subtitle": "People stay separate from businesses until humans confirm identity.",
+      "fields": [
+        {
+          "label": "Name",
+          "value": "A. Bell",
+          "detail": "Candidate only."
+        },
+        {
+          "label": "Confidence",
+          "value": "medium",
+          "detail": "OCR plus source context."
+        },
+        {
+          "label": "Linked sources",
+          "value": "2",
+          "detail": "Both linked by source issue."
+        },
+        {
+          "label": "Merge check",
+          "value": "pending",
+          "detail": "Do not merge yet."
+        }
+      ]
+    },
+    "businessReview": {
+      "title": "Business review",
+      "subtitle": "Business records keep their own citation trail.",
+      "fields": [
+        {
+          "label": "Business",
+          "value": "Texarkana Livery",
+          "detail": "Candidate business identity."
+        },
+        {
+          "label": "Type",
+          "value": "livery / wagon yard",
+          "detail": "Source-backed commercial clue."
+        },
+        {
+          "label": "Linked sources",
+          "value": "1",
+          "detail": "Single issue trail."
+        },
+        {
+          "label": "Price clue",
+          "value": "unknown",
+          "detail": "No verified pricing yet."
+        }
+      ]
+    },
+    "legend": [
+      {
+        "label": "candidate_pending_review",
+        "state": "reviewing",
+        "note": "Candidate only."
+      },
+      {
+        "label": "confirmed",
+        "state": "ready",
+        "note": "Human accepted."
+      },
+      {
+        "label": "rejected",
+        "state": "blocked",
+        "note": "Not promoted."
+      }
+    ],
+    "unresolved": [
+      "Resolve person identity for A. Bell",
+      "Confirm business type for the livery",
+      "Check duplicate person candidate set"
+    ],
+    "history": [
+      "Person and business candidates remain separate.",
+      "OCR excerpts are visible for review.",
+      "Merge checks are still pending."
+    ]
+  },
+  "sourceProvenanceInspector": {
+    "source": {
+      "title": "Source record",
+      "subtitle": "Review the raw evidence trail before promotion.",
+      "fields": [
+        {
+          "label": "Source ID",
+          "value": "source_texarkana_1885_sanborn_loc",
+          "detail": "Referenced by the town package."
+        },
+        {
+          "label": "Archive",
+          "value": "Library of Congress",
+          "detail": "Primary archive citation."
+        },
+        {
+          "label": "Issue date",
+          "value": "1885-10",
+          "detail": "Historical scope anchor."
+        },
+        {
+          "label": "Page",
+          "value": "Sheet 3",
+          "detail": "Used in the map workspace."
+        }
+      ]
+    },
+    "ocr": {
+      "quote": "Sawmill, livery, and rail-side labels appear in the source excerpt as review candidates."
+    },
+    "rights": {
+      "fields": [
+        {
+          "label": "Citation string",
+          "value": "Sanborn Fire Insurance Map, Texarkana, October 1885",
+          "detail": "Should be shown wherever the source is reused."
+        },
+        {
+          "label": "Rights",
+          "value": "Reference use",
+          "detail": "Keep access notes visible."
+        },
+        {
+          "label": "Access",
+          "value": "Public archive record",
+          "detail": "Still requires normal citation handling."
+        }
+      ]
+    },
+    "linkedRecords": [
+      {
+        "label": "Buildings",
+        "value": "24",
+        "detail": "Reviewed and candidate anchors."
+      },
+      {
+        "label": "People",
+        "value": "19",
+        "detail": "Identity queue still separate."
+      },
+      {
+        "label": "Businesses",
+        "value": "11",
+        "detail": "Commercial candidates only."
+      },
+      {
+        "label": "Claims",
+        "value": "7",
+        "detail": "Not auto-promoted."
+      }
+    ],
+    "trail": [
+      "Raw source record -> normalized source record",
+      "Normalized source record -> candidate matches",
+      "Candidate matches -> human review decision"
+    ],
+    "history": [
+      "OCR excerpt shown for review.",
+      "Rights notes preserved.",
+      "No auto-approval from source text."
+    ]
+  },
+  "releaseGate": {
+    "state": "guarded",
+    "reason": "Community review is active, but unresolved items still block release.",
+    "progressPercent": 42,
+    "progressDetail": "The town is moving forward, but not yet public-release ready.",
+    "blockers": [
+      "Missing control points on Sheet 5",
+      "Three building anchors still need human review",
+      "Two source issues remain unresolved"
+    ],
+    "criteria": [
+      {
+        "label": "Citations",
+        "value": "partial",
+        "detail": "Visible but not complete."
+      },
+      {
+        "label": "Map stitching",
+        "value": "reviewing",
+        "detail": "Local alignment only."
+      },
+      {
+        "label": "Building anchors",
+        "value": "partial",
+        "detail": "Not all reviewed."
+      },
+      {
+        "label": "People identities",
+        "value": "reviewing",
+        "detail": "Separate identity queue."
+      },
+      {
+        "label": "Rights notes",
+        "value": "ready",
+        "detail": "Access information is present."
+      }
+    ],
+    "actions": [
+      {
+        "label": "Export review report",
+        "state": "ready"
+      },
+      {
+        "label": "View blocker summary",
+        "state": "reviewing"
+      },
+      {
+        "label": "Hold release",
+        "state": "blocked"
+      }
+    ],
+    "history": [
+      "Release gate remains guarded.",
+      "Human review is still required for several records.",
+      "Community surface is still upstream of classroom use."
+    ]
+  }
+}
