@@ -1876,6 +1876,17 @@ def _community_dashboard_section(raw_dashboard: object) -> str:
             f'<a class="badge link-badge" href="{_attr(link["href"])}">{_text(link["label"])}</a>'
         )
 
+    diagnostic_rows = "".join(
+        (
+            '<article class="diagnostic-card">\n'
+            f'  <p class="diagnostic-label">{_text(card["label"])}</p>\n'
+            f'  <strong>{_text(card["value"])}</strong>\n'
+            f'  <p class="note">{_text(card["note"])}</p>\n'
+            '</article>'
+        )
+        for card in diagnostics_cards
+    )
+
     year_tick_rows = "".join(year_ticks)
     status_card_rows = "".join(status_cards_html)
     route_card_rows = "".join(route_rows)
@@ -2095,17 +2106,7 @@ def _community_dashboard_section(raw_dashboard: object) -> str:
         <p class="eyebrow">Diagnostics &amp; Safeguards</p>
         <h3>Review-only protections and provenance guardrails</h3>
       </div>
-      <div class="diagnostics-grid">
-        {''.join(
-            f"""
-<article class="diagnostic-card">
-  <p class="diagnostic-label">{_text(card["label"])}</p>
-  <strong>{_text(card["value"])}</strong>
-  <p class="note">{_text(card["note"])}</p>
-</article>"""
-            for card in diagnostics_cards
-        )}
-      </div>
+      <div class="diagnostics-grid">{diagnostic_rows}</div>
       <div class="link-strip">{''.join(nav_rows)}</div>
       <p class="note">Primary navigation remains available for the map, building, and people auditors.</p>
     </article>
