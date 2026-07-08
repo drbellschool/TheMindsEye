@@ -1,0 +1,48 @@
+.route-shell--community-dashboard .route-shell__grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.82fr);
+}
+
+.route-shell--community-dashboard .route-shell__bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.78fr);
+}
+
+.route-shell--map-auditor .route-shell__grid {
+  grid-template-columns: minmax(260px, 0.86fr) minmax(0, 1.2fr) minmax(320px, 0.94fr);
+}
+
+.route-shell--map-auditor .route-shell__bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.route-shell--building-auditor .route-shell__grid,
+.route-shell--people-auditor .route-shell__grid,
+.route-shell--source-provenance-inspector .route-shell__grid {
+  grid-template-columns: minmax(260px, 0.88fr) minmax(0, 1.1fr) minmax(320px, 0.96fr);
+}
+
+.route-shell--release-gate .route-shell__grid {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+}
+
+.route-shell--release-gate .route-shell__bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.route-shell--debug .route-shell__grid {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1180px) {
+  .route-shell--community-dashboard .route-shell__grid,
+  .route-shell--community-dashboard .route-shell__bottom,
+  .route-shell--map-auditor .route-shell__grid,
+  .route-shell--map-auditor .route-shell__bottom,
+  .route-shell--building-auditor .route-shell__grid,
+  .route-shell--people-auditor .route-shell__grid,
+  .route-shell--source-provenance-inspector .route-shell__grid,
+  .route-shell--release-gate .route-shell__grid,
+  .route-shell--release-gate .route-shell__bottom {
+    grid-template-columns: 1fr;
+  }
+}
+

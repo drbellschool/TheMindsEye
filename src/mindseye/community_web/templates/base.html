@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }}</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <link rel="stylesheet" href="/static/css/layout.css">
+  {{{route_css_link_html}}}
+  {{{route_js_link_html}}}
+</head>
+<body class="{{ body_class }}">
+  <div class="{{ page_class }}" data-route="{{ route_id }}" data-town="{{ town_name }}" data-map-year="{{ map_year }}">
+    {{ include:partials/topbar.html }}
+    <main class="app-main">
+      {{{route_shell_html}}}
+    </main>
+    <footer class="app-footer">
+      <p>{{ footer_note }}</p>
+    </footer>
+  </div>
+</body>
+</html>

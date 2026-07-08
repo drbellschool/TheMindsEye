@@ -1,0 +1,16 @@
+.route-shell--building-auditor .route-shell__hero .panel {
+  min-height: 210px;
+}
+
+.route-shell--building-auditor .route-shell__column .panel {
+  min-height: 100%;
+}
+
+.route-shell--building-auditor .evidence-inspector {
+  background-image: url("../textures/parchment.svg");
+}
+
+.route-shell--building-auditor .list__item {
+  background: rgba(255, 255, 255, 0.26);
+}
+

@@ -1,0 +1,26 @@
+<section class="panel evidence-inspector">
+  <div class="panel__head">
+    <div>
+      <p class="eyebrow">{{ focus_label }}</p>
+      <h2>{{ label }}</h2>
+      <p class="panel__subtitle">{{ focus_id }}</p>
+    </div>
+    <span class="tag state-{{ status }}">{{ historical_basis }}</span>
+  </div>
+  <div class="panel__body">
+    <div class="key-value-grid">
+      <div class="key-value">
+        <div class="key-value__label">Confidence</div>
+        <p class="key-value__value">{{ confidence }}</p>
+      </div>
+      <div class="key-value">
+        <div class="key-value__label">Source IDs</div>
+        <p class="key-value__value">{{ source_ids }}</p>
+      </div>
+      <div class="key-value">
+        <div class="key-value__label">Notes</div>
+        <p class="key-value__value">{{ notes }}</p>
+      </div>
+    </div>
+  </div>
+</section>

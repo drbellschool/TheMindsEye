@@ -1,0 +1,19 @@
+<header class="topbar panel panel--dark">
+  <div class="topbar__brand">
+    <p class="eyebrow">The Mind's Eye</p>
+    <h1>{{ route_title }}</h1>
+    <p class="topbar__subtitle">{{ route_subtitle }}</p>
+    <p class="topbar__summary">{{ route_summary }}</p>
+  </div>
+  <div class="topbar__meta">
+    <span class="badge">Town <strong>{{ town_name }}</strong></span>
+    <span class="badge">Map year <strong>{{ map_year }}</strong></span>
+    <span class="badge">Package <strong>{{ package_id }}</strong></span>
+  </div>
+  <div class="topbar__nav">
+    {{{topbar_links_html}}}
+  </div>
+  <div class="topbar__chips">
+    {{{status_chips_html}}}
+  </div>
+</header>

@@ -1,0 +1,13 @@
+<section class="panel panel--dark release-gate-card">
+  <div class="panel__head">
+    <div>
+      <p class="eyebrow">Release Gate</p>
+      <h2>{{ state }}</h2>
+      <p class="panel__subtitle">{{ reason }}</p>
+    </div>
+    <span class="badge state-{{ state }}"><strong>{{ blocker_count }}</strong> blockers</span>
+  </div>
+  <div class="panel__body">
+    {{{blockers_html}}}
+  </div>
+</section>
