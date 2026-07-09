@@ -37,7 +37,7 @@ type SourceRecordRow = {
 
 type ReviewEventRow = {
   summary: string;
-  entity_table: string;
+  target_table: string;
   reviewer_name: string | null;
   previous_review_status: ReviewStatus | null;
   next_review_status: ReviewStatus | null;
@@ -134,7 +134,7 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
       supabase.from("review_events").select("*", { count: "exact", head: true }).in("next_review_status", unresolvedStatuses),
       supabase
         .from("review_events")
-        .select("summary, entity_table, reviewer_name, previous_review_status, next_review_status, occurred_at")
+        .select("summary, target_table, reviewer_name, previous_review_status, next_review_status, occurred_at")
         .order("occurred_at", { ascending: false })
         .limit(3),
     ]);
@@ -277,7 +277,7 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
         const nextStatus = event.next_review_status ?? "unknown";
         const occurredAt = event.occurred_at ? event.occurred_at.slice(0, 10) : "unknown date";
 
-        return `${event.entity_table}: ${event.summary} (${reviewer}, ${occurredAt}, ${previousStatus} -> ${nextStatus})`;
+        return `${event.target_table}: ${event.summary} (${reviewer}, ${occurredAt}, ${previousStatus} -> ${nextStatus})`;
       });
     }
 

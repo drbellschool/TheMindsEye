@@ -240,20 +240,24 @@ values (
 )
 on conflict (claim_id) do nothing;
 
-insert into review_events (
+insert into public.review_events (
   id,
   town_package_id,
-  entity_table,
-  entity_id,
+  target_table,
+  target_id,
+  source_record_id,
+  action_type,
   previous_review_status,
   next_review_status,
+  reviewer_identifier,
+  reviewer_name,
+  reviewer_role,
   certainty,
   is_verified,
   summary,
-  reviewer_identifier,
-  reviewer_name,
+  review_note,
   occurred_at,
-  notes
+  created_at
 )
 values
 (
@@ -261,47 +265,75 @@ values
   '00000000-0000-0000-0000-000000000001',
   'map_layers',
   'map_layer_texarkana_sheet_3',
+  '00000000-0000-0000-0000-000000000101',
+  'status_change',
   'unknown',
   'source_based_inference',
+  'community_seed_01',
+  'Community seed',
+  'seed',
   'medium',
   false,
   'Sheet 3 alignment remains local-only until more control points are confirmed.',
-  'community_seed_01',
-  'Community seed',
+  'No final georeferencing yet.',
   '2026-07-09T08:00:00Z',
-  'No final georeferencing yet.'
+  '2026-07-09T08:00:00Z'
 ),
 (
   '00000000-0000-0000-0000-000000000802',
   '00000000-0000-0000-0000-000000000001',
   'buildings',
   'building_texarkana_0012',
+  '00000000-0000-0000-0000-000000000101',
+  'status_change',
   'unknown',
   'illustrative',
+  'community_seed_01',
+  'Community seed',
+  'seed',
   'low',
   false,
   'Building art request remains illustrative and separate from the reviewed footprint.',
-  'community_seed_01',
-  'Community seed',
+  'Visual layer only.',
   '2026-07-09T08:15:00Z',
-  'Visual layer only.'
+  '2026-07-09T08:15:00Z'
 ),
 (
   '00000000-0000-0000-0000-000000000803',
   '00000000-0000-0000-0000-000000000001',
   'people',
   'person_texarkana_a_bell',
+  '00000000-0000-0000-0000-000000000101',
+  'status_change',
   'unknown',
   'unknown',
+  'community_seed_01',
+  'Community seed',
+  'seed',
   'medium',
   false,
   'Person identity remains unresolved pending duplicate review.',
-  'community_seed_01',
-  'Community seed',
+  'Do not auto-promote candidate identity.',
   '2026-07-09T08:30:00Z',
-  'Do not auto-promote candidate identity.'
+  '2026-07-09T08:30:00Z'
 )
-on conflict (id) do nothing;
+on conflict (id) do update
+set town_package_id = excluded.town_package_id,
+    target_table = excluded.target_table,
+    target_id = excluded.target_id,
+    source_record_id = excluded.source_record_id,
+    action_type = excluded.action_type,
+    previous_review_status = excluded.previous_review_status,
+    next_review_status = excluded.next_review_status,
+    reviewer_identifier = excluded.reviewer_identifier,
+    reviewer_name = excluded.reviewer_name,
+    reviewer_role = excluded.reviewer_role,
+    certainty = excluded.certainty,
+    is_verified = excluded.is_verified,
+    summary = excluded.summary,
+    review_note = excluded.review_note,
+    occurred_at = excluded.occurred_at,
+    created_at = excluded.created_at;
 
 insert into asset_requests (
   id,

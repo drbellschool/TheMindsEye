@@ -173,22 +173,219 @@ create table if not exists claims (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists review_events (
+create table if not exists public.review_events (
   id uuid primary key default gen_random_uuid(),
   town_package_id uuid not null references town_packages(id) on delete cascade,
-  entity_table text not null,
-  entity_id text not null,
+  target_table text not null,
+  target_id text not null,
+  source_record_id uuid references source_records(id) on delete set null,
+  action_type text not null default 'status_change',
   previous_review_status review_status_enum,
   next_review_status review_status_enum not null default 'unknown',
+  reviewer_identifier text,
+  reviewer_name text,
+  reviewer_role text,
   certainty certainty_enum not null default 'unknown',
   is_verified boolean not null default false,
   summary text not null,
-  reviewer_identifier text,
-  reviewer_name text,
+  review_note text,
   occurred_at timestamptz not null default now(),
-  notes text,
   created_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_table'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'target_table'
+  ) then
+    alter table public.review_events rename column entity_table to target_table;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_id'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'target_id'
+  ) then
+    alter table public.review_events rename column entity_id to target_id;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'review_status'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'next_review_status'
+  ) then
+    alter table public.review_events rename column review_status to next_review_status;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'notes'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'review_note'
+  ) then
+    alter table public.review_events rename column notes to review_note;
+  end if;
+end
+$$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_table'
+  ) and exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'target_table'
+  ) then
+    execute '
+      update public.review_events
+      set target_table = coalesce(target_table, entity_table)
+      where target_table is null and entity_table is not null
+    ';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_id'
+  ) and exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'target_id'
+  ) then
+    execute '
+      update public.review_events
+      set target_id = coalesce(target_id, entity_id)
+      where target_id is null and entity_id is not null
+    ';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'review_status'
+  ) and exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'next_review_status'
+  ) then
+    execute '
+      update public.review_events
+      set next_review_status = coalesce(next_review_status, review_status)
+      where next_review_status is null and review_status is not null
+    ';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'notes'
+  ) and exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'review_note'
+  ) then
+    execute '
+      update public.review_events
+      set review_note = coalesce(review_note, notes)
+      where review_note is null and notes is not null
+    ';
+  end if;
+end
+$$;
+
+alter table public.review_events add column if not exists source_record_id uuid references source_records(id) on delete set null;
+alter table public.review_events add column if not exists action_type text;
+alter table public.review_events add column if not exists previous_review_status review_status_enum;
+alter table public.review_events add column if not exists next_review_status review_status_enum;
+alter table public.review_events add column if not exists reviewer_identifier text;
+alter table public.review_events add column if not exists reviewer_name text;
+alter table public.review_events add column if not exists reviewer_role text;
+alter table public.review_events add column if not exists review_note text;
+alter table public.review_events add column if not exists target_table text;
+alter table public.review_events add column if not exists target_id text;
+alter table public.review_events add column if not exists occurred_at timestamptz;
+alter table public.review_events add column if not exists created_at timestamptz;
+
+update public.review_events
+set action_type = coalesce(action_type, 'status_change'),
+    next_review_status = coalesce(next_review_status, 'unknown'::review_status_enum),
+    occurred_at = coalesce(occurred_at, created_at, now()),
+    created_at = coalesce(created_at, occurred_at, now())
+where action_type is null
+   or next_review_status is null
+   or occurred_at is null
+   or created_at is null;
+
+alter table public.review_events alter column action_type set default 'status_change';
+alter table public.review_events alter column next_review_status set default 'unknown';
+alter table public.review_events alter column occurred_at set default now();
+alter table public.review_events alter column created_at set default now();
+
+alter table public.review_events alter column target_table set not null;
+alter table public.review_events alter column target_id set not null;
+alter table public.review_events alter column action_type set not null;
+alter table public.review_events alter column next_review_status set not null;
+alter table public.review_events alter column certainty set not null;
+alter table public.review_events alter column is_verified set not null;
+alter table public.review_events alter column summary set not null;
+alter table public.review_events alter column occurred_at set not null;
+alter table public.review_events alter column created_at set not null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_table'
+  ) then
+    alter table public.review_events drop column entity_table;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'entity_id'
+  ) then
+    alter table public.review_events drop column entity_id;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'review_status'
+  ) then
+    alter table public.review_events drop column review_status;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'review_events' and column_name = 'notes'
+  ) then
+    alter table public.review_events drop column notes;
+  end if;
+end
+$$;
 
 create table if not exists asset_requests (
   id uuid primary key default gen_random_uuid(),
@@ -213,8 +410,8 @@ create index if not exists idx_buildings_town_package on buildings (town_package
 create index if not exists idx_people_town_package on people (town_package_id);
 create index if not exists idx_businesses_town_package on businesses (town_package_id);
 create index if not exists idx_claims_town_package on claims (town_package_id);
-create index if not exists idx_review_events_town_package on review_events (town_package_id);
-create index if not exists idx_review_events_next_status on review_events (next_review_status);
+create index if not exists idx_review_events_town_package on public.review_events (town_package_id);
+create index if not exists idx_review_events_next_status on public.review_events (next_review_status);
 create index if not exists idx_asset_requests_town_package on asset_requests (town_package_id);
 
 drop trigger if exists set_town_packages_updated_at on town_packages;
