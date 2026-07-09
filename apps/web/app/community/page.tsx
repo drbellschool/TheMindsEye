@@ -10,7 +10,7 @@ export const metadata = {
 };
 
 export default async function CommunityDashboardPage() {
-  const communityData = await loadCommunityData();
+  const { data: communityData, source, warningMessage } = await loadCommunityData();
   const { communityDashboard, reviewLegend, routeCards } = communityData;
 
   return (
@@ -22,6 +22,12 @@ export default async function CommunityDashboardPage() {
           subtitle={communityDashboard.hero.subtitle}
           tone="paper"
         >
+          <div className="source-indicator-row">
+            <span className={`source-indicator ${source === "supabase" ? "source-indicator--supabase" : "source-indicator--fallback"}`}>
+              Data source: {source === "supabase" ? "Supabase" : "Demo fallback"}
+            </span>
+          </div>
+          {warningMessage ? <p className="source-warning">{warningMessage}</p> : null}
           <div className="panel-grid panel-grid--2">
             <div className="callout">
               <p className="muted">Year gate</p>

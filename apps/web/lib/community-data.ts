@@ -45,6 +45,15 @@ type ReviewEventRow = {
 };
 
 const unresolvedStatuses: ReviewStatus[] = ["source_based_inference", "illustrative", "unknown"];
+const supabaseFallbackWarning = "Using demo fallback because Supabase data could not be loaded.";
+
+export type CommunityDataSource = "supabase" | "demo_fallback";
+
+export type CommunityDataLoadResult = {
+  data: CommunityDemoData;
+  source: CommunityDataSource;
+  warningMessage?: string;
+};
 
 function cloneDemoData(): CommunityDemoData {
   return JSON.parse(JSON.stringify(communityDemo)) as CommunityDemoData;
@@ -91,16 +100,24 @@ function hasAnyQueryErrors(results: Array<{ error: { message: string } | null }>
   return results.some((result) => result.error);
 }
 
-export async function loadCommunityData(): Promise<CommunityDemoData> {
+function buildFallbackResult(warningMessage?: string): CommunityDataLoadResult {
+  return {
+    data: communityDemo,
+    source: "demo_fallback",
+    warningMessage,
+  };
+}
+
+export async function loadCommunityData(): Promise<CommunityDataLoadResult> {
   if (!hasSupabaseEnv()) {
-    return communityDemo;
+    return buildFallbackResult();
   }
 
   try {
     const supabase = await createClient();
 
     if (!supabase) {
-      return communityDemo;
+      return buildFallbackResult(supabaseFallbackWarning);
     }
 
     const [
@@ -152,7 +169,7 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
         recentReviewEventsResult,
       ])
     ) {
-      return communityDemo;
+      return buildFallbackResult(supabaseFallbackWarning);
     }
 
     const data = cloneDemoData();
@@ -281,8 +298,11 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
       });
     }
 
-    return data;
+    return {
+      data,
+      source: "supabase",
+    };
   } catch {
-    return communityDemo;
+    return buildFallbackResult(supabaseFallbackWarning);
   }
 }
