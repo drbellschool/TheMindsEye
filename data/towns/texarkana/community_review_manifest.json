@@ -1,0 +1,58 @@
+{
+  "community_review_manifest_id": "community_texarkana_1885_review_manifest",
+  "manifest_type": "town_community_review_manifest",
+  "town_package_id": "texarkana_1885",
+  "review_queue_status": "seeded_with_issue_adapter",
+  "promotion_rule": "Person and business records stay in review until a human confirms the source issue, the identity, and any related location link. Issue metadata must remain visible to reviewers.",
+  "record_count": 2,
+  "source_issue_count": 1,
+  "claim_boundary": {
+    "verified_fact": "The newspaper issue metadata is a verified source record, and a business record may be confirmed only when the page explicitly states it.",
+    "source_based_inference": "Person-to-place or business-to-location links remain inference until a reviewer promotes them.",
+    "fictional_gameplay": "No fictional gameplay identities belong in the community review queue."
+  },
+  "source_issues": [
+    {
+      "source_issue_id": "issue_texarkana_1893_daily_texarkana_democrat_098_p3",
+      "source_id": "source_texarkana_1893_daily_texarkana_democrat_098_p3",
+      "publication_title": "Daily Texarkana Democrat",
+      "issue_date": "1893-12-20",
+      "volume": "10",
+      "number": "98",
+      "edition": "1",
+      "page": "3 of 4",
+      "page_url": "https://texashistory.unt.edu/ark:/67531/metapth1644239/m1/3/",
+      "citation": "Daily Texarkana Democrat, Vol. 10, No. 98, Ed. 1, December 20, 1893, page 3 of 4, Portal to Texas History.",
+      "ocr_excerpt": "A. S. Blythe. Texarkana. Ark. ... H. T. Huey Proprietor.",
+      "notes": "This issue page is used as a normalized source-issue adapter seed for community review. It exposes newspaper issue metadata separately from the underlying source record."
+    }
+  ],
+  "people": [
+    {
+      "review_record_id": "community_texarkana_1893_person_a_s_blythe",
+      "entity_type": "person",
+      "entity_id": "person_texarkana_1893_a_s_blythe",
+      "display_name": "A. S. Blythe",
+      "review_status": "under_review",
+      "historical_basis": "source_based_inference",
+      "source_ids": ["source_texarkana_1893_daily_texarkana_democrat_098_p3"],
+      "source_issue_id": "issue_texarkana_1893_daily_texarkana_democrat_098_p3",
+      "related_location_ids": ["loc_texarkana_1885_003"],
+      "notes": "The issue page names A. S. Blythe in OCR. The record stays in review until a reviewer confirms the person identity and any person-to-place link."
+    }
+  ],
+  "businesses": [
+    {
+      "review_record_id": "community_texarkana_1893_business_exchange",
+      "entity_type": "business",
+      "entity_id": "business_texarkana_1893_exchange",
+      "display_name": "Exchange (H. T. Huey Proprietor)",
+      "review_status": "confirmed",
+      "historical_basis": "verified_fact",
+      "source_ids": ["source_texarkana_1893_daily_texarkana_democrat_098_p3"],
+      "source_issue_id": "issue_texarkana_1893_daily_texarkana_democrat_098_p3",
+      "related_location_ids": [],
+      "notes": "The issue page explicitly advertises the business and names H. T. Huey as proprietor. The location link remains separate until the map/location side confirms it."
+    }
+  ]
+}

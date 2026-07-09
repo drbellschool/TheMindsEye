@@ -31,6 +31,16 @@ class ClassroomReadinessTests(unittest.TestCase):
         self.assertFalse(placeholder_check["passed"])
         self.assertIn("loc_texarkana_1885_001", placeholder_check["details"]["placeholder_location_ids"])
         self.assertIn(placeholder_check, report["blockers"])
+        instructional_check = checks["instructional_alignment"]
+        self.assertFalse(instructional_check["passed"])
+        self.assertEqual(instructional_check["details"]["teks_status"], "pending_teacher_selection")
+        self.assertIn("alignment_texarkana_1885_teks_001", instructional_check["details"]["pending_alignment_ids"])
+        self.assertIn(instructional_check, report["blockers"])
+        teacher_review_check = checks["teacher_review_approval"]
+        self.assertFalse(teacher_review_check["passed"])
+        self.assertEqual(teacher_review_check["details"]["review_status"], "pending_teacher_review")
+        self.assertIn("alignment_texarkana_1885_teks_001", teacher_review_check["details"]["pending_alignment_ids"])
+        self.assertIn(teacher_review_check, report["blockers"])
 
     def test_source_notes_provenance_labels_and_fictional_separation_pass(self):
         package = load_town_package(ROOT, "texarkana")

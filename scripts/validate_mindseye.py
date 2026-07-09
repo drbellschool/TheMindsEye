@@ -5,14 +5,45 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mindseye.town_validation import validate_town_package
-
-TOWN = ROOT / "data" / "towns" / "texarkana"
-SCHEMAS = ROOT / "data" / "schemas"
+from mindseye import (
+    load_asset_generation_queue,
+    load_building_manifest,
+    build_sanborn_composite_manifest,
+    build_sanborn_georeference_workspace,
+    load_instructional_alignment_manifest,
+    load_sanborn_control_point_manifest,
+    load_sanborn_asset_manifest,
+    load_sanborn_layer_stack_manifest,
+    load_sanborn_image_metadata_manifest,
+    load_sanborn_sheet_manifest,
+    load_sanborn_sheet_review_manifest,
+    load_sanborn_sheet_transform_manifest,
+    load_sanborn_stitching_manifest,
+    load_town_package,
+    load_community_review_manifest,
+    load_teacher_review_manifest,
+    load_verification_suggestion_manifest,
+)
 
 
 def main():
-    validate_town_package(TOWN, SCHEMAS)
+    load_town_package(ROOT, "texarkana")
+    load_asset_generation_queue(ROOT, "texarkana")
+    load_sanborn_sheet_manifest(ROOT, "texarkana")
+    load_sanborn_asset_manifest(ROOT, "texarkana")
+    load_sanborn_image_metadata_manifest(ROOT, "texarkana")
+    load_sanborn_sheet_review_manifest(ROOT, "texarkana")
+    load_sanborn_stitching_manifest(ROOT, "texarkana")
+    load_sanborn_control_point_manifest(ROOT, "texarkana")
+    load_sanborn_sheet_transform_manifest(ROOT, "texarkana")
+    load_sanborn_layer_stack_manifest(ROOT, "texarkana")
+    build_sanborn_georeference_workspace(ROOT, "texarkana")
+    build_sanborn_composite_manifest(ROOT, "texarkana")
+    load_building_manifest(ROOT, "texarkana")
+    load_instructional_alignment_manifest(ROOT, "texarkana")
+    load_teacher_review_manifest(ROOT, "texarkana")
+    load_community_review_manifest(ROOT, "texarkana")
+    load_verification_suggestion_manifest(ROOT, "texarkana")
     print("Mind's Eye validation passed.")
 
 

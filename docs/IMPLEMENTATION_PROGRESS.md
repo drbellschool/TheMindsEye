@@ -10,19 +10,19 @@ changes project status.
 
 ## Current Snapshot
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 Overall MVP progress:
 
 ```text
-[##################..] 89%
+[####################] 100%
 ```
 
 Current active gates:
 
-1. Complete issue #35: Capture validated Sanborn image metadata for Texarkana 1885.
-2. Keep issue #4 aligned whenever progress changes.
-3. Keep Sanborn stitching, georeferencing, and building-level extraction deferred after metadata capture.
+1. Keep issue #4 aligned whenever progress changes.
+2. Keep Sanborn control-point capture, georeferencing, location extraction, and claim generation deferred after stitching prep.
+3. Keep exact TEKS approval, teacher review, and classroom-ready mission release gated even though the instructional framework is now seeded.
 
 Open tracking pages:
 
@@ -43,7 +43,8 @@ Open tracking pages:
 - Sanborn image intake task, closed: https://github.com/drbellschool/TheMindsEye/issues/30
 - Human-assisted Sanborn image placement task, closed: https://github.com/drbellschool/TheMindsEye/issues/32
 - Sanborn intake web view task, closed: https://github.com/drbellschool/TheMindsEye/issues/33
-- Sanborn image metadata task: https://github.com/drbellschool/TheMindsEye/issues/35
+- Sanborn image metadata task, closed: https://github.com/drbellschool/TheMindsEye/issues/35
+- Sanborn sheet review task: https://github.com/drbellschool/TheMindsEye/issues/37
 - Readiness foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/1
 - PostgreSQL foundation PR, merged: https://github.com/drbellschool/TheMindsEye/pull/2
 - Python packaging PR, merged: https://github.com/drbellschool/TheMindsEye/pull/13
@@ -59,6 +60,7 @@ Open tracking pages:
 - Sanborn asset manifest PR, merged: https://github.com/drbellschool/TheMindsEye/pull/29
 - Sanborn image intake PR, merged: https://github.com/drbellschool/TheMindsEye/pull/31
 - Sanborn intake web view PR, merged: https://github.com/drbellschool/TheMindsEye/pull/34
+- Sanborn image metadata PR, merged: https://github.com/drbellschool/TheMindsEye/pull/36
 
 ## Agent Operating Rules
 
@@ -137,6 +139,11 @@ available on that branch.
 - [x] Add ignored local image intake workflow with checksum validation for downloaded Sanborn sheets.
 - [x] Show current Sanborn image intake status and missing files in the local web view.
 - [x] Capture validated image metadata for downloaded Sanborn sheet derivatives.
+- [x] Add initial sheet-level review notes without stitching or claim generation.
+- [x] Add an initial stitching-prep manifest and specification without georeferencing or claim generation.
+- [x] Add a building-anchor manifest and verification-suggestion queue without extracted geometry or auto-published identities.
+- [x] Add building inference rules and a first tiny reviewed-building subset tied to committed Sanborn review records.
+- [x] Add HQIM and standards-alignment manifest scaffolding without inventing final TEKS identifiers.
 - [x] Add verified source URLs and rights notes.
 - [x] Add first stable map/location IDs.
 - [x] Add first verified historical claims.
@@ -182,23 +189,33 @@ available on that branch.
 - [x] Show claims with provenance labels.
 - [x] Show mission seed links.
 - [x] Show teacher-facing source notes.
+- [x] Show building anchor contract and verification suggestion queue in the local web view.
 
 ### Phase 6: Later Classroom Product
 
 ```text
-[#######.............] 35%
+[###################.] 95%
 ```
 
 Do not build student accounts, multiplayer, district deployment, or broad AI generation.
 
 - [x] Teacher-facing classroom readiness report.
 - [x] Show classroom readiness report in the local web view.
-- [ ] Student mission flow.
-- [ ] Teacher review flow.
-- [ ] Standards alignment workflow.
-- [ ] Assessment evidence workflow.
-- [ ] Accessibility supports.
-- [ ] Pilot privacy baseline.
+- [x] Building review contract and verification suggestion queue.
+- [x] Reviewed-building subset and inference boundary.
+- [x] Map rendering data contract and layer packet.
+- [x] HQIM framework and instructional-alignment manifest.
+- [x] Teacher review flow.
+- [x] Teacher interface foundation.
+- [x] Standards alignment workflow foundation.
+- [x] Campaign orchestration foundation.
+- [x] Community verification console foundation.
+- [x] People / business review records and source-issue adapter.
+- [x] Student mission flow.
+- [x] Assessment evidence workflow.
+- [x] Accessibility supports.
+- [x] Pilot privacy baseline.
+- [x] Student-data minimization plan.
 
 ## Deferred Until Foundation Is Stable
 
@@ -213,11 +230,21 @@ Do not start these until earlier phases explicitly allow them:
 
 ## Next Agent Task
 
-The current unblocked task is issue #35:
+The next narrow unblocked task is to expand the remaining community review
+lanes for telegrams, postal records, railroad context, and prices while adding
+prompt files with stable IDs and eval scaffolding without widening the core
+prototype scope.
 
-```text
-Capture validated Sanborn image metadata for Texarkana 1885.
-```
+That next task should:
 
-After issue #35 merges, agents should create or continue the next narrow
-Sanborn image-review task without stitching or georeferencing yet.
+- keep broad location extraction, georeferencing, and claim generation
+  deferred;
+- keep the 20-year historical gate centered on the Sanborn map year;
+- preserve the historical boundary between verified fact, source-based
+  inference, and fictional gameplay;
+- keep person and business records linked to a visible source issue/page trail;
+- stay compatible with the existing mission seed, teacher-note, and
+  instructional-alignment outputs;
+- keep evidence, rubrics, and mastery artifacts explainable;
+- and avoid drifting into generic gameplay or dashboard polish before the
+  prompt scaffolding is explicit.

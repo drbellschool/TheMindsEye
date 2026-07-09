@@ -1,0 +1,174 @@
+{
+  "sheet_review_manifest_id": "sanborn_texarkana_1885_loc_sheet_review_manifest",
+  "manifest_type": "loc_sanborn_sheet_review_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_id": "source_texarkana_1885_sanborn_loc",
+  "sheet_manifest_id": "sanborn_texarkana_1885_loc_sheet_manifest",
+  "asset_manifest_id": "sanborn_texarkana_1885_loc_asset_manifest",
+  "image_metadata_manifest_id": "sanborn_texarkana_1885_loc_image_metadata_manifest",
+  "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885 initial sheet review manifest",
+  "review_date": "2026-07-06",
+  "review_scope": "human_visual_review_of_unstitched_loc_sheet_derivatives",
+  "review_method": "manual_sheet_level_observation",
+  "rights_status": "public_domain",
+  "origin_repository": "Library of Congress Geography and Map Division",
+  "binary_files_committed": false,
+  "stitching_status": "not_started",
+  "georeferencing_status": "deferred",
+  "location_extraction_status": "deferred",
+  "claim_generation_status": "deferred",
+  "review_count": 5,
+  "claim_boundary": {
+    "verified_fact": "This manifest records only labels and visible map features directly observed on the five locally validated LOC sheet derivatives.",
+    "source_based_inference": "Cross-sheet alignment, address normalization, business identity persistence, and any conversion into location or claim records remain deferred until later reviewed extraction.",
+    "fictional_gameplay": "This manifest creates no fictional gameplay records."
+  },
+  "reviews": [
+    {
+      "review_record_id": "review_texarkana_1885_sanborn_001",
+      "sheet_id": "sheet_texarkana_1885_sanborn_001",
+      "sheet_number": 1,
+      "image_record_id": "image_texarkana_1885_sanborn_001",
+      "asset_record_id": "asset_texarkana_1885_sanborn_001",
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "review_status": "sheet_level_visual_review_complete",
+      "sheet_role": "title_index_and_lumber_yard_sheet",
+      "observed_labels": [
+        "Texarkana Texas & Arkansas",
+        "Index. Streets, &c.",
+        "Kizer Lumber Co's Planning Mill",
+        "Texas Mattress Fac."
+      ],
+      "visible_features": [
+        "Overview key and numbered sheet index in the upper left corner.",
+        "State Line and railroad corridors crossing the center of the sheet.",
+        "Large lumber yard and planning mill tract at the lower left.",
+        "Compass rose and scale bar shown on the unstitched sheet."
+      ],
+      "deferred_work": [
+        "Translate numbered index blocks into stitched sheet coverage.",
+        "Extract stable business and street location records from the visible labels.",
+        "Reconcile rail corridor geometry with adjacent sheets before map alignment."
+      ],
+      "notes": "This sheet combines the title cartouche, street and special index, legend, and a lower-panel industrial area; it is not a stitched town overview."
+    },
+    {
+      "review_record_id": "review_texarkana_1885_sanborn_002",
+      "sheet_id": "sheet_texarkana_1885_sanborn_002",
+      "sheet_number": 2,
+      "image_record_id": "image_texarkana_1885_sanborn_002",
+      "asset_record_id": "asset_texarkana_1885_sanborn_002",
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "review_status": "sheet_level_visual_review_complete",
+      "sheet_role": "northern_edge_residential_and_mill_sheet",
+      "observed_labels": [
+        "Whittaker & Gallaway's Planing Mill",
+        "American Refrigeration & Transfer Ice Ho.",
+        "Brownsville Female Seminary",
+        "Catholic Ch."
+      ],
+      "visible_features": [
+        "Rail spurs, tramways, and mill frontage occupy the upper right quadrant.",
+        "Residential blocks 69, 70, 24, and 25 show scattered wells and frame buildings.",
+        "Broad, Spruce, Laurel, Hazel, Walnut, Clinton, and Oak labels organize the street grid.",
+        "Cross-sheet direction notes point toward sheet No. 3."
+      ],
+      "deferred_work": [
+        "Confirm whether seminary and church labels should become stable location records.",
+        "Separate industrial rail frontage from nearby residential blocks.",
+        "Normalize cross-sheet references before any stitched-map work."
+      ],
+      "notes": "The sheet mixes a mill district at the top and right with lower-density residential blocks and civic or institutional labels."
+    },
+    {
+      "review_record_id": "review_texarkana_1885_sanborn_003",
+      "sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "sheet_number": 3,
+      "image_record_id": "image_texarkana_1885_sanborn_003",
+      "asset_record_id": "asset_texarkana_1885_sanborn_003",
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "review_status": "sheet_level_visual_review_complete",
+      "sheet_role": "downtown_commercial_corridor_sheet",
+      "observed_labels": [
+        "Texarkana Iron Wks. Foundry & Mach. Shop",
+        "A.S. Blythe. Wagon Yard & Livery.",
+        "Sherman Ho.",
+        "P.O."
+      ],
+      "visible_features": [
+        "Dense multi-story commercial frontages line Broad and Front streets.",
+        "Public wells are marked inside the downtown blocks.",
+        "State Line Av. cuts diagonally across the lower portion of the sheet.",
+        "Cross-sheet notes connect this sheet to No. 4 and No. 5."
+      ],
+      "deferred_work": [
+        "Review blocks 71 through 77 before promoting visible businesses into location records.",
+        "Distinguish hotel, livery, foundry, and postal uses in a later extraction pass.",
+        "Align the downtown frontage geometry with adjacent sheets before map reconstruction."
+      ],
+      "notes": "This sheet is the most crowded commercial section in the initial review and contains many stacked occupancy labels that still need structured extraction."
+    },
+    {
+      "review_record_id": "review_texarkana_1885_sanborn_004",
+      "sheet_id": "sheet_texarkana_1885_sanborn_004",
+      "sheet_number": 4,
+      "image_record_id": "image_texarkana_1885_sanborn_004",
+      "asset_record_id": "asset_texarkana_1885_sanborn_004",
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "review_status": "sheet_level_visual_review_complete",
+      "sheet_role": "state_line_business_frontage_sheet",
+      "observed_labels": [
+        "Ghio's Opera Ho.",
+        "Cosmopolitan Hotel",
+        "Citizens Bank",
+        "F.A. Felton and Co."
+      ],
+      "visible_features": [
+        "State Line Av. slices diagonally through the upper-right commercial blocks.",
+        "Multiple public wells are marked near the central business frontage.",
+        "Burned and ruins-of-fire annotations remain visible on several blocks.",
+        "Broad, State, Front, Maple, Spruce, and Clinton frame a dense downtown sheet."
+      ],
+      "deferred_work": [
+        "Separate burned-site annotations from active businesses in a later pass.",
+        "Normalize the diagonal State Line frontage before geometry extraction.",
+        "Review candidate downtown landmarks before creating locations or claims."
+      ],
+      "notes": "This sheet concentrates banks, hotel, opera-house frontage, and machinery-supply businesses without yet resolving parcel-by-parcel identities."
+    },
+    {
+      "review_record_id": "review_texarkana_1885_sanborn_005",
+      "sheet_id": "sheet_texarkana_1885_sanborn_005",
+      "sheet_number": 5,
+      "image_record_id": "image_texarkana_1885_sanborn_005",
+      "asset_record_id": "asset_texarkana_1885_sanborn_005",
+      "source_id": "source_texarkana_1885_sanborn_loc",
+      "map_id": "map_texarkana_1885_sanborn_loc",
+      "review_status": "sheet_level_visual_review_complete",
+      "sheet_role": "rail_and_oil_mill_corridor_sheet",
+      "observed_labels": [
+        "The Texarkana Cotton Seed Oil M'f'g Co.",
+        "The Arkansaw Cotton Seed Oil Mill.",
+        "Marquand Hotel.",
+        "Passenger Depot."
+      ],
+      "visible_features": [
+        "Multiple parallel railroad tracks and freight platforms dominate the left half of the sheet.",
+        "Cotton sheds, oil-mill buildings, compress structures, and cake houses fill the industrial tract.",
+        "A curving road and water edge appear on the east side of the sheet.",
+        "The Front Street hotel and depot cluster sits apart from the larger oil and compress complex."
+      ],
+      "deferred_work": [
+        "Separate rail passenger, hotel, and industrial labels into later extraction passes.",
+        "Trace parcel boundaries through the compress and mill complex before georeferencing.",
+        "Avoid inferring ownership continuity across adjacent oil and compress structures."
+      ],
+      "notes": "The sheet reads as a rail-and-industrial district centered on cotton seed oil and compress operations rather than a conventional street grid."
+    }
+  ]
+}

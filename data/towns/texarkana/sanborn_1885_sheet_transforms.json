@@ -1,0 +1,178 @@
+{
+  "sheet_transform_manifest_id": "sanborn_texarkana_1885_loc_sheet_transform_manifest",
+  "manifest_type": "loc_sanborn_sheet_transform_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_id": "source_texarkana_1885_sanborn_loc",
+  "sheet_manifest_id": "sanborn_texarkana_1885_loc_sheet_manifest",
+  "sheet_review_manifest_id": "sanborn_texarkana_1885_loc_sheet_review_manifest",
+  "control_point_manifest_id": "sanborn_texarkana_1885_loc_control_point_manifest",
+  "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885 sheet transforms",
+  "prepared_on": "2026-07-07",
+  "alignment_scope": "local_coordinate_system_only",
+  "control_point_status": "partial",
+  "transform_status": "partial",
+  "local_alignment_status": "local_only",
+  "georeferencing_status": "deferred",
+  "sheet_transform_count": 5,
+  "sheet_transforms": [
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_001",
+      "sheet_number": 1,
+      "sheet_role": "title_index_and_lumber_yard_sheet",
+      "review_status": "sheet_level_visual_review_complete",
+      "transform_status": "missing_control_points",
+      "transform_model": null,
+      "candidate_neighbor_sheet_ids": [],
+      "control_point_ids": [],
+      "local_origin": {
+        "x": 0,
+        "y": 0
+      },
+      "scale_x": null,
+      "scale_y": null,
+      "rotation_degrees": null,
+      "translation": {
+        "x": null,
+        "y": null
+      },
+      "warnings": [
+        "No control points recorded for this sheet."
+      ],
+      "notes": "Index/title sheet remains a planning reference only."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_002",
+      "sheet_number": 2,
+      "sheet_role": "northern_edge_residential_and_mill_sheet",
+      "review_status": "sheet_level_visual_review_complete",
+      "transform_status": "missing_control_points",
+      "transform_model": null,
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "control_point_ids": [],
+      "local_origin": {
+        "x": 0,
+        "y": 0
+      },
+      "scale_x": null,
+      "scale_y": null,
+      "rotation_degrees": null,
+      "translation": {
+        "x": null,
+        "y": null
+      },
+      "warnings": [
+        "No control points recorded for this sheet.",
+        "Cross-sheet relationship remains planning-only until alignment is reviewed."
+      ],
+      "notes": "Sheet 2 is a neighbor candidate for the downtown anchor but lacks control points."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "sheet_number": 3,
+      "sheet_role": "downtown_commercial_corridor_sheet",
+      "review_status": "sheet_level_visual_review_complete",
+      "transform_status": "local_anchor_only",
+      "transform_model": "local_affine_provisional",
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_002",
+        "sheet_texarkana_1885_sanborn_004",
+        "sheet_texarkana_1885_sanborn_005"
+      ],
+      "control_point_ids": [
+        "cp_texarkana_1885_sanborn_003_origin",
+        "cp_texarkana_1885_sanborn_003_front_street_midpoint",
+        "cp_texarkana_1885_sanborn_003_rail_frontage_reference"
+      ],
+      "local_origin": {
+        "x": 0,
+        "y": 0
+      },
+      "scale_x": 1,
+      "scale_y": 1,
+      "rotation_degrees": 0,
+      "translation": {
+        "x": 0,
+        "y": 0
+      },
+      "warnings": [
+        "Local anchor only; not final georeferencing."
+      ],
+      "notes": "Downtown corridor sheet is the current local origin for prep-only alignment."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_004",
+      "sheet_number": 4,
+      "sheet_role": "state_line_business_frontage_sheet",
+      "review_status": "sheet_level_visual_review_complete",
+      "transform_status": "missing_control_points",
+      "transform_model": null,
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "control_point_ids": [],
+      "local_origin": {
+        "x": 0,
+        "y": 0
+      },
+      "scale_x": null,
+      "scale_y": null,
+      "rotation_degrees": null,
+      "translation": {
+        "x": null,
+        "y": null
+      },
+      "warnings": [
+        "No control points recorded for this sheet.",
+        "State Line frontage remains unresolved until later review."
+      ],
+      "notes": "State Line frontage remains candidate-only until control points are collected."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_005",
+      "sheet_number": 5,
+      "sheet_role": "rail_and_oil_mill_corridor_sheet",
+      "review_status": "sheet_level_visual_review_complete",
+      "transform_status": "missing_control_points",
+      "transform_model": null,
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "control_point_ids": [],
+      "local_origin": {
+        "x": 0,
+        "y": 0
+      },
+      "scale_x": null,
+      "scale_y": null,
+      "rotation_degrees": null,
+      "translation": {
+        "x": null,
+        "y": null
+      },
+      "warnings": [
+        "No control points recorded for this sheet.",
+        "Rail and mill corridor remains unresolved until traced."
+      ],
+      "notes": "Industrial corridor remains a candidate only until the map is traced."
+    }
+  ],
+  "control_point_covered_sheet_ids": [
+    "sheet_texarkana_1885_sanborn_003"
+  ],
+  "missing_control_point_sheet_ids": [
+    "sheet_texarkana_1885_sanborn_001",
+    "sheet_texarkana_1885_sanborn_002",
+    "sheet_texarkana_1885_sanborn_004",
+    "sheet_texarkana_1885_sanborn_005"
+  ],
+  "transform_coverage_percent": 20,
+  "warnings": [
+    "Sheet 003 is the only local anchor and cannot be treated as final georeferencing.",
+    "Four sheets still lack control points."
+  ],
+  "errors": [],
+  "status": "prep_only"
+}

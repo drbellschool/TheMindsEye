@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .models import LocationRecord, MindseyeDataError, TownPackage
+from .map_rendering import build_map_rendering_packet
 
 
 class UnknownLocationError(MindseyeDataError):
@@ -46,3 +47,7 @@ class MapEngine:
             "source_ids": list(location.source_ids),
             "citations": [source.citation for source in sources],
         }
+
+    def build_render_packet(self) -> dict[str, object]:
+        """Return the current read-only map rendering contract."""
+        return build_map_rendering_packet(self.package)

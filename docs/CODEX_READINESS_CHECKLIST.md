@@ -86,12 +86,12 @@ Not approved yet:
 
 ### Privacy / IP / Grant Readiness
 
-- [ ] Repository license strategy is explicit.
+- [x] Repository license strategy is explicit.
 - [x] Contributor/contractor IP assignment caution is documented.
 - [x] Student-data minimization posture is documented.
-- [ ] Pilot privacy/data-use notes exist.
-- [ ] Grant one-pager exists.
-- [ ] Pilot school/museum partner packet exists.
+- [x] Pilot privacy/data-use notes exist.
+- [x] Grant one-pager exists.
+- [x] Pilot school/museum partner packet exists.
 
 ## Agent Acceptance Criteria for the MVP
 

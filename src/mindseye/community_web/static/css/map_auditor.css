@@ -1,0 +1,20 @@
+.route-shell--map-auditor .route-shell__hero .panel {
+  min-height: 210px;
+}
+
+.route-shell--map-auditor .route-shell__column--center .panel:first-child {
+  min-height: 380px;
+}
+
+.route-shell--map-auditor .route-shell__column--center .panel:last-child {
+  min-height: 220px;
+}
+
+.route-shell--map-auditor .map-controls__grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.route-shell--map-auditor .control-card {
+  background: rgba(255, 255, 255, 0.3);
+}
+

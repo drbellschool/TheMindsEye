@@ -1,0 +1,139 @@
+{
+  "stitching_manifest_id": "sanborn_texarkana_1885_loc_stitching_manifest",
+  "manifest_type": "loc_sanborn_stitching_manifest",
+  "town_package_id": "texarkana_1885",
+  "map_id": "map_texarkana_1885_sanborn_loc",
+  "source_id": "source_texarkana_1885_sanborn_loc",
+  "sheet_manifest_id": "sanborn_texarkana_1885_loc_sheet_manifest",
+  "asset_manifest_id": "sanborn_texarkana_1885_loc_asset_manifest",
+  "image_metadata_manifest_id": "sanborn_texarkana_1885_loc_image_metadata_manifest",
+  "sheet_review_manifest_id": "sanborn_texarkana_1885_loc_sheet_review_manifest",
+  "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885 stitching prep manifest",
+  "preparation_date": "2026-07-06",
+  "stitching_scope": "sheet_order_and_adjacency_prep_only",
+  "stitching_method": "manual_review_based_pre_stitch_planning",
+  "rights_status": "public_domain",
+  "origin_repository": "Library of Congress Geography and Map Division",
+  "binary_files_committed": false,
+  "stitching_status": "prep_only",
+  "control_point_status": "not_started",
+  "georeferencing_status": "deferred",
+  "location_extraction_status": "deferred",
+  "claim_generation_status": "deferred",
+  "anchor_sheet_id": "sheet_texarkana_1885_sanborn_003",
+  "claim_boundary": {
+    "verified_fact": "This manifest records only planning relationships grounded in the committed sheet review notes and validated LOC sheet derivatives.",
+    "source_based_inference": "Anchor selection, candidate neighbors, and future alignment order remain source-based stitching inferences until control points and later reconstruction work are reviewed.",
+    "fictional_gameplay": "This manifest creates no fictional gameplay records."
+  },
+  "runtime_notes": [
+    "This file plans later stitching work without creating any stitched image output.",
+    "Candidate links are evidence-backed planning links, not proof of exact geometry.",
+    "Control points, georeferencing, location extraction, and claim generation remain deferred."
+  ],
+  "sheet_plan_count": 5,
+  "sheet_plans": [
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_001",
+      "sheet_number": 1,
+      "sheet_role": "title_index_and_lumber_yard_sheet",
+      "stitch_priority": "reference_only_until_index_translation",
+      "stitch_readiness": "needs_index_translation",
+      "candidate_neighbor_sheet_ids": [],
+      "blocking_tasks": [
+        "Translate numbered index blocks into stitched sheet coverage.",
+        "Reconcile rail corridor geometry with adjacent sheets before map alignment."
+      ],
+      "notes": "Use the index, legend, and scale bar as planning aids only; do not treat this sheet as the direct stitched town base."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_002",
+      "sheet_number": 2,
+      "sheet_role": "northern_edge_residential_and_mill_sheet",
+      "stitch_priority": "align_after_anchor_sheet",
+      "stitch_readiness": "candidate_after_cross_sheet_review",
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "blocking_tasks": [
+        "Normalize cross-sheet references before any stitched-map work.",
+        "Separate industrial rail frontage from nearby residential blocks."
+      ],
+      "notes": "Sheet 2 has an explicit cross-sheet note toward sheet 3 and should be aligned only after the downtown anchor is established."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "sheet_number": 3,
+      "sheet_role": "downtown_commercial_corridor_sheet",
+      "stitch_priority": "anchor_first",
+      "stitch_readiness": "best_candidate_anchor_sheet",
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_002",
+        "sheet_texarkana_1885_sanborn_004",
+        "sheet_texarkana_1885_sanborn_005"
+      ],
+      "blocking_tasks": [
+        "Align the downtown frontage geometry with adjacent sheets before map reconstruction.",
+        "Review blocks 71 through 77 before promoting visible businesses into location records."
+      ],
+      "notes": "Sheet 3 is the densest downtown commercial corridor and is the best current anchor candidate for later stitching."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_004",
+      "sheet_number": 4,
+      "sheet_role": "state_line_business_frontage_sheet",
+      "stitch_priority": "align_after_anchor_sheet",
+      "stitch_readiness": "candidate_after_state_line_normalization",
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "blocking_tasks": [
+        "Normalize the diagonal State Line frontage before geometry extraction.",
+        "Separate burned-site annotations from active businesses in a later pass."
+      ],
+      "notes": "Sheet 4 appears to continue the downtown frontage and should be aligned against sheet 3 after State Line geometry is normalized."
+    },
+    {
+      "sheet_id": "sheet_texarkana_1885_sanborn_005",
+      "sheet_number": 5,
+      "sheet_role": "rail_and_oil_mill_corridor_sheet",
+      "stitch_priority": "align_after_anchor_sheet",
+      "stitch_readiness": "candidate_after_rail_corridor_tracing",
+      "candidate_neighbor_sheet_ids": [
+        "sheet_texarkana_1885_sanborn_003"
+      ],
+      "blocking_tasks": [
+        "Trace parcel boundaries through the compress and mill complex before georeferencing.",
+        "Separate rail passenger, hotel, and industrial labels into later extraction passes."
+      ],
+      "notes": "Sheet 5 likely connects to the downtown and Front Street corridor through sheet 3 but remains an industrial rail district until traced more carefully."
+    }
+  ],
+  "link_count": 3,
+  "links": [
+    {
+      "from_sheet_id": "sheet_texarkana_1885_sanborn_002",
+      "to_sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "link_type": "cross_sheet_reference",
+      "alignment_status": "candidate",
+      "evidence_basis": "Sheet 2 review notes state that cross-sheet direction notes point toward sheet No. 3.",
+      "notes": "Use sheet 3 as the receiving anchor when later control points are collected."
+    },
+    {
+      "from_sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "to_sheet_id": "sheet_texarkana_1885_sanborn_004",
+      "link_type": "cross_sheet_reference",
+      "alignment_status": "candidate",
+      "evidence_basis": "Sheet 3 review notes explicitly connect this sheet to No. 4.",
+      "notes": "Treat the shared downtown frontage as a planning relationship only until geometry is reviewed."
+    },
+    {
+      "from_sheet_id": "sheet_texarkana_1885_sanborn_003",
+      "to_sheet_id": "sheet_texarkana_1885_sanborn_005",
+      "link_type": "cross_sheet_reference",
+      "alignment_status": "candidate",
+      "evidence_basis": "Sheet 3 review notes explicitly connect this sheet to No. 5.",
+      "notes": "Downtown-to-rail-corridor alignment remains deferred until the industrial tract is traced more carefully."
+    }
+  ]
+}

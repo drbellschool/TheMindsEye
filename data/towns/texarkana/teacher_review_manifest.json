@@ -1,0 +1,30 @@
+{
+  "teacher_review_manifest_id": "teacher_review_texarkana_1885_mission_001",
+  "manifest_type": "mission_teacher_review_manifest",
+  "town_package_id": "texarkana_1885",
+  "mission_id": "mission_texarkana_1885_001",
+  "instructional_manifest_id": "instructional_texarkana_1885_mission_001",
+  "title": "Texarkana 1885 teacher review and approval seed",
+  "teacher_authority_rule": "The teacher must explicitly approve or reject the mission before student release. Exact TEKS selection remains a human decision.",
+  "review_status": "pending_teacher_review",
+  "mission_release_status": "draft",
+  "record_count": 2,
+  "review_items": [
+    {
+      "review_item_id": "teacher_review_texarkana_1885_hqim_001",
+      "alignment_id": "alignment_texarkana_1885_hqim_001",
+      "framework": "HQIM",
+      "decision_state": "approved",
+      "teacher_review_required": true,
+      "notes": "HQIM expectations are seeded and remain teacher-reviewed for classroom use."
+    },
+    {
+      "review_item_id": "teacher_review_texarkana_1885_teks_001",
+      "alignment_id": "alignment_texarkana_1885_teks_001",
+      "framework": "TEKS",
+      "decision_state": "pending_teacher_selection",
+      "teacher_review_required": true,
+      "notes": "Teacher must choose the exact TEKS target before classroom use."
+    }
+  ]
+}

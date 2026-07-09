@@ -134,6 +134,7 @@ Required features:
 - numbered buildings;
 - building interiors;
 - empty buildings when unknown;
+- generic but visually coherent buildings when only existence is known;
 - historically accurate placement;
 - AI confidence;
 - community approval before publishing.
@@ -173,7 +174,9 @@ The framework should support:
 
 The town universe is not limited to one map year.
 
-A town package may use an approximate 10-year historical window around a map year.
+A town package should use a 20-year historical gate centered on a map year,
+typically 10 years before and 10 years after the Sanborn map year, unless a
+specific evidence boundary is documented for that town.
 
 Example:
 
@@ -213,12 +216,17 @@ Community dashboard review areas:
 - ownership;
 - labels;
 - sources;
+- candidate suggestions from source-matching systems;
 - approvals;
 - moderation;
 - town censorship when appropriate for local governance and educational policy;
 - historical corrections.
 
 Community review must improve historical accuracy without allowing unverified claims to become facts.
+
+Suggested matches from the Portal to Texas History, directories, newspapers,
+and other source systems must remain review candidates until a human confirms
+them.
 
 ## 9. Provenance System
 
@@ -311,6 +319,7 @@ Teacher sees:
 - mastery;
 - evidence;
 - mission status;
+- live event status;
 - AI confidence;
 - time;
 - reports.
@@ -326,6 +335,10 @@ The student dashboard should show:
 - current location;
 - inventory;
 - map;
+- map filters;
+- live events;
+- classmate markers where appropriate;
+- NPC markers where appropriate;
 - journal;
 - telegrams;
 - evidence;
@@ -594,7 +607,12 @@ Required map features include:
 - building labels;
 - building numbers;
 - players;
+- classmate markers;
 - NPCs;
+- quest markers;
+- event markers;
+- search;
+- layer toggles;
 - animals;
 - vehicles;
 - shops;

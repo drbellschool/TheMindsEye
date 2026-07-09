@@ -33,6 +33,30 @@ class MapEngineTests(unittest.TestCase):
         with self.assertRaises(UnknownLocationError):
             engine.get_location("loc_does_not_exist")
 
+    def test_build_render_packet_separates_contract_layers(self):
+        package = load_town_package(ROOT, "texarkana")
+        engine = MapEngine(package)
+        packet = engine.build_render_packet()
+
+        self.assertEqual(packet["town_package_id"], "texarkana_1885")
+        self.assertEqual(packet["base_map_layer"]["layer_id"], "base-map")
+        self.assertEqual(packet["road_rail_layer"]["status"], "deferred")
+        self.assertEqual(packet["building_footprint_layer"]["layer_id"], "building-footprints")
+        self.assertEqual(packet["building_art_layer"]["layer_id"], "building-art")
+        self.assertEqual(packet["building_art_layer"]["status"], "reviewed_subset_available")
+        self.assertGreaterEqual(len(packet["building_art_layer"]["records"]), 1)
+        self.assertGreaterEqual(len(packet["building_art_layer"]["fallback_records"]), 1)
+        self.assertEqual(packet["building_art_layer"]["records"][0]["review_anchor_kind"], "building")
+        self.assertTrue(packet["building_art_layer"]["records"][0]["review_anchor_reviewed"])
+        self.assertFalse(packet["building_art_layer"]["fallback_records"][0]["review_anchor_reviewed"])
+        self.assertEqual(packet["label_layer"]["layer_id"], "labels")
+        self.assertEqual(packet["quest_marker_layer"]["layer_id"], "quest-markers")
+        self.assertEqual(packet["evidence_provenance_layer"]["layer_id"], "evidence-provenance")
+        self.assertEqual(
+            packet["evidence_provenance_layer"]["teacher_review_manifest_id"],
+            "teacher_review_texarkana_1885_mission_001",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,18 @@
+.route-shell--community-dashboard .route-shell__hero .panel {
+  min-height: 220px;
+}
+
+.route-shell--community-dashboard .route-shell__grid .panel {
+  min-height: 100%;
+}
+
+.route-shell--community-dashboard .route-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.route-shell--community-dashboard .scope-ladder,
+.route-shell--community-dashboard .diagnostic-grid {
+  display: grid;
+  gap: 10px;
+}
+

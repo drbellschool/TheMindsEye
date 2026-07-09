@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "instructional-alignment-manifest.schema.json",
+  "title": "The Mind's Eye Instructional Alignment Manifest",
+  "type": "object",
+  "required": [
+    "instructional_manifest_id",
+    "manifest_type",
+    "town_package_id",
+    "mission_id",
+    "title",
+    "hqim_status",
+    "teks_status",
+    "teacher_authority_rule",
+    "record_count",
+    "alignments"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "instructional_manifest_id": { "type": "string", "minLength": 1, "pattern": "^instructional_[a-z0-9_]+$" },
+    "manifest_type": { "type": "string", "const": "mission_instructional_alignment_manifest" },
+    "town_package_id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_]+$" },
+    "mission_id": { "type": "string", "minLength": 1, "pattern": "^mission_[a-z0-9_]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "hqim_status": { "type": "string", "enum": ["framework_seeded", "reviewed"] },
+    "teks_status": {
+      "type": "string",
+      "enum": ["pending_teacher_selection", "reviewed_subset_available", "approved_for_mission_use"]
+    },
+    "teacher_authority_rule": { "type": "string", "minLength": 1 },
+    "record_count": { "type": "integer", "minimum": 1 },
+    "alignments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "alignment_id",
+          "framework",
+          "subject_area",
+          "grade_band",
+          "alignment_status",
+          "standard_label",
+          "hqim_dimension",
+          "evidence_expectations",
+          "teacher_review_required",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "alignment_id": { "type": "string", "minLength": 1, "pattern": "^alignment_[a-z0-9_]+$" },
+          "framework": { "type": "string", "enum": ["HQIM", "TEKS"] },
+          "subject_area": { "type": "string", "minLength": 1 },
+          "grade_band": { "type": "string", "minLength": 1 },
+          "alignment_status": {
+            "type": "string",
+            "enum": ["framework_seed", "pending_teacher_selection", "reviewed"]
+          },
+          "standard_id": { "type": "string", "minLength": 1 },
+          "standard_label": { "type": "string", "minLength": 1 },
+          "hqim_dimension": { "type": "string", "minLength": 1 },
+          "evidence_expectations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "teacher_review_required": { "type": "boolean", "const": true },
+          "notes": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["framework"],
+              "properties": {
+                "framework": { "const": "TEKS" },
+                "alignment_status": { "const": "reviewed" }
+              }
+            },
+            "then": {
+              "required": ["standard_id"]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

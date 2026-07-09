@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "community-review-manifest.schema.json",
+  "title": "The Mind's Eye Community Review Manifest",
+  "type": "object",
+  "required": [
+    "community_review_manifest_id",
+    "manifest_type",
+    "town_package_id",
+    "review_queue_status",
+    "promotion_rule",
+    "record_count",
+    "source_issue_count",
+    "claim_boundary",
+    "source_issues",
+    "people",
+    "businesses"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "community_review_manifest_id": { "type": "string", "minLength": 1, "pattern": "^community_[a-z0-9_]+$" },
+    "manifest_type": { "type": "string", "const": "town_community_review_manifest" },
+    "town_package_id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_]+$" },
+    "review_queue_status": { "type": "string", "minLength": 1 },
+    "promotion_rule": { "type": "string", "minLength": 1 },
+    "record_count": { "type": "integer", "minimum": 1 },
+    "source_issue_count": { "type": "integer", "minimum": 1 },
+    "claim_boundary": {
+      "type": "object",
+      "required": ["verified_fact", "source_based_inference", "fictional_gameplay"],
+      "additionalProperties": false,
+      "properties": {
+        "verified_fact": { "type": "string", "minLength": 1 },
+        "source_based_inference": { "type": "string", "minLength": 1 },
+        "fictional_gameplay": { "type": "string", "minLength": 1 }
+      }
+    },
+    "source_issues": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "source_issue_id",
+          "source_id",
+          "publication_title",
+          "issue_date",
+          "volume",
+          "number",
+          "edition",
+          "page",
+          "page_url",
+          "citation",
+          "ocr_excerpt",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_issue_id": { "type": "string", "minLength": 1, "pattern": "^issue_[a-z0-9_]+$" },
+          "source_id": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" },
+          "publication_title": { "type": "string", "minLength": 1 },
+          "issue_date": { "type": "string", "minLength": 1 },
+          "volume": { "type": "string", "minLength": 1 },
+          "number": { "type": "string", "minLength": 1 },
+          "edition": { "type": "string", "minLength": 1 },
+          "page": { "type": "string", "minLength": 1 },
+          "page_url": { "type": "string", "minLength": 1 },
+          "citation": { "type": "string", "minLength": 1 },
+          "ocr_excerpt": { "type": "string", "minLength": 1 },
+          "notes": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "people": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "review_record_id",
+          "entity_type",
+          "entity_id",
+          "display_name",
+          "review_status",
+          "historical_basis",
+          "source_ids",
+          "source_issue_id",
+          "related_location_ids",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "review_record_id": { "type": "string", "minLength": 1, "pattern": "^community_[a-z0-9_]+$" },
+          "entity_type": { "type": "string", "const": "person" },
+          "entity_id": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "review_status": {
+            "type": "string",
+            "enum": ["suggested", "under_review", "confirmed", "rejected", "insufficient_evidence"]
+          },
+          "historical_basis": {
+            "type": "string",
+            "enum": ["verified_fact", "source_based_inference", "fictional_gameplay"]
+          },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+          },
+          "source_issue_id": { "type": "string", "minLength": 1, "pattern": "^issue_[a-z0-9_]+$" },
+          "related_location_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^loc_[a-z0-9_]+$" }
+          },
+          "notes": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "businesses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "review_record_id",
+          "entity_type",
+          "entity_id",
+          "display_name",
+          "review_status",
+          "historical_basis",
+          "source_ids",
+          "source_issue_id",
+          "related_location_ids",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "review_record_id": { "type": "string", "minLength": 1, "pattern": "^community_[a-z0-9_]+$" },
+          "entity_type": { "type": "string", "const": "business" },
+          "entity_id": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "review_status": {
+            "type": "string",
+            "enum": ["suggested", "under_review", "confirmed", "rejected", "insufficient_evidence"]
+          },
+          "historical_basis": {
+            "type": "string",
+            "enum": ["verified_fact", "source_based_inference", "fictional_gameplay"]
+          },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1, "pattern": "^source_[a-z0-9_]+$" }
+          },
+          "source_issue_id": { "type": "string", "minLength": 1, "pattern": "^issue_[a-z0-9_]+$" },
+          "related_location_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "pattern": "^loc_[a-z0-9_]+$" }
+          },
+          "notes": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,295 @@
+{
+  "queue_id": "asset_generation_queue_texarkana_1885",
+  "town_package_id": "texarkana_1885",
+  "town_name": "Texarkana",
+  "map_year": 1885,
+  "queue_status": "draft",
+  "execution_mode": "stub_only",
+  "live_api_enabled": false,
+  "version": 1,
+  "request_count": 13,
+  "pipeline_counts": {
+    "evidence_assistant": 5,
+    "visual_asset": 8
+  },
+  "notes": "Sample-only queue for the community AI architecture. No live AI calls, no API keys, and no auto-approval are represented here.",
+  "requests": [
+    {
+      "request_id": "ai_texarkana_1885_evidence_001",
+      "pipeline": "evidence_assistant",
+      "request_kind": "candidate_building",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_001",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_evidence_assistant_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "candidate_pending_review",
+      "candidate_label": "Sawmill",
+      "candidate_summary": "Propose a candidate sawmill label for the first Texarkana building anchor and keep it pending until a human reviews the Sanborn evidence.",
+      "provenance_notes": "Candidate-only label suggestion anchored to the 1885 Sanborn source; no verified building identity is claimed."
+    },
+    {
+      "request_id": "ai_texarkana_1885_evidence_002",
+      "pipeline": "evidence_assistant",
+      "request_kind": "candidate_building",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_002",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_evidence_assistant_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "candidate_pending_review",
+      "candidate_label": "Railroad Depot",
+      "candidate_summary": "Propose a candidate railroad depot label for the second building anchor and keep the result pending review.",
+      "provenance_notes": "Candidate-only label suggestion from the Sanborn map context; this is not a verified identity claim."
+    },
+    {
+      "request_id": "ai_texarkana_1885_evidence_003",
+      "pipeline": "evidence_assistant",
+      "request_kind": "candidate_person",
+      "target_record_type": "person",
+      "target_record_id": "person_texarkana_1893_a_s_blythe",
+      "source_ids": [
+        "source_texarkana_1893_daily_texarkana_democrat_098_p3"
+      ],
+      "prompt_id": "prompt_community_evidence_assistant_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "candidate_pending_review",
+      "candidate_label": "A. S. Blythe",
+      "candidate_summary": "Keep the OCR-based person match in review until a human confirms the identity and any location link.",
+      "provenance_notes": "Source issue OCR is the evidence anchor; identity remains candidate_pending_review."
+    },
+    {
+      "request_id": "ai_texarkana_1885_evidence_004",
+      "pipeline": "evidence_assistant",
+      "request_kind": "candidate_business",
+      "target_record_type": "business",
+      "target_record_id": "business_texarkana_1893_exchange",
+      "source_ids": [
+        "source_texarkana_1893_daily_texarkana_democrat_098_p3"
+      ],
+      "prompt_id": "prompt_community_evidence_assistant_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "candidate_pending_review",
+      "candidate_label": "Exchange",
+      "candidate_summary": "Keep the business match tied to the issue page until a reviewer confirms the source trail and identity.",
+      "provenance_notes": "Business identity is source-linked and must stay in review until confirmed."
+    },
+    {
+      "request_id": "ai_texarkana_1885_evidence_005",
+      "pipeline": "evidence_assistant",
+      "request_kind": "candidate_source_link",
+      "target_record_type": "source",
+      "target_record_id": "source_texarkana_1893_daily_texarkana_democrat_098_p3",
+      "source_ids": [
+        "source_texarkana_1893_daily_texarkana_democrat_098_p3"
+      ],
+      "prompt_id": "prompt_community_evidence_assistant_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "candidate_pending_review",
+      "candidate_label": "Daily Texarkana Democrat page 3 source link",
+      "candidate_summary": "Preserve the issue-page source link so downstream people and business review can cite the same evidence trail.",
+      "provenance_notes": "Source link candidate only; no historical promotion or auto-approval."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_001",
+      "pipeline": "visual_asset",
+      "request_kind": "building_art",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_001",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "sawmill",
+      "style": "dark historical brass/parchment illustration with sepia linework and a transparent cutout silhouette",
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "transparent_background": true,
+      "intended_layer": "building-art",
+      "provenance_notes": "Illustrative building art anchored to the reviewed 1885 Sanborn source. It does not assert a verified sawmill identity.",
+      "notes": "Fit the asset to the footprint and keep the map geometry separate."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_002",
+      "pipeline": "visual_asset",
+      "request_kind": "building_art",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_004",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "cotton seed oil mill",
+      "style": "dark historical brass/parchment illustration with industrial detailing and transparent cutout edges",
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "transparent_background": true,
+      "intended_layer": "building-art",
+      "provenance_notes": "Illustrative building art anchored to the reviewed cotton seed oil mill record. The image remains illustrative until separately reviewed.",
+      "notes": "Keep the industrial mass within the reviewed footprint."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_003",
+      "pipeline": "visual_asset",
+      "request_kind": "building_art",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_002",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "railroad depot",
+      "style": "dark historical brass/parchment illustration with railroad architecture cues and transparent cutout edges",
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "transparent_background": true,
+      "intended_layer": "building-art",
+      "provenance_notes": "Illustrative depot asset for a candidate building shell; it is not a verified railroad depot claim.",
+      "notes": "Keep the asset compatible with later footprint review."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_004",
+      "pipeline": "visual_asset",
+      "request_kind": "building_art",
+      "target_record_type": "building",
+      "target_record_id": "building_texarkana_1885_003",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "livery/wagon yard",
+      "style": "dark historical brass/parchment illustration with stable-yard detail and transparent cutout edges",
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "transparent_background": true,
+      "intended_layer": "building-art",
+      "provenance_notes": "Illustrative art anchored to the reviewed A.S. Blythe wagon yard and livery record. The art remains illustrative until reviewed separately.",
+      "notes": "Preserve the reviewed label alignment with the footprint."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_005",
+      "pipeline": "visual_asset",
+      "request_kind": "ui_texture",
+      "target_record_type": "source",
+      "target_record_id": "source_texarkana_1885_sanborn_loc",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "parchment UI texture",
+      "style": "aged parchment panel texture with grain, fold marks, brass wear, and dark ink wash edges",
+      "dimensions": {
+        "width": 2048,
+        "height": 2048
+      },
+      "transparent_background": false,
+      "intended_layer": "interface",
+      "provenance_notes": "Interface texture is illustrative and uses the historical paper language of the community shell. It does not add new historical claims.",
+      "notes": "Use as a reusable shell texture rather than a map cutout."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_006",
+      "pipeline": "visual_asset",
+      "request_kind": "road_texture",
+      "target_record_type": "source",
+      "target_record_id": "source_texarkana_1885_sanborn_loc",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "dirt road texture",
+      "style": "weathered dirt road texture with muted earth tones and subtle map-paper grain",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "transparent_background": true,
+      "intended_layer": "road-rail",
+      "provenance_notes": "Illustrative road texture for the map layer stack; it remains separate from the reviewed source geometry.",
+      "notes": "Keep the texture tileable and compatible with the road/rail layer."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_007",
+      "pipeline": "visual_asset",
+      "request_kind": "terrain_texture",
+      "target_record_type": "source",
+      "target_record_id": "source_texarkana_1885_sanborn_loc",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "grass/brush texture",
+      "style": "historical grass and brush texture with sparse vegetation, sepia wear, and map-paper grain",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "transparent_background": true,
+      "intended_layer": "base-map",
+      "provenance_notes": "Illustrative terrain texture for the base map layer. It is not a claim about exact vegetation coverage.",
+      "notes": "Keep the terrain readable beneath buildings and labels."
+    },
+    {
+      "request_id": "ai_texarkana_1885_visual_008",
+      "pipeline": "visual_asset",
+      "request_kind": "rail_texture",
+      "target_record_type": "source",
+      "target_record_id": "source_texarkana_1885_sanborn_loc",
+      "source_ids": [
+        "source_texarkana_1885_sanborn_loc"
+      ],
+      "prompt_id": "prompt_community_visual_asset_v001",
+      "prompt_version": "v001",
+      "review_state": "pending_review",
+      "output_status": "illustrative",
+      "asset_name": "rail line texture",
+      "style": "aged rail line texture with iron-dark rails, ties, and weathered map-paper edges",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "transparent_background": true,
+      "intended_layer": "road-rail",
+      "provenance_notes": "Illustrative rail texture for the road/rail layer. It stays separate from stitched geometry and control points.",
+      "notes": "Use as a reusable line texture rather than a finalized alignment output."
+    }
+  ]
+}
