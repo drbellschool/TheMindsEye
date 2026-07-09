@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="960" viewBox="0 0 1280 960" fill="none">
+  <defs>
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.45" numOctaves="2" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.06" />
+      </feComponentTransfer>
+    </filter>
+    <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M80 0H0V80" stroke="#94b5d5" stroke-opacity=".18" stroke-width="1" />
+    </pattern>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="960">
+      <stop stop-color="#112233" />
+      <stop offset="1" stop-color="#0c1720" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="960" fill="url(#blue)" />
+  <rect width="1280" height="960" fill="url(#grid)" />
+  <rect width="1280" height="960" filter="url(#noise)" opacity=".85" />
+  <path d="M0 120H1280M0 360H1280M0 600H1280M0 840H1280" stroke="#94b5d5" stroke-opacity=".06" />
+  <path d="M160 0V960M420 0V960M700 0V960M980 0V960" stroke="#94b5d5" stroke-opacity=".06" />
+</svg>

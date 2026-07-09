@@ -1,0 +1,63 @@
+import { KeyValueList } from "@/components/KeyValueList";
+import { Panel } from "@/components/Panel";
+import { communityDemo } from "@/lib/demo-data";
+
+export const metadata = {
+  title: "Release Gate | The Mind's Eye",
+};
+
+export default function ReleaseGatePage() {
+  const { releaseGate } = communityDemo;
+
+  return (
+    <div className="content-grid content-grid--split">
+      <Panel eyebrow="Release" title="Gate status" subtitle={releaseGate.reason} tone="dark">
+        <div className="release-banner">
+          <div className="release-banner__state">{releaseGate.state}</div>
+          <div className="progress">
+            <span style={{ width: `${releaseGate.progressPercent}%` }} />
+          </div>
+          <p className="small-muted">{releaseGate.progressDetail}</p>
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Blockers" title="Why it is not ready" subtitle="These items must remain visible until reviewed." tone="paper">
+        <div className="blocker-list">
+          {releaseGate.blockers.map((blocker) => (
+            <span className="tag state-blocked" key={blocker}>
+              {blocker}
+            </span>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Criteria" title="Readiness matrix" subtitle="The gate is more than a single status chip." tone="paper">
+        <KeyValueList
+          items={releaseGate.criteria.map((criterion) => ({
+            label: criterion.label,
+            value: criterion.value,
+            detail: criterion.detail,
+          }))}
+        />
+      </Panel>
+
+      <Panel eyebrow="Export" title="Human handoff" subtitle="Preview, summarize, and export the current review state." tone="dark">
+        <div className="tag-row">
+          {releaseGate.actions.map((action) => (
+            <span className={`tag state-${action.state}`} key={action.label}>
+              {action.label}
+            </span>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel eyebrow="History" title="Recent gate events" subtitle="A release decision should always have a trail." tone="dark">
+        <div className="small-muted">
+          {releaseGate.history.map((item) => (
+            <p key={item}>{item}</p>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
