@@ -38,7 +38,10 @@ type SourceRecordRow = {
 type ReviewEventRow = {
   summary: string;
   entity_table: string;
-  review_status: ReviewStatus | null;
+  reviewer_name: string | null;
+  previous_review_status: ReviewStatus | null;
+  next_review_status: ReviewStatus | null;
+  occurred_at: string | null;
 };
 
 const unresolvedStatuses: ReviewStatus[] = ["source_based_inference", "illustrative", "unknown"];
@@ -128,11 +131,11 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
       supabase.from("buildings").select("*", { count: "exact", head: true }),
       supabase.from("people").select("*", { count: "exact", head: true }),
       supabase.from("businesses").select("*", { count: "exact", head: true }),
-      supabase.from("review_events").select("*", { count: "exact", head: true }).in("review_status", unresolvedStatuses),
+      supabase.from("review_events").select("*", { count: "exact", head: true }).in("next_review_status", unresolvedStatuses),
       supabase
         .from("review_events")
-        .select("summary, entity_table, review_status")
-        .order("created_at", { ascending: false })
+        .select("summary, entity_table, reviewer_name, previous_review_status, next_review_status, occurred_at")
+        .order("occurred_at", { ascending: false })
         .limit(3),
     ]);
 
@@ -268,7 +271,14 @@ export async function loadCommunityData(): Promise<CommunityDemoData> {
     }
 
     if (recentReviewEvents.length > 0) {
-      data.communityDashboard.history = recentReviewEvents.map((event) => `${event.entity_table}: ${event.summary} [${event.review_status ?? "unknown"}]`);
+      data.communityDashboard.history = recentReviewEvents.map((event) => {
+        const reviewer = event.reviewer_name ?? "unknown reviewer";
+        const previousStatus = event.previous_review_status ?? "unknown";
+        const nextStatus = event.next_review_status ?? "unknown";
+        const occurredAt = event.occurred_at ? event.occurred_at.slice(0, 10) : "unknown date";
+
+        return `${event.entity_table}: ${event.summary} (${reviewer}, ${occurredAt}, ${previousStatus} -> ${nextStatus})`;
+      });
     }
 
     return data;

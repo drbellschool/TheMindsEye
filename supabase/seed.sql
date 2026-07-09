@@ -245,11 +245,14 @@ insert into review_events (
   town_package_id,
   entity_table,
   entity_id,
-  review_status,
+  previous_review_status,
+  next_review_status,
   certainty,
   is_verified,
   summary,
+  reviewer_identifier,
   reviewer_name,
+  occurred_at,
   notes
 )
 values
@@ -258,11 +261,14 @@ values
   '00000000-0000-0000-0000-000000000001',
   'map_layers',
   'map_layer_texarkana_sheet_3',
+  'unknown',
   'source_based_inference',
   'medium',
   false,
   'Sheet 3 alignment remains local-only until more control points are confirmed.',
+  'community_seed_01',
   'Community seed',
+  '2026-07-09T08:00:00Z',
   'No final georeferencing yet.'
 ),
 (
@@ -270,11 +276,14 @@ values
   '00000000-0000-0000-0000-000000000001',
   'buildings',
   'building_texarkana_0012',
+  'unknown',
   'illustrative',
   'low',
   false,
   'Building art request remains illustrative and separate from the reviewed footprint.',
+  'community_seed_01',
   'Community seed',
+  '2026-07-09T08:15:00Z',
   'Visual layer only.'
 ),
 (
@@ -283,10 +292,13 @@ values
   'people',
   'person_texarkana_a_bell',
   'unknown',
+  'unknown',
   'medium',
   false,
   'Person identity remains unresolved pending duplicate review.',
+  'community_seed_01',
   'Community seed',
+  '2026-07-09T08:30:00Z',
   'Do not auto-promote candidate identity.'
 )
 on conflict (id) do nothing;

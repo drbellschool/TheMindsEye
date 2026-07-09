@@ -178,11 +178,14 @@ create table if not exists review_events (
   town_package_id uuid not null references town_packages(id) on delete cascade,
   entity_table text not null,
   entity_id text not null,
-  review_status review_status_enum not null default 'unknown',
+  previous_review_status review_status_enum,
+  next_review_status review_status_enum not null default 'unknown',
   certainty certainty_enum not null default 'unknown',
   is_verified boolean not null default false,
   summary text not null,
+  reviewer_identifier text,
   reviewer_name text,
+  occurred_at timestamptz not null default now(),
   notes text,
   created_at timestamptz not null default now()
 );
@@ -195,8 +198,8 @@ create table if not exists asset_requests (
   entity_id text not null,
   asset_type text not null,
   prompt_notes text,
-  review_status review_status_enum not null default 'unknown',
-  certainty certainty_enum not null default 'unknown',
+  review_status review_status_enum not null default 'illustrative',
+  certainty certainty_enum not null default 'low',
   is_verified boolean not null default false,
   notes text,
   created_at timestamptz not null default now(),
@@ -211,7 +214,7 @@ create index if not exists idx_people_town_package on people (town_package_id);
 create index if not exists idx_businesses_town_package on businesses (town_package_id);
 create index if not exists idx_claims_town_package on claims (town_package_id);
 create index if not exists idx_review_events_town_package on review_events (town_package_id);
-create index if not exists idx_review_events_status on review_events (review_status);
+create index if not exists idx_review_events_next_status on review_events (next_review_status);
 create index if not exists idx_asset_requests_town_package on asset_requests (town_package_id);
 
 drop trigger if exists set_town_packages_updated_at on town_packages;
