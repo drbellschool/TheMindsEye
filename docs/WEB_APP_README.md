@@ -8,23 +8,25 @@ This app is demo-data only for the current milestone. It does not connect to Sup
 
 ## Run Locally
 
-From `apps/web`:
+From the repository root:
 
 ```bash
+cd apps/web
 npm install
 npm run dev
 ```
 
 ## Build Check
 
-From `apps/web`:
+From the repository root:
 
 ```bash
+cd apps/web
 npm install
 npm run build
 ```
 
-## Routes
+## Public Review Routes
 
 - `/community`
 - `/community/map-auditor`
@@ -37,6 +39,28 @@ npm run build
 
 All pages read from the demo JSON source in `apps/web/lib/demo-data/` for this milestone.
 
-## Deployment
+## Vercel Deployment
 
-The app is structured to deploy as a public Vercel preview once the repository is connected to Vercel.
+Use these exact Vercel project settings:
+
+- Import GitHub repo: `drbellschool/TheMindsEye`
+- Root Directory: `apps/web`
+- Framework: `Next.js`
+- Install Command: `npm install`
+- Build Command: `npm run build`
+- Output Directory: leave blank and use the Next.js default
+- Local dev command: `npm run dev`
+
+## Deployment Checklist
+
+- Confirm the Vercel project imports `drbellschool/TheMindsEye`.
+- Confirm the Root Directory is `apps/web`.
+- Confirm the Output Directory is blank and left at the Next.js default.
+- Run `cd apps/web`, `npm install`, and `npm run build` before opening or updating the PR.
+- Open the preview deployment and verify all public review routes load:
+  - `/community`
+  - `/community/map-auditor`
+  - `/community/building-auditor`
+  - `/community/people-auditor`
+  - `/community/source-provenance-inspector`
+  - `/community/release-gate`

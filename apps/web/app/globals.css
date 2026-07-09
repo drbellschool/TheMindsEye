@@ -1,5 +1,7 @@
 :root {
   color-scheme: dark;
+  --font-display: "Baskerville Old Face", "Book Antiqua", "Palatino Linotype", "Times New Roman", serif;
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --background: #101010;
   --background-alt: #171312;
   --panel: #f0dfbe;
