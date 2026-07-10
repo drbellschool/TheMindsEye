@@ -1,153 +1,175 @@
 # AI Agent Instructions for The Mind's Eye
 
-These instructions apply to Codex, ChatGPT agents, and any AI-assisted development workflow working inside `TheMindsEye`.
+These instructions apply to Codex, ChatGPT, and every AI-assisted development workflow operating inside this repository.
 
 ## Read First
 
-Before changing files, read:
+Before changing files, read in this order:
 
-1. `README.md`
+1. `docs/CONSTITUTION.md`
 2. `PROJECT_GOAL.md`
-3. `docs/PRODUCT_SPEC_V1.md`
-4. `docs/FEATURE_COVERAGE_MATRIX.md`
-5. `docs/PRODUCT_PRIORITY_CAPTURE.md`
-6. `docs/CORE_WORKSTREAMS.md`
-7. `docs/ARCHITECTURE.md`
-8. `docs/ROADMAP.md`
-9. `docs/CODEX_READINESS_CHECKLIST.md`
-10. `docs/PROMPT_CONTRACTS.md`
-11. `docs/CONTRIBUTOR_IP_BOUNDARY.md`
-12. this `AGENTS.md`
-
-If these documents conflict, follow this order:
-
-1. `PROJECT_GOAL.md`
-2. `docs/PRODUCT_SPEC_V1.md`
 3. `docs/ARCHITECTURE.md`
-4. `docs/ROADMAP.md`
-5. `docs/PRODUCT_PRIORITY_CAPTURE.md`
-6. `docs/CORE_WORKSTREAMS.md`
-7. `README.md`
-8. local implementation notes
+4. `docs/PR_REVIEW_CHECKLIST.md`
+5. `docs/ROADMAP.md`
+6. relevant product, schema, prompt, privacy, rights, and implementation documents
+7. this `AGENTS.md`
 
-## Product Thesis
+When documents conflict, `docs/CONSTITUTION.md` controls. Do not silently resolve a material conflict; identify it in the pull request.
 
-The Mind's Eye is a historically accurate, AI-powered instructional world where authentic historical evidence, standards-based learning, adaptive instruction, and student agency are integrated into a single reusable framework.
+## Current Product Architecture
 
-Gameplay exists to support learning, not the other way around.
+- GitHub is source control and the pull-request review surface.
+- `apps/web` is the Next.js public product application.
+- Vercel is the live preview and production review surface.
+- Supabase is the persistent application database.
+- Python is limited to ingestion, transformation, analysis, evaluation, and background-processing tools.
+- Codex and other agents build bounded changes.
+- Humans verify history, review production behavior, and approve merges.
 
-It must be built so future towns can be added as town packages.
+Do not treat a local Python page as the public product. Do not declare a web task complete solely because it works locally.
 
-The first implementation target is still narrow:
+## Current Build Priority
 
-> Texarkana 1885, one map-linked historical dataset, one playable mission, teacher-visible citations, and a repeatable architecture that can eventually support other towns.
+The Community evidence system is the foundation. The approved sequence is:
 
-Do not mistake the narrow MVP for a one-town architecture.
+1. Community Verification Console
+2. Source / Provenance Inspector
+3. Map Auditor
+4. Building Auditor
+5. People and Business Auditor
+6. Release Gate
+7. Source ingestion and visual asset pipelines
+8. Historical World Engine
+9. Teacher product
+10. Student product
+11. Assessment, AI Game Master, classroom, and multiplayer
+12. additional town packages
 
-## Non-Negotiable Historical Integrity Rule
+Until the Community evidence read/write and release-gate model is stable, do not add teacher dashboards, student dashboards, missions, multiplayer, or gameplay unless the task explicitly authorizes an exception.
 
-Every historically meaningful output must be labeled as one of:
+## Historical Integrity Contract
 
-1. `verified_fact`
-2. `source_based_inference`
-3. `fictional_gameplay`
+Every historically meaningful record must use exactly one evidence classification:
 
-The larger product language may also refer to verified fact, historical inference, simulation element, and creative licensing. The implementation must keep these categories explicit and never present an inference or invented gameplay detail as verified history.
+- `verified_fact`
+- `source_based_inference`
+- `illustrative`
+- `fictional_gameplay`
+- `unknown`
+- `rejected`
 
-## Non-Negotiable Instructional Rule
+Evidence classification is separate from workflow/review status.
 
-The product must remain standards-based and instructionally serious.
+New imported, extracted, or AI-generated candidates must never default to `verified_fact`.
 
-Agents must not reduce it to:
+Unknown is better than invented.
 
-- a generic D&D clone;
-- a simple historical fiction generator;
-- a map viewer only;
-- a dashboard-only school app;
-- or a disconnected AI lesson generator.
+## AI Boundary
 
-The platform must preserve:
+AI may propose, extract, summarize, normalize, match, classify, draft, and generate candidate material.
 
-- TEKS/standards alignment;
-- HQIM principles;
-- teacher authority;
-- student mastery evidence;
-- MTSS/intervention possibilities;
-- accessibility supports;
-- and gradebook-facing evidence.
+AI must not:
 
-## Codex Working Rules
+- silently verify history;
+- invent citations or source details;
+- hide uncertainty or conflicting evidence;
+- convert illustrative or fictional content into fact;
+- overwrite human review decisions;
+- remove provenance or review history;
+- present generated artwork as documentary evidence;
+- issue final student grades without teacher authority.
 
-When assigned a task:
+## Provenance Requirements
 
-1. Identify which engine/layer the task belongs to:
-   - Historical World Engine
-   - World / Map Engine
-   - Sanborn Map Builder
-   - Knowledge / Provenance Engine
-   - Story / Mission Engine
-   - Standards / Learning Engine
-   - Assessment Engine
-   - Teacher Dashboard
-   - Student Dashboard
-   - Community Dashboard
-   - Game / Classroom Engine
-2. Check whether the task affects data schemas, prompts, provenance, standards, dashboards, or student data.
-3. Add or update tests where behavior changes.
-4. Avoid hard-coding Texarkana-specific values into reusable engine code.
-5. Keep raw source records separate from normalized records.
-6. Preserve citation/source trails.
-7. Document meaningful architecture decisions.
-8. Prefer small, reviewable commits.
+Every historical entity, claim, relationship, map feature, and released derivative must preserve or expose:
 
-## Do Not Do These Things
+- source linkage;
+- source location such as page, issue, sheet, or excerpt when available;
+- evidence classification;
+- certainty;
+- candidate origin, including AI involvement when applicable;
+- review state;
+- reviewer and review-event history when applicable;
+- release state and unresolved blockers.
+
+Relationships are first-class records and must carry the same evidence and review expectations as entities.
+
+## Data Maturity Pipeline
+
+Do not bypass this sequence:
+
+```text
+Raw Source
+  -> Normalized Source
+  -> Candidate Record
+  -> Human Review
+  -> Approved Record
+  -> Released Historical Record
+  -> World Object
+  -> Educational Object
+  -> Gameplay Object
+```
+
+Raw source material must remain separate from normalized or derived records. Normalization must not destroy the source trail.
+
+## Town-Package Rule
+
+Texarkana is the first town package, not a hard-coded product boundary.
+
+Reusable application logic must remain town-agnostic where practical. Town-specific names, years, source manifests, maps, records, and release state belong in data or configuration layers.
+
+Adding another town should primarily add evidence, structured records, configuration, review queues, and approved content—not require rewriting the engine.
+
+## Working Rules
+
+For each assigned task:
+
+1. State the single intended scope.
+2. Identify affected routes, tables, schemas, evidence states, and review workflows.
+3. Check the Constitution and current product phase.
+4. Preserve safe demo fallback until production data behavior is stable.
+5. Show the active data source where relevant.
+6. Add or update validation and tests for changed behavior.
+7. Use safe migrations and non-destructive review workflows.
+8. Keep the pull request small and reviewable.
+9. Run the relevant checks. For web changes, run:
+
+```bash
+cd apps/web
+npm run build
+```
+
+10. Open a pull request that explains scope, evidence impact, validation, Vercel verification steps, and known limitations.
+
+## Do Not
 
 Do not:
 
-- rewrite the repository structure without explicit approval;
-- build a large open-world game before the prototype loop works;
-- add student account/roster features before privacy rules are defined;
-- add copyrighted or restricted historical content without source-rights notes;
-- create AI prompts without documenting expected inputs and outputs;
-- generate missions that hide which facts are verified, inferred, or fictional;
-- mix source ingestion, mission writing, and gameplay state into one untestable module;
-- remove the town-package direction;
-- treat the Sanborn map as only a background image;
-- skip standards alignment;
-- skip teacher review;
-- or build features that ignore `docs/PRODUCT_SPEC_V1.md`.
+- merge or revive the obsolete Python community web-shell direction as the product;
+- add auth before the Community read/write model is stable unless explicitly assigned;
+- add student or roster data before privacy and access controls are approved;
+- create destructive review actions that erase history;
+- fabricate fallback data or present demo data as Supabase data;
+- hide failed Supabase connections;
+- combine unrelated schema, route, visual, ingestion, and gameplay work in one PR;
+- add unreviewed third-party datasets or source content without rights notes;
+- add licenses, contributor terms, or model-training assumptions that weaken ownership without explicit approval;
+- hard-code a one-town architecture;
+- skip the release gate;
+- or declare success without a production/preview review path for web-facing work.
 
-## Preferred MVP Build Order
+## Definition of Done
 
-1. Data/source manifest pattern.
-2. Town package schema for Texarkana 1885.
-3. Small hand-curated source dataset.
-4. Location/building index linked to map IDs.
-5. Claim/provenance records.
-6. Sanborn stitching and building-data specifications.
-7. Standards/HQIM mission template.
-8. One mission generator path.
-9. Teacher-facing citation/source notes.
-10. Minimal student-facing mission experience.
-11. Tests and evals for the above.
+A task is not complete unless:
 
-## Definition of Done for Early Tasks
+- it obeys `docs/CONSTITUTION.md`;
+- it stays within the requested scope and current build phase;
+- evidence classifications and provenance remain intact;
+- AI-generated candidates remain non-verified until human review;
+- review events or equivalent audit history are created for review writes;
+- demo and failure states are visibly labeled and safe;
+- relevant tests and builds pass;
+- the pull request explains how to review the change on Vercel when applicable;
+- and `docs/PR_REVIEW_CHECKLIST.md` can be completed without a constitutional exception.
 
-A task is not done unless:
-
-- the change supports the Texarkana 1885 prototype;
-- reusable code remains town-agnostic where practical;
-- historical claims remain labeled;
-- source/citation links are preserved;
-- instructional purpose and standards alignment are not lost;
-- any schema changes are documented;
-- tests or validation are added when appropriate;
-- and the change does not create privacy, IP, or licensing risk.
-
-## Grant and IP Caution
-
-The project may seek non-dilutive funding. Protecting ownership matters.
-
-Agents must not add license terms, third-party datasets, model-training assumptions, or contributor language that could weaken ownership without explicit approval.
-
-If a task involves outside contributors, school pilots, student data, source licensing, or grant materials, flag the issue for human review instead of silently making assumptions.
+If a requested task conflicts with these rules, stop the conflicting portion, document the conflict, and propose the smallest compliant alternative.
