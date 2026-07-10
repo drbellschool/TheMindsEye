@@ -1,4 +1,4 @@
-import rawCommunityDemo from "./community.json";
+import rawCommunityDemo from "./community.json" with { type: "json" };
 
 export type CommunityDemoData = typeof rawCommunityDemo;
 

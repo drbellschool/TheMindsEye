@@ -839,6 +839,77 @@
       "No auto-approval from source text."
     ]
   },
+  "sourceDetails": {
+    "source_texarkana_1885_sanborn_loc": {
+      "sourceId": "source_texarkana_1885_sanborn_loc",
+      "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+      "archiveName": "Library of Congress",
+      "sourceUrl": "https://www.loc.gov/",
+      "sourceDate": "1885-10-01",
+      "pageReference": "Sheet 3",
+      "rightsNote": "Reference use only",
+      "ocrExcerpt": "Sawmill, livery, and rail-side labels appear in the source excerpt as review candidates.",
+      "reviewStatus": "source_based_inference",
+      "certainty": "medium",
+      "evidenceClassification": "source_based_inference",
+      "linkedClaims": [
+        {
+          "claimId": "claim_texarkana_demo_0001",
+          "claimText": "The Sheet 3 label likely refers to a sawmill-related operation near the rail spur.",
+          "evidenceClassification": "source_based_inference",
+          "reviewStatus": "source_based_inference",
+          "certainty": "medium"
+        }
+      ],
+      "linkedBuildings": [
+        {
+          "id": "building_texarkana_0012",
+          "title": "Sawmill footprint review",
+          "detail": "Sheet 3",
+          "reviewStatus": "source_based_inference",
+          "certainty": "medium",
+          "note": "The anchor record remains review-bound and not verified by default."
+        }
+      ],
+      "linkedPeople": [
+        {
+          "id": "person_texarkana_a_bell",
+          "title": "A. Bell",
+          "detail": "Occupation unavailable",
+          "reviewStatus": "unknown",
+          "certainty": "medium",
+          "note": "Demo identity record only; do not present as verified history."
+        }
+      ],
+      "linkedBusinesses": [
+        {
+          "id": "business_texarkana_livery",
+          "title": "Texarkana Livery",
+          "detail": "livery / wagon yard",
+          "reviewStatus": "source_based_inference",
+          "certainty": "medium",
+          "note": "Commercial candidate remains separate from person identity review."
+        }
+      ],
+      "reviewTimelineEmptyState": "No source review notes are stored for this source record yet.",
+      "reviewTimeline": [
+        {
+          "id": "source_records:source_texarkana_1885_sanborn_loc:2026-07-09T07:45:00Z:0",
+          "targetTable": "source_records",
+          "targetId": "source_texarkana_1885_sanborn_loc",
+          "previousStatus": "unknown",
+          "nextStatus": "source_based_inference",
+          "reviewerName": "Community demo",
+          "occurredAt": "2026-07-09T07:45:00Z",
+          "occurredAtDateLabel": "2026-07-09",
+          "occurredAtLabel": "2026-07-09 07:45 UTC",
+          "summary": "Source metadata remains review-bound pending direct archive confirmation.",
+          "reviewNote": "Keep the source title, sheet reference, and OCR excerpt visible, but do not promote the record to verified fact.",
+          "transitionLabel": "unknown -> source_based_inference"
+        }
+      ]
+    }
+  },
   "releaseGate": {
     "state": "guarded",
     "reason": "Community review is active, but unresolved items still block release.",

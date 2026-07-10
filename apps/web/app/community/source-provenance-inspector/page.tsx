@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
 import { loadCommunityData } from "@/lib/community-data";
@@ -9,10 +11,24 @@ export const metadata = {
 export default async function SourceProvenanceInspectorPage() {
   const { data: communityData } = await loadCommunityData();
   const { sourceProvenanceInspector } = communityData;
+  const sourceId = sourceProvenanceInspector.source.fields.find((field) => field.label === "Source ID")?.value;
+  const sourceDetailHref = sourceId && sourceId.startsWith("source_") ? `/community/sources/${encodeURIComponent(sourceId)}` : null;
 
   return (
     <div className="content-grid content-grid--split">
-      <Panel eyebrow="Source" title={sourceProvenanceInspector.source.title} subtitle={sourceProvenanceInspector.source.subtitle} tone="paper">
+      <Panel
+        action={
+          sourceDetailHref ? (
+            <Link className="dashboard-panel-link" href={sourceDetailHref}>
+              Open source detail
+            </Link>
+          ) : null
+        }
+        eyebrow="Source"
+        title={sourceProvenanceInspector.source.title}
+        subtitle={sourceProvenanceInspector.source.subtitle}
+        tone="paper"
+      >
         <KeyValueList
           items={sourceProvenanceInspector.source.fields.map((item) => ({
             label: item.label,
