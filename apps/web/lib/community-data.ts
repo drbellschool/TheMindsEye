@@ -1,18 +1,21 @@
 import { cache } from "react";
 
+import {
+  buildCommunityStatusSummaries,
+  combineChipStates,
+  hasAnyQueryErrors,
+  normalizeReviewStatus,
+  summarizeStatusCounts,
+  toChipState,
+  type ReviewEventStatusRow,
+  type ReviewStatus,
+  type ReviewStatusCounts,
+  type StatusRow,
+} from "@/lib/community-status";
 import { communityDemo, type CommunityDemoData } from "@/lib/demo-data";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 
-type ReviewStatus =
-  | "verified_fact"
-  | "source_based_inference"
-  | "illustrative"
-  | "fictional_gameplay"
-  | "unknown"
-  | "rejected";
-
 type ReleaseState = "ready" | "guarded" | "blocked";
-type ChipState = "ready" | "reviewing" | "partial" | "guarded" | "blocked";
 
 type CountQueryResult = {
   count: number | null;
@@ -87,18 +90,6 @@ type ReviewEventRow = {
   occurred_at: string | null;
 };
 
-type ReviewStatusCounts = Partial<Record<ReviewStatus, number>>;
-
-const reviewStatuses: ReviewStatus[] = [
-  "verified_fact",
-  "source_based_inference",
-  "illustrative",
-  "fictional_gameplay",
-  "unknown",
-  "rejected",
-];
-
-const unresolvedStatuses: ReviewStatus[] = ["source_based_inference", "illustrative", "unknown"];
 const supabaseFallbackWarning = "Using demo fallback because Supabase data could not be loaded.";
 
 export type CommunityDataSource = "supabase" | "demo_fallback";
@@ -129,10 +120,6 @@ function formatSourceDate(sourceDate: string | null, fallback: string): string {
   return sourceDate.slice(0, 7);
 }
 
-function normalizeReviewStatus(value: string | null | undefined): ReviewStatus {
-  return reviewStatuses.includes(value as ReviewStatus) ? (value as ReviewStatus) : "unknown";
-}
-
 function deriveReleaseState(releaseClassification: string | null | undefined, unresolvedCount: number): ReleaseState {
   const normalizedReleaseClassification = normalizeReviewStatus(releaseClassification);
 
@@ -147,33 +134,8 @@ function deriveReleaseState(releaseClassification: string | null | undefined, un
   return "guarded";
 }
 
-function toChipState(reviewStatus: ReviewStatus | null): ChipState {
-  switch (reviewStatus) {
-    case "verified_fact":
-      return "ready";
-    case "source_based_inference":
-      return "reviewing";
-    case "illustrative":
-    case "fictional_gameplay":
-      return "partial";
-    case "rejected":
-      return "blocked";
-    case "unknown":
-    default:
-      return "guarded";
-  }
-}
-
-function stateFromCount(count: number, populatedState: ChipState): ChipState {
-  return count > 0 ? populatedState : "guarded";
-}
-
 function countOrZero(result: CountQueryResult): number {
   return result.count ?? 0;
-}
-
-function hasAnyQueryErrors(results: Array<{ error: { message: string } | null }>): boolean {
-  return results.some((result) => result.error);
 }
 
 function buildFallbackResult(warningMessage?: string): CommunityDataLoadResult {
@@ -184,30 +146,11 @@ function buildFallbackResult(warningMessage?: string): CommunityDataLoadResult {
   };
 }
 
-function countReviewStatuses<T extends { review_status: string | null }>(rows: T[]): ReviewStatusCounts {
-  const counts: ReviewStatusCounts = {};
-
-  for (const row of rows) {
-    const reviewStatus = normalizeReviewStatus(row.review_status);
-    counts[reviewStatus] = (counts[reviewStatus] ?? 0) + 1;
-  }
-
-  return counts;
-}
-
-function summarizeStatusCounts(counts: ReviewStatusCounts): string {
-  const parts = reviewStatuses
-    .filter((status) => (counts[status] ?? 0) > 0)
-    .map((status) => `${status}: ${counts[status]}`);
-
-  return parts.length > 0 ? parts.join(" | ") : "No reviewed records available.";
-}
-
 function buildReviewStateTags(counts: ReviewStatusCounts) {
   const tagStatuses: ReviewStatus[] = ["verified_fact", "source_based_inference", "illustrative", "unknown"];
 
   return tagStatuses.map((status) => ({
-    label: `${status} (${counts[status] ?? 0})`,
+    label: `${status} (${counts[status]})`,
     state: toChipState(status),
   }));
 }
@@ -240,18 +183,18 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const [
       townPackageResult,
       primarySourceResult,
-      sourcesCountResult,
-      claimsCountResult,
-      mapLayersCountResult,
+      sourceStatusRowsResult,
+      claimStatusRowsResult,
+      mapLayerStatusRowsResult,
       mapLayerRowsResult,
-      buildingsCountResult,
+      buildingStatusRowsResult,
       buildingRowsResult,
-      peopleCountResult,
+      peopleStatusRowsResult,
       peopleRowsResult,
-      businessesCountResult,
+      businessStatusRowsResult,
       businessRowsResult,
       assetRequestsCountResult,
-      unresolvedCountResult,
+      reviewEventStatusRowsResult,
       recentReviewEventsResult,
     ] = await Promise.all([
       supabase
@@ -266,34 +209,34 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         .order("source_date", { ascending: true })
         .limit(1)
         .maybeSingle<SourceRecordRow>(),
-      supabase.from("source_records").select("*", { count: "exact", head: true }),
-      supabase.from("claims").select("*", { count: "exact", head: true }),
-      supabase.from("map_layers").select("*", { count: "exact", head: true }),
+      supabase.from("source_records").select("review_status"),
+      supabase.from("claims").select("review_status"),
+      supabase.from("map_layers").select("review_status"),
       supabase
         .from("map_layers")
         .select("layer_id, label, sheet_number, review_status, alignment_scope, notes")
         .order("sheet_number", { ascending: true })
         .limit(6),
-      supabase.from("buildings").select("*", { count: "exact", head: true }),
+      supabase.from("buildings").select("review_status"),
       supabase
         .from("buildings")
         .select("building_id, label, sheet_reference, review_status, certainty, art_state, notes")
         .order("created_at", { ascending: true })
         .limit(24),
-      supabase.from("people").select("*", { count: "exact", head: true }),
+      supabase.from("people").select("review_status"),
       supabase
         .from("people")
         .select("person_id, display_name, occupation, review_status, certainty, notes")
         .order("created_at", { ascending: true })
         .limit(24),
-      supabase.from("businesses").select("*", { count: "exact", head: true }),
+      supabase.from("businesses").select("review_status"),
       supabase
         .from("businesses")
         .select("business_id, display_name, business_type, review_status, certainty, notes")
         .order("created_at", { ascending: true })
         .limit(24),
       supabase.from("asset_requests").select("*", { count: "exact", head: true }),
-      supabase.from("review_events").select("*", { count: "exact", head: true }).in("next_review_status", unresolvedStatuses),
+      supabase.from("review_events").select("next_review_status"),
       supabase
         .from("review_events")
         .select("summary, target_table, reviewer_name, previous_review_status, next_review_status, occurred_at")
@@ -305,18 +248,18 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       hasAnyQueryErrors([
         townPackageResult,
         primarySourceResult,
-        sourcesCountResult,
-        claimsCountResult,
-        mapLayersCountResult,
+        sourceStatusRowsResult,
+        claimStatusRowsResult,
+        mapLayerStatusRowsResult,
         mapLayerRowsResult,
-        buildingsCountResult,
+        buildingStatusRowsResult,
         buildingRowsResult,
-        peopleCountResult,
+        peopleStatusRowsResult,
         peopleRowsResult,
-        businessesCountResult,
+        businessStatusRowsResult,
         businessRowsResult,
         assetRequestsCountResult,
-        unresolvedCountResult,
+        reviewEventStatusRowsResult,
         recentReviewEventsResult,
       ])
     ) {
@@ -326,27 +269,46 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const data = cloneDemoData();
     const townPackage = townPackageResult.data;
     const primarySource = primarySourceResult.data;
+    const sourceStatusRows = (sourceStatusRowsResult.data ?? []) as StatusRow[];
+    const claimStatusRows = (claimStatusRowsResult.data ?? []) as StatusRow[];
+    const mapLayerStatusRows = (mapLayerStatusRowsResult.data ?? []) as StatusRow[];
     const mapLayerRows = (mapLayerRowsResult.data ?? []) as MapLayerRow[];
+    const buildingStatusRows = (buildingStatusRowsResult.data ?? []) as StatusRow[];
     const buildingRows = (buildingRowsResult.data ?? []) as BuildingRow[];
+    const peopleStatusRows = (peopleStatusRowsResult.data ?? []) as StatusRow[];
     const peopleRows = (peopleRowsResult.data ?? []) as PersonRow[];
+    const businessStatusRows = (businessStatusRowsResult.data ?? []) as StatusRow[];
     const businessRows = (businessRowsResult.data ?? []) as BusinessRow[];
+    const reviewEventStatusRows = (reviewEventStatusRowsResult.data ?? []) as ReviewEventStatusRow[];
     const recentReviewEvents = (recentReviewEventsResult.data ?? []) as ReviewEventRow[];
 
-    const sourcesCount = countOrZero(sourcesCountResult);
-    const claimsCount = countOrZero(claimsCountResult);
-    const sheetsCount = countOrZero(mapLayersCountResult);
-    const buildingsCount = countOrZero(buildingsCountResult);
-    const peopleCount = countOrZero(peopleCountResult);
-    const businessesCount = countOrZero(businessesCountResult);
+    const statusSummaries = buildCommunityStatusSummaries({
+      sourceRecords: sourceStatusRows,
+      mapLayers: mapLayerStatusRows,
+      buildings: buildingStatusRows,
+      people: peopleStatusRows,
+      businesses: businessStatusRows,
+      claims: claimStatusRows,
+      reviewEvents: reviewEventStatusRows,
+    });
+
+    data.statusSummaries = statusSummaries;
+
+    const sourcesCount = statusSummaries.sourceRecords.total;
+    const claimsCount = statusSummaries.claims.total;
+    const sheetsCount = statusSummaries.mapLayers.total;
+    const buildingsCount = statusSummaries.buildings.total;
+    const peopleCount = statusSummaries.people.total;
+    const businessesCount = statusSummaries.businesses.total;
     const assetRequestsCount = countOrZero(assetRequestsCountResult);
-    const unresolvedCount = countOrZero(unresolvedCountResult);
+    const unresolvedCount = statusSummaries.unresolvedReviewEvents;
 
     const releaseState = deriveReleaseState(townPackage?.release_state, unresolvedCount);
-    const buildingStatusCounts = countReviewStatuses(buildingRows);
-    const peopleStatusCounts = countReviewStatuses(peopleRows);
-    const businessStatusCounts = countReviewStatuses(businessRows);
+    const buildingStatusCounts = statusSummaries.buildings.counts;
+    const peopleStatusCounts = statusSummaries.people.counts;
+    const businessStatusCounts = statusSummaries.businesses.counts;
 
-    const trackedCount = sourcesCount + sheetsCount + buildingsCount + peopleCount + businessesCount;
+    const trackedCount = sourcesCount + sheetsCount + buildingsCount + peopleCount + businessesCount + claimsCount;
     const resolvedCount = Math.max(trackedCount - unresolvedCount, 0);
     const progressPercent = trackedCount > 0 ? Math.max(0, Math.min(100, Math.round((resolvedCount / trackedCount) * 100))) : 0;
 
@@ -355,7 +317,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const identityEvents = filterReviewEvents(recentReviewEvents, ["people", "businesses"]);
     const sourceHistory = filterReviewEvents(recentReviewEvents, ["source_records"]).map(formatReviewHistory);
     const releaseBlockers = recentReviewEvents
-      .filter((event) => unresolvedStatuses.includes(normalizeReviewStatus(event.next_review_status)))
+      .filter((event) => normalizeReviewStatus(event.next_review_status) !== "verified_fact" && normalizeReviewStatus(event.next_review_status) !== "rejected")
       .map((event) => event.summary);
 
     const primaryMapLayer = mapLayerRows[0];
@@ -382,15 +344,15 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.statusChips = data.statusChips.map((chip) => {
       switch (chip.label) {
         case "Sources":
-          return { ...chip, value: String(sourcesCount), state: stateFromCount(sourcesCount, "ready") };
+          return { ...chip, value: String(sourcesCount), state: statusSummaries.sourceRecords.state };
         case "Sheets":
-          return { ...chip, value: String(sheetsCount), state: stateFromCount(sheetsCount, "reviewing") };
+          return { ...chip, value: String(sheetsCount), state: statusSummaries.mapLayers.state };
         case "Buildings":
-          return { ...chip, value: String(buildingsCount), state: stateFromCount(buildingsCount, "partial") };
+          return { ...chip, value: String(buildingsCount), state: statusSummaries.buildings.state };
         case "People":
-          return { ...chip, value: String(peopleCount), state: stateFromCount(peopleCount, "reviewing") };
+          return { ...chip, value: String(peopleCount), state: statusSummaries.people.state };
         case "Businesses":
-          return { ...chip, value: String(businessesCount), state: stateFromCount(businessesCount, "reviewing") };
+          return { ...chip, value: String(businessesCount), state: statusSummaries.businesses.state };
         case "Release":
           return { ...chip, value: releaseState, state: releaseState };
         default:
@@ -401,17 +363,21 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.routeCards = data.routeCards.map((routeCard) => {
       switch (routeCard.href) {
         case "/community":
-          return { ...routeCard, statValue: `${progressPercent}%` };
+          return { ...routeCard, statValue: `${progressPercent}%`, state: releaseState };
         case "/community/map-auditor":
-          return { ...routeCard, statValue: String(sheetsCount) };
+          return { ...routeCard, statValue: String(sheetsCount), state: statusSummaries.mapLayers.state };
         case "/community/building-auditor":
-          return { ...routeCard, statValue: String(buildingsCount) };
+          return { ...routeCard, statValue: String(buildingsCount), state: statusSummaries.buildings.state };
         case "/community/people-auditor":
-          return { ...routeCard, statValue: String(peopleCount + businessesCount) };
+          return {
+            ...routeCard,
+            statValue: String(peopleCount + businessesCount),
+            state: combineChipStates([statusSummaries.people.state, statusSummaries.businesses.state]),
+          };
         case "/community/source-provenance-inspector":
-          return { ...routeCard, statValue: String(sourcesCount) };
+          return { ...routeCard, statValue: String(sourcesCount), state: statusSummaries.sourceRecords.state };
         case "/community/release-gate":
-          return { ...routeCard, statValue: releaseState };
+          return { ...routeCard, statValue: releaseState, state: releaseState };
         default:
           return routeCard;
       }
@@ -431,17 +397,24 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.communityDashboard.overviewCards = data.communityDashboard.overviewCards.map((card) => {
       switch (card.label) {
         case "Sources":
-          return { ...card, value: String(sourcesCount) };
+          return { ...card, value: String(sourcesCount), detail: statusSummaries.sourceRecords.summary };
         case "Sheets":
-          return { ...card, value: String(sheetsCount) };
+          return { ...card, value: String(sheetsCount), detail: statusSummaries.mapLayers.summary };
         case "Buildings":
-          return { ...card, value: String(buildingsCount) };
+          return { ...card, value: String(buildingsCount), detail: statusSummaries.buildings.summary };
         case "People":
-          return { ...card, value: String(peopleCount) };
+          return { ...card, value: String(peopleCount), detail: statusSummaries.people.summary };
         case "Businesses":
-          return { ...card, value: String(businessesCount) };
+          return { ...card, value: String(businessesCount), detail: statusSummaries.businesses.summary };
         case "Unresolved":
-          return { ...card, value: String(unresolvedCount) };
+          return {
+            ...card,
+            value: String(unresolvedCount),
+            detail:
+              unresolvedCount > 0
+                ? `${unresolvedCount} unresolved review events currently block release.`
+                : "No unresolved review events are currently blocking release.",
+          };
         default:
           return card;
       }
@@ -450,7 +423,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.communityDashboard.evidenceInspector.sourceId = primarySource?.source_id ?? "No source loaded";
     data.communityDashboard.evidenceInspector.title = primarySource?.title ?? "No source records loaded from Supabase";
     data.communityDashboard.evidenceInspector.summary = primarySource
-      ? "Primary source metadata loaded from Supabase when available."
+      ? `Primary source metadata loaded from Supabase. ${statusSummaries.sourceRecords.summary}`
       : "Supabase is connected, but source_records is empty for the active town package.";
     data.communityDashboard.evidenceInspector.fields = [
       {
@@ -466,7 +439,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Review state",
         value: primarySource ? normalizeReviewStatus(primarySource.review_status) : "unknown",
-        detail: "No record is auto-promoted to verified by default.",
+        detail: statusSummaries.sourceRecords.summary,
       },
       {
         label: "Map year",
@@ -509,7 +482,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Map layers",
         value: String(sheetsCount),
-        detail: "Supabase map_layers rows currently available for the active town package.",
+        detail: statusSummaries.mapLayers.summary,
       },
       {
         label: "Primary layer",
@@ -537,7 +510,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Building records",
         value: String(buildingsCount),
-        detail: "Total building rows currently available in Supabase.",
+        detail: statusSummaries.buildings.summary,
       },
       {
         label: "Primary building",
@@ -569,15 +542,15 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         ? `${assetRequestsCount} asset requests currently linked to the community review model.`
         : "No asset_requests rows are linked to the community review model yet.";
     data.buildingAuditor.artPreview.tags = [
-      { label: `Buildings ${buildingsCount}`, state: stateFromCount(buildingsCount, "reviewing") },
-      { label: `Assets ${assetRequestsCount}`, state: stateFromCount(assetRequestsCount, "partial") },
+      { label: `Buildings ${buildingsCount}`, state: statusSummaries.buildings.state },
+      { label: `Assets ${assetRequestsCount}`, state: assetRequestsCount > 0 ? "partial" : "guarded" },
       { label: "Read only", state: "guarded" },
     ];
     data.buildingAuditor.extractedLabels = [
       {
         label: "Buildings",
         value: String(buildingsCount),
-        detail: "Supabase building rows in the current review set.",
+        detail: statusSummaries.buildings.summary,
       },
       {
         label: "Primary label",
@@ -587,14 +560,14 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Review summary",
         value: summarizeStatusCounts(buildingStatusCounts),
-        detail: "Status distribution across loaded building rows.",
+        detail: "Status distribution across Supabase building rows.",
       },
     ];
     data.buildingAuditor.provenance.fields = [
       {
         label: "Building records",
         value: String(buildingsCount),
-        detail: "Total building rows available in Supabase.",
+        detail: statusSummaries.buildings.summary,
       },
       {
         label: "Illustrative assets",
@@ -618,17 +591,17 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "People",
         value: String(peopleCount),
-        detail: "Supabase people rows currently in the review queue.",
+        detail: statusSummaries.people.summary,
       },
       {
         label: "Businesses",
         value: String(businessesCount),
-        detail: "Supabase business rows currently in the review queue.",
+        detail: statusSummaries.businesses.summary,
       },
       {
         label: "Source records",
         value: String(sourcesCount),
-        detail: "Source trail available for identity review.",
+        detail: statusSummaries.sourceRecords.summary,
       },
     ];
     data.peopleAuditor.personReview.title = primaryPerson?.display_name ?? "No people loaded from Supabase";
@@ -682,12 +655,12 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.peopleAuditor.legend = [
       {
         label: "People statuses",
-        state: stateFromCount(peopleCount, "reviewing"),
+        state: statusSummaries.people.state,
         note: summarizeStatusCounts(peopleStatusCounts),
       },
       {
         label: "Business statuses",
-        state: stateFromCount(businessesCount, "reviewing"),
+        state: statusSummaries.businesses.state,
         note: summarizeStatusCounts(businessStatusCounts),
       },
       {
@@ -697,7 +670,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       },
     ];
     data.peopleAuditor.unresolved = identityEvents
-      .filter((event) => unresolvedStatuses.includes(normalizeReviewStatus(event.next_review_status)))
+      .filter((event) => normalizeReviewStatus(event.next_review_status) !== "verified_fact" && normalizeReviewStatus(event.next_review_status) !== "rejected")
       .map((event) => event.summary);
     data.peopleAuditor.history =
       identityEvents.length > 0 ? identityEvents.map(formatReviewHistory) : ["No people or business review events loaded from Supabase yet."];
@@ -725,7 +698,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Review status",
         value: primarySource ? normalizeReviewStatus(primarySource.review_status) : "unknown",
-        detail: "Current Supabase review state.",
+        detail: statusSummaries.sourceRecords.summary,
       },
     ];
     data.sourceProvenanceInspector.ocr.quote = primarySource?.ocr_excerpt ?? "No OCR excerpt is available in Supabase yet.";
@@ -733,7 +706,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Source count",
         value: String(sourcesCount),
-        detail: "Supabase source records in the current town package.",
+        detail: statusSummaries.sourceRecords.summary,
       },
       {
         label: "Citation string",
@@ -750,22 +723,22 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       {
         label: "Sources",
         value: String(sourcesCount),
-        detail: "Supabase source records currently available.",
+        detail: statusSummaries.sourceRecords.summary,
       },
       {
         label: "Buildings",
         value: String(buildingsCount),
-        detail: "Reviewed and candidate anchors linked from the source set.",
+        detail: statusSummaries.buildings.summary,
       },
       {
         label: "People",
         value: String(peopleCount + businessesCount),
-        detail: "Identity and business records remain review-bound.",
+        detail: `${statusSummaries.people.summary} | ${statusSummaries.businesses.summary}`,
       },
       {
         label: "Claims",
         value: String(claimsCount),
-        detail: "Claims remain provenance-labeled and non-verified by default.",
+        detail: statusSummaries.claims.summary,
       },
     ];
     data.sourceProvenanceInspector.trail = [
@@ -788,24 +761,29 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     data.releaseGate.blockers = releaseBlockers;
     data.releaseGate.criteria = [
       {
-        label: "Citations",
-        value: primarySource ? normalizeReviewStatus(primarySource.review_status) : "unknown",
-        detail: `${sourcesCount} source records currently available.`,
+        label: "Source records",
+        value: String(sourcesCount),
+        detail: statusSummaries.sourceRecords.summary,
       },
       {
-        label: "Map stitching",
-        value: primaryMapLayer ? normalizeReviewStatus(primaryMapLayer.review_status) : "unknown",
-        detail: `${sheetsCount} map layers currently tracked.`,
+        label: "Map layers",
+        value: String(sheetsCount),
+        detail: statusSummaries.mapLayers.summary,
       },
       {
         label: "Building anchors",
-        value: summarizeStatusCounts(buildingStatusCounts),
-        detail: `${buildingsCount} building records currently tracked.`,
+        value: String(buildingsCount),
+        detail: statusSummaries.buildings.summary,
       },
       {
-        label: "People identities",
-        value: summarizeStatusCounts(peopleStatusCounts),
-        detail: `${peopleCount} people and ${businessesCount} businesses currently in review.`,
+        label: "People and businesses",
+        value: String(peopleCount + businessesCount),
+        detail: `${statusSummaries.people.summary} | ${statusSummaries.businesses.summary}`,
+      },
+      {
+        label: "Claims",
+        value: String(claimsCount),
+        detail: statusSummaries.claims.summary,
       },
       {
         label: "Review events",

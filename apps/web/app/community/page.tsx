@@ -4,6 +4,7 @@ import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
 import { RouteCard } from "@/components/RouteCard";
 import { StatusChip } from "@/components/StatusChip";
+import { reviewStatuses, toChipState } from "@/lib/community-status";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -27,17 +28,13 @@ function formatLastSync(source: "supabase" | "demo_fallback", history: string[])
   };
 }
 
-function getChipState(chip: { state: string } | undefined, fallbackState: string) {
-  return chip?.state ?? fallbackState;
-}
-
-function getChipValue(chip: { value: string } | undefined, fallbackValue: string) {
-  return chip?.value ?? fallbackValue;
+function formatStatusLabel(status: string) {
+  return status.replaceAll("_", " ");
 }
 
 export default async function CommunityDashboardPage() {
   const { data: communityData, source } = await loadCommunityData();
-  const { communityDashboard, routeCards, summary, town } = communityData;
+  const { communityDashboard, routeCards, summary, town, statusSummaries } = communityData;
   const routeCardsByHref = new Map(routeCards.map((route) => [route.href, route]));
   const primaryRouteCards = [
     routeCardsByHref.get("/community/map-auditor"),
@@ -46,26 +43,54 @@ export default async function CommunityDashboardPage() {
   ].filter((route): route is NonNullable<typeof route> => Boolean(route));
   const sourceInspectorRoute = routeCardsByHref.get("/community/source-provenance-inspector");
   const releaseGateRoute = routeCardsByHref.get("/community/release-gate");
-  const statusChipByLabel = new Map(communityData.statusChips.map((chip) => [chip.label, chip]));
-  const sourcesChip = statusChipByLabel.get("Sources");
-  const sheetsChip = statusChipByLabel.get("Sheets");
-  const buildingsChip = statusChipByLabel.get("Buildings");
-  const peopleChip = statusChipByLabel.get("People");
-  const businessesChip = statusChipByLabel.get("Businesses");
-  const releaseChip = statusChipByLabel.get("Release");
   const dashboardStatusChips = [
-    { label: "Sources", value: getChipValue(sourcesChip, String(summary.sources)), state: getChipState(sourcesChip, "guarded") },
-    { label: "Map layers", value: getChipValue(sheetsChip, String(summary.sheets)), state: getChipState(sheetsChip, "guarded") },
-    { label: "Buildings", value: getChipValue(buildingsChip, String(summary.buildings)), state: getChipState(buildingsChip, "guarded") },
-    { label: "People", value: getChipValue(peopleChip, String(summary.people)), state: getChipState(peopleChip, "guarded") },
-    { label: "Businesses", value: getChipValue(businessesChip, String(summary.businesses)), state: getChipState(businessesChip, "guarded") },
+    { label: "Sources", value: String(statusSummaries.sourceRecords.total), state: statusSummaries.sourceRecords.state },
+    { label: "Map layers", value: String(statusSummaries.mapLayers.total), state: statusSummaries.mapLayers.state },
+    { label: "Buildings", value: String(statusSummaries.buildings.total), state: statusSummaries.buildings.state },
+    { label: "People", value: String(statusSummaries.people.total), state: statusSummaries.people.state },
+    { label: "Businesses", value: String(statusSummaries.businesses.total), state: statusSummaries.businesses.state },
     {
       label: "Unresolved",
-      value: String(summary.unresolved),
-      state: summary.unresolved > 0 ? "blocked" : "ready",
+      value: String(statusSummaries.unresolvedReviewEvents),
+      state: statusSummaries.unresolvedReviewEvents > 0 ? "blocked" : "ready",
     },
-    { label: "Release", value: getChipValue(releaseChip, communityDashboard.releaseGate.state), state: getChipState(releaseChip, "guarded") },
+    { label: "Release", value: communityDashboard.releaseGate.state, state: communityDashboard.releaseGate.state },
   ];
+  const reviewStatusFamilies = [
+    statusSummaries.sourceRecords,
+    statusSummaries.mapLayers,
+    statusSummaries.buildings,
+    statusSummaries.people,
+    statusSummaries.businesses,
+    statusSummaries.claims,
+  ];
+  const reviewStatusSummaryItems = reviewStatusFamilies.map((family) => {
+    const groupedCounts = reviewStatuses
+      .filter((status) => family.counts[status] > 0)
+      .map((status) => `${formatStatusLabel(status)}: ${family.counts[status]}`)
+      .join(" | ");
+
+    return {
+      label: family.label,
+      value: String(family.total),
+      detail: groupedCounts.length > 0 ? groupedCounts : "No records loaded from Supabase yet.",
+    };
+  });
+  const summaryBreakdownChips = reviewStatuses.map((status) => {
+    const total =
+      statusSummaries.sourceRecords.counts[status] +
+      statusSummaries.mapLayers.counts[status] +
+      statusSummaries.buildings.counts[status] +
+      statusSummaries.people.counts[status] +
+      statusSummaries.businesses.counts[status] +
+      statusSummaries.claims.counts[status];
+
+    return {
+      label: formatStatusLabel(status),
+      value: String(total),
+      state: total > 0 ? toChipState(status) : "guarded",
+    };
+  });
   const activeYear = town.year > 0 ? town.year : null;
   const yearGateStart = activeYear ? activeYear - 10 : null;
   const yearGateEnd = activeYear ? activeYear + 10 : null;
@@ -186,6 +211,20 @@ export default async function CommunityDashboardPage() {
         ))}
       </section>
 
+      <Panel
+        eyebrow="Review Status Summary"
+        title="Real grouped counts from the Community read model"
+        subtitle="These totals come from the shared Supabase-backed loader. Missing or invalid statuses normalize to unknown, and empty tables stay at zero without triggering fallback."
+        tone="paper"
+      >
+        <div className="dashboard-status-strip">
+          {summaryBreakdownChips.map((chip) => (
+            <StatusChip key={chip.label} label={chip.label} value={chip.value} state={chip.state} />
+          ))}
+        </div>
+        <KeyValueList items={reviewStatusSummaryItems} />
+      </Panel>
+
       <div className="dashboard-summary-grid">
         <Panel
           action={
@@ -237,7 +276,7 @@ export default async function CommunityDashboardPage() {
             <p className="small-muted">{communityDashboard.releaseGate.reason}</p>
           </div>
           <KeyValueList
-            items={communityData.releaseGate.criteria.slice(0, 4).map((criterion) => ({
+            items={communityData.releaseGate.criteria.map((criterion) => ({
               label: criterion.label,
               value: criterion.value,
               detail: criterion.detail,

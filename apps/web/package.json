@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:unit": "node --test --experimental-strip-types ./lib/community-status.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
