@@ -942,17 +942,76 @@ textarea {
   gap: 12px;
 }
 
+.dashboard-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-timeline-item,
 .dashboard-history-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
-  align-items: flex-start;
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid rgba(186, 147, 86, 0.2);
   background:
     linear-gradient(180deg, rgba(250, 239, 209, 0.98), rgba(236, 220, 182, 0.96)),
     url("/textures/parchment.svg");
+}
+
+.dashboard-history-item {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+}
+
+.dashboard-timeline__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.dashboard-timeline__field {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-timeline__field strong {
+  font-size: 1rem;
+  color: var(--muted-strong);
+  word-break: break-word;
+}
+
+.dashboard-timeline__meta,
+.dashboard-timeline__transition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.dashboard-timeline__summary,
+.dashboard-timeline__note {
+  margin: 0;
+  color: var(--muted-strong);
+}
+
+.dashboard-timeline__arrow {
+  font-size: 1.1rem;
+  color: rgba(100, 83, 71, 0.82);
+}
+
+.dashboard-timeline__note {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-timeline__note-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(100, 83, 71, 0.74);
 }
 
 .dashboard-history-item__marker {
@@ -1006,7 +1065,8 @@ textarea {
   .section-heading,
   .route-card__footer,
   .dashboard-year-band__header,
-  .dashboard-release-callout__row {
+  .dashboard-release-callout__row,
+  .dashboard-timeline__header {
     align-items: flex-start;
     flex-direction: column;
   }
