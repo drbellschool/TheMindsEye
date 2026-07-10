@@ -49,6 +49,93 @@
       "state": "guarded"
     }
   ],
+  "statusSummaries": {
+    "sourceRecords": {
+      "label": "Source records",
+      "total": 18,
+      "state": "guarded",
+      "summary": "verified_fact: 4 | source_based_inference: 7 | unknown: 7",
+      "counts": {
+        "verified_fact": 4,
+        "source_based_inference": 7,
+        "illustrative": 0,
+        "fictional_gameplay": 0,
+        "unknown": 7,
+        "rejected": 0
+      }
+    },
+    "mapLayers": {
+      "label": "Map layers",
+      "total": 6,
+      "state": "guarded",
+      "summary": "verified_fact: 1 | source_based_inference: 2 | illustrative: 1 | unknown: 2",
+      "counts": {
+        "verified_fact": 1,
+        "source_based_inference": 2,
+        "illustrative": 1,
+        "fictional_gameplay": 0,
+        "unknown": 2,
+        "rejected": 0
+      }
+    },
+    "buildings": {
+      "label": "Buildings",
+      "total": 24,
+      "state": "guarded",
+      "summary": "verified_fact: 6 | source_based_inference: 9 | illustrative: 5 | unknown: 4",
+      "counts": {
+        "verified_fact": 6,
+        "source_based_inference": 9,
+        "illustrative": 5,
+        "fictional_gameplay": 0,
+        "unknown": 4,
+        "rejected": 0
+      }
+    },
+    "people": {
+      "label": "People",
+      "total": 19,
+      "state": "guarded",
+      "summary": "verified_fact: 3 | source_based_inference: 6 | unknown: 10",
+      "counts": {
+        "verified_fact": 3,
+        "source_based_inference": 6,
+        "illustrative": 0,
+        "fictional_gameplay": 0,
+        "unknown": 10,
+        "rejected": 0
+      }
+    },
+    "businesses": {
+      "label": "Businesses",
+      "total": 11,
+      "state": "guarded",
+      "summary": "verified_fact: 2 | source_based_inference: 4 | unknown: 5",
+      "counts": {
+        "verified_fact": 2,
+        "source_based_inference": 4,
+        "illustrative": 0,
+        "fictional_gameplay": 0,
+        "unknown": 5,
+        "rejected": 0
+      }
+    },
+    "claims": {
+      "label": "Claims",
+      "total": 7,
+      "state": "guarded",
+      "summary": "verified_fact: 1 | source_based_inference: 3 | unknown: 3",
+      "counts": {
+        "verified_fact": 1,
+        "source_based_inference": 3,
+        "illustrative": 0,
+        "fictional_gameplay": 0,
+        "unknown": 3,
+        "rejected": 0
+      }
+    },
+    "unresolvedReviewEvents": 7
+  },
   "routeLinks": [
     {
       "href": "/community",
