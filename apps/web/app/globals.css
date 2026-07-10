@@ -160,6 +160,20 @@ textarea {
   gap: 10px;
 }
 
+.community-shell__status {
+  display: grid;
+  gap: 8px;
+}
+
+.community-shell__status .source-indicator-row {
+  margin-bottom: 0;
+}
+
+.community-shell__status .source-warning {
+  margin: 0;
+  color: rgba(245, 230, 202, 0.84);
+}
+
 .community-shell__nav {
   display: flex;
   flex-wrap: wrap;

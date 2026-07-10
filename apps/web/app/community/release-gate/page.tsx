@@ -1,13 +1,14 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Release Gate | The Mind's Eye",
 };
 
-export default function ReleaseGatePage() {
-  const { releaseGate } = communityDemo;
+export default async function ReleaseGatePage() {
+  const { data: communityData } = await loadCommunityData();
+  const { releaseGate } = communityData;
 
   return (
     <div className="content-grid content-grid--split">
@@ -22,13 +23,17 @@ export default function ReleaseGatePage() {
       </Panel>
 
       <Panel eyebrow="Blockers" title="Why it is not ready" subtitle="These items must remain visible until reviewed." tone="paper">
-        <div className="blocker-list">
-          {releaseGate.blockers.map((blocker) => (
-            <span className="tag state-blocked" key={blocker}>
-              {blocker}
-            </span>
-          ))}
-        </div>
+        {releaseGate.blockers.length > 0 ? (
+          <div className="blocker-list">
+            {releaseGate.blockers.map((blocker) => (
+              <span className="tag state-blocked" key={blocker}>
+                {blocker}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="small-muted">No unresolved review events are currently blocking release.</p>
+        )}
       </Panel>
 
       <Panel eyebrow="Criteria" title="Readiness matrix" subtitle="The gate is more than a single status chip." tone="paper">
