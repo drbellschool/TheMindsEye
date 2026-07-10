@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
+import { ReviewTimeline } from "@/components/ReviewTimeline";
 import { RouteCard } from "@/components/RouteCard";
 import { StatusChip } from "@/components/StatusChip";
 import { reviewStatuses, toChipState } from "@/lib/community-status";
@@ -11,7 +12,10 @@ export const metadata = {
   title: "Community Dashboard | The Mind's Eye",
 };
 
-function formatLastSync(source: "supabase" | "demo_fallback", history: string[]) {
+function formatLastSync(
+  source: "supabase" | "demo_fallback",
+  reviewTimeline: Array<{ occurredAtDateLabel: string; occurredAtLabel: string; summary: string; targetTable: string; targetId: string }>,
+) {
   if (source === "demo_fallback") {
     return {
       value: "Demo snapshot",
@@ -19,12 +23,18 @@ function formatLastSync(source: "supabase" | "demo_fallback", history: string[])
     };
   }
 
-  const datedEntry = history.find((entry) => /\b\d{4}-\d{2}-\d{2}\b/.test(entry));
-  const match = datedEntry?.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  const latestEvent = reviewTimeline[0];
+
+  if (!latestEvent) {
+    return {
+      value: "Live Supabase read",
+      detail: "Supabase data loaded, but no review events are available yet.",
+    };
+  }
 
   return {
-    value: match?.[0] ?? "Live Supabase read",
-    detail: datedEntry ?? "Supabase data loaded, but no dated review history is available yet.",
+    value: latestEvent.occurredAtDateLabel,
+    detail: `${latestEvent.occurredAtLabel} | ${latestEvent.targetTable} | ${latestEvent.targetId} | ${latestEvent.summary}`,
   };
 }
 
@@ -94,7 +104,7 @@ export default async function CommunityDashboardPage() {
   const activeYear = town.year > 0 ? town.year : null;
   const yearGateStart = activeYear ? activeYear - 10 : null;
   const yearGateEnd = activeYear ? activeYear + 10 : null;
-  const lastSync = formatLastSync(source, communityDashboard.history);
+  const lastSync = formatLastSync(source, communityDashboard.reviewTimeline);
   const packageFields = [
     {
       label: "Town package",
@@ -286,15 +296,16 @@ export default async function CommunityDashboardPage() {
       </div>
 
       <div className="dashboard-summary-grid">
-        <Panel eyebrow="Recent Review History" title="Latest review events" subtitle="Keep recent community decisions visible." tone="paper">
-          <div className="dashboard-history-list">
-            {communityDashboard.history.map((item, index) => (
-              <div className="dashboard-history-item" key={`${item}-${index}`}>
-                <span className="dashboard-history-item__marker" aria-hidden="true" />
-                <p>{item}</p>
-              </div>
-            ))}
-          </div>
+        <Panel
+          eyebrow="Review Event Timeline"
+          title="Latest review events"
+          subtitle="Newest-first review history from the shared Supabase-backed Community loader."
+          tone="paper"
+        >
+          <ReviewTimeline
+            emptyState={communityDashboard.reviewTimelineEmptyState}
+            events={communityDashboard.reviewTimeline}
+          />
         </Panel>
 
         <Panel eyebrow="Unresolved Blockers" title="What still blocks release" subtitle="These items stay visible until the release gate is satisfied." tone="dark">

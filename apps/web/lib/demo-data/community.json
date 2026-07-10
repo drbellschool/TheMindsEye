@@ -341,10 +341,55 @@
         }
       ]
     },
+    "reviewTimelineEmptyState": "No review events loaded from Supabase yet.",
+    "reviewTimeline": [
+      {
+        "id": "people:person_texarkana_a_bell:2026-07-09T08:30:00Z:0",
+        "targetTable": "people",
+        "targetId": "person_texarkana_a_bell",
+        "previousStatus": "unknown",
+        "nextStatus": "unknown",
+        "reviewerName": "Community seed",
+        "occurredAt": "2026-07-09T08:30:00Z",
+        "occurredAtDateLabel": "2026-07-09",
+        "occurredAtLabel": "2026-07-09 08:30 UTC",
+        "summary": "Person identity remains unresolved pending duplicate review.",
+        "reviewNote": "Do not auto-promote candidate identity.",
+        "transitionLabel": "unknown -> unknown"
+      },
+      {
+        "id": "buildings:building_texarkana_0012:2026-07-09T08:15:00Z:1",
+        "targetTable": "buildings",
+        "targetId": "building_texarkana_0012",
+        "previousStatus": "unknown",
+        "nextStatus": "illustrative",
+        "reviewerName": "Community seed",
+        "occurredAt": "2026-07-09T08:15:00Z",
+        "occurredAtDateLabel": "2026-07-09",
+        "occurredAtLabel": "2026-07-09 08:15 UTC",
+        "summary": "Building art request remains illustrative and separate from the reviewed footprint.",
+        "reviewNote": "Visual layer only.",
+        "transitionLabel": "unknown -> illustrative"
+      },
+      {
+        "id": "map_layers:map_layer_texarkana_sheet_3:2026-07-09T08:00:00Z:2",
+        "targetTable": "map_layers",
+        "targetId": "map_layer_texarkana_sheet_3",
+        "previousStatus": "unknown",
+        "nextStatus": "source_based_inference",
+        "reviewerName": "Community seed",
+        "occurredAt": "2026-07-09T08:00:00Z",
+        "occurredAtDateLabel": "2026-07-09",
+        "occurredAtLabel": "2026-07-09 08:00 UTC",
+        "summary": "Sheet 3 alignment remains local-only until more control points are confirmed.",
+        "reviewNote": "No final georeferencing yet.",
+        "transitionLabel": "unknown -> source_based_inference"
+      }
+    ],
     "history": [
-      "Sheet review updated for control point coverage.",
-      "Building candidate queue kept separate from verified facts.",
-      "Release gate remains guarded."
+      "people: Person identity remains unresolved pending duplicate review. (Community seed, 2026-07-09, unknown -> unknown)",
+      "buildings: Building art request remains illustrative and separate from the reviewed footprint. (Community seed, 2026-07-09, unknown -> illustrative)",
+      "map_layers: Sheet 3 alignment remains local-only until more control points are confirmed. (Community seed, 2026-07-09, unknown -> source_based_inference)"
     ]
   },
   "mapAuditor": {

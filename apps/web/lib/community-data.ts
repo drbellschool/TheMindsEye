@@ -1,6 +1,14 @@
 import { cache } from "react";
 
 import {
+  buildReviewEventTimeline,
+  communityReviewTimelineEmptyState,
+  filterReviewTimeline,
+  formatReviewTimelineHistory,
+  recentReviewEventQueryLimit,
+  type ReviewEventRow,
+} from "@/lib/community-review-events";
+import {
   buildCommunityStatusSummaries,
   combineChipStates,
   hasAnyQueryErrors,
@@ -81,15 +89,6 @@ type BusinessRow = {
   notes: string | null;
 };
 
-type ReviewEventRow = {
-  summary: string;
-  target_table: string;
-  reviewer_name: string | null;
-  previous_review_status: string | null;
-  next_review_status: string | null;
-  occurred_at: string | null;
-};
-
 const supabaseFallbackWarning = "Using demo fallback because Supabase data could not be loaded.";
 
 export type CommunityDataSource = "supabase" | "demo_fallback";
@@ -153,19 +152,6 @@ function buildReviewStateTags(counts: ReviewStatusCounts) {
     label: `${status} (${counts[status]})`,
     state: toChipState(status),
   }));
-}
-
-function formatReviewHistory(event: ReviewEventRow): string {
-  const reviewer = event.reviewer_name ?? "unknown reviewer";
-  const previousStatus = normalizeReviewStatus(event.previous_review_status);
-  const nextStatus = normalizeReviewStatus(event.next_review_status);
-  const occurredAt = event.occurred_at ? event.occurred_at.slice(0, 10) : "unknown date";
-
-  return `${event.target_table}: ${event.summary} (${reviewer}, ${occurredAt}, ${previousStatus} -> ${nextStatus})`;
-}
-
-function filterReviewEvents(events: ReviewEventRow[], targetTables: string[]): ReviewEventRow[] {
-  return events.filter((event) => targetTables.includes(event.target_table));
 }
 
 export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult> => {
@@ -239,9 +225,9 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       supabase.from("review_events").select("next_review_status"),
       supabase
         .from("review_events")
-        .select("summary, target_table, reviewer_name, previous_review_status, next_review_status, occurred_at")
+        .select("summary, target_table, target_id, reviewer_identifier, reviewer_name, previous_review_status, next_review_status, occurred_at, review_note")
         .order("occurred_at", { ascending: false })
-        .limit(6),
+        .limit(recentReviewEventQueryLimit),
     ]);
 
     if (
@@ -312,12 +298,16 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const resolvedCount = Math.max(trackedCount - unresolvedCount, 0);
     const progressPercent = trackedCount > 0 ? Math.max(0, Math.min(100, Math.round((resolvedCount / trackedCount) * 100))) : 0;
 
-    const overallHistory = recentReviewEvents.map(formatReviewHistory);
-    const mapHistory = filterReviewEvents(recentReviewEvents, ["map_layers"]).map(formatReviewHistory);
-    const identityEvents = filterReviewEvents(recentReviewEvents, ["people", "businesses"]);
-    const sourceHistory = filterReviewEvents(recentReviewEvents, ["source_records"]).map(formatReviewHistory);
-    const releaseBlockers = recentReviewEvents
-      .filter((event) => normalizeReviewStatus(event.next_review_status) !== "verified_fact" && normalizeReviewStatus(event.next_review_status) !== "rejected")
+    const recentReviewTimeline = buildReviewEventTimeline(recentReviewEvents);
+    const fullReviewHistoryTimeline = buildReviewEventTimeline(recentReviewEvents, recentReviewEventQueryLimit);
+    const overallHistory = formatReviewTimelineHistory(fullReviewHistoryTimeline);
+    const mapTimeline = filterReviewTimeline(fullReviewHistoryTimeline, ["map_layers"]);
+    const identityTimeline = filterReviewTimeline(fullReviewHistoryTimeline, ["people", "businesses"]);
+    const sourceTimeline = filterReviewTimeline(fullReviewHistoryTimeline, ["source_records"]);
+    const mapHistory = formatReviewTimelineHistory(mapTimeline);
+    const sourceHistory = formatReviewTimelineHistory(sourceTimeline);
+    const releaseBlockers = fullReviewHistoryTimeline
+      .filter((event) => event.nextStatus !== "verified_fact" && event.nextStatus !== "rejected")
       .map((event) => event.summary);
 
     const primaryMapLayer = mapLayerRows[0];
@@ -447,7 +437,9 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: primarySource ? "Shown from the first available source record." : "No source date is available yet.",
       },
     ];
-    data.communityDashboard.history = overallHistory.length > 0 ? overallHistory : ["No review events loaded from Supabase yet."];
+    data.communityDashboard.reviewTimeline = recentReviewTimeline;
+    data.communityDashboard.reviewTimelineEmptyState = communityReviewTimelineEmptyState;
+    data.communityDashboard.history = overallHistory.length > 0 ? overallHistory : [communityReviewTimelineEmptyState];
 
     data.mapAuditor.sheetStrip =
       mapLayerRows.length > 0
@@ -669,11 +661,11 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         note: `${peopleCount + businessesCount} total identity records currently in review.`,
       },
     ];
-    data.peopleAuditor.unresolved = identityEvents
-      .filter((event) => normalizeReviewStatus(event.next_review_status) !== "verified_fact" && normalizeReviewStatus(event.next_review_status) !== "rejected")
+    data.peopleAuditor.unresolved = identityTimeline
+      .filter((event) => event.nextStatus !== "verified_fact" && event.nextStatus !== "rejected")
       .map((event) => event.summary);
     data.peopleAuditor.history =
-      identityEvents.length > 0 ? identityEvents.map(formatReviewHistory) : ["No people or business review events loaded from Supabase yet."];
+      identityTimeline.length > 0 ? formatReviewTimelineHistory(identityTimeline) : ["No people or business review events loaded from Supabase yet."];
 
     data.sourceProvenanceInspector.source.title = primarySource?.title ?? "No source records loaded from Supabase";
     data.sourceProvenanceInspector.source.subtitle = primarySource

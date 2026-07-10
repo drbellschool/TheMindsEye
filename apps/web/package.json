@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:unit": "node --test --experimental-strip-types ./lib/community-status.test.ts"
+    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
