@@ -3,14 +3,15 @@ import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
 import { RouteCard } from "@/components/RouteCard";
 import { StatusChip } from "@/components/StatusChip";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Community Dashboard | The Mind's Eye",
 };
 
-export default function CommunityDashboardPage() {
-  const { communityDashboard, reviewLegend, routeCards } = communityDemo;
+export default async function CommunityDashboardPage() {
+  const { data: communityData, source, warningMessage } = await loadCommunityData();
+  const { communityDashboard, reviewLegend, routeCards } = communityData;
 
   return (
     <div className="shell-grid shell-grid--dashboard">
@@ -21,6 +22,12 @@ export default function CommunityDashboardPage() {
           subtitle={communityDashboard.hero.subtitle}
           tone="paper"
         >
+          <div className="source-indicator-row">
+            <span className={`source-indicator ${source === "supabase" ? "source-indicator--supabase" : "source-indicator--fallback"}`}>
+              Data source: {source === "supabase" ? "Supabase" : "Demo fallback"}
+            </span>
+          </div>
+          {warningMessage ? <p className="source-warning">{warningMessage}</p> : null}
           <div className="panel-grid panel-grid--2">
             <div className="callout">
               <p className="muted">Year gate</p>
@@ -34,7 +41,7 @@ export default function CommunityDashboardPage() {
             </div>
           </div>
           <div className="status-strip" style={{ marginTop: 16 }}>
-            {communityDemo.statusChips.map((chip) => (
+            {communityData.statusChips.map((chip) => (
               <StatusChip key={chip.label} label={chip.label} value={chip.value} state={chip.state} />
             ))}
           </div>
@@ -57,7 +64,7 @@ export default function CommunityDashboardPage() {
             }))}
           />
           <div className="progress" style={{ marginTop: 16 }}>
-            <span style={{ width: `${communityDemo.summary.progressPercent}%` }} />
+            <span style={{ width: `${communityData.summary.progressPercent}%` }} />
           </div>
         </Panel>
 

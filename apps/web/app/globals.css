@@ -378,6 +378,41 @@ textarea {
   gap: 10px;
 }
 
+.source-indicator-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.source-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid rgba(186, 147, 86, 0.26);
+  background: rgba(255, 250, 238, 0.78);
+}
+
+.source-indicator--supabase {
+  border-color: rgba(109, 159, 103, 0.38);
+  background: rgba(109, 159, 103, 0.14);
+}
+
+.source-indicator--fallback {
+  border-color: rgba(109, 136, 171, 0.42);
+  background: rgba(109, 136, 171, 0.14);
+}
+
+.source-warning {
+  margin: 0 0 16px;
+  color: rgba(100, 83, 71, 0.84);
+  font-size: 0.92rem;
+}
+
 .value-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
