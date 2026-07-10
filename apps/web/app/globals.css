@@ -1028,6 +1028,96 @@ textarea {
   color: var(--muted-strong);
 }
 
+.source-detail-page,
+.record-list {
+  display: grid;
+  gap: 20px;
+}
+
+.source-detail-hero,
+.source-detail-hero__status {
+  display: grid;
+  gap: 14px;
+}
+
+.source-detail-hero__status {
+  justify-content: flex-start;
+}
+
+.source-detail-link-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.source-detail-link {
+  color: var(--muted-strong);
+  text-decoration: underline;
+  text-decoration-color: rgba(100, 83, 71, 0.45);
+  text-underline-offset: 0.18em;
+  word-break: break-word;
+}
+
+.record-list__item {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(186, 147, 86, 0.22);
+  background:
+    linear-gradient(180deg, rgba(250, 239, 209, 0.98), rgba(236, 220, 182, 0.96)),
+    url("/textures/parchment.svg");
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.panel--dark .record-list__item {
+  background:
+    linear-gradient(180deg, rgba(42, 33, 27, 0.9), rgba(26, 22, 18, 0.96)),
+    url("/textures/dark-panel.svg");
+  border-color: rgba(226, 190, 126, 0.18);
+}
+
+.record-list__header,
+.record-list__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.record-list__chips {
+  justify-content: flex-start;
+}
+
+.record-list__eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(100, 83, 71, 0.74);
+}
+
+.panel--dark .record-list__eyebrow {
+  color: rgba(245, 230, 202, 0.68);
+}
+
+.record-list__title {
+  display: block;
+  font-size: 1.05rem;
+  color: var(--muted-strong);
+}
+
+.panel--dark .record-list__title,
+.panel--dark .record-list__body,
+.panel--dark .record-list__item .small-muted {
+  color: #f6e7cb;
+}
+
+.record-list__body {
+  margin: 0;
+  color: var(--muted-strong);
+}
+
 @media (max-width: 1200px) {
   .content-grid--dashboard,
   .content-grid--three,
@@ -1066,7 +1156,8 @@ textarea {
   .route-card__footer,
   .dashboard-year-band__header,
   .dashboard-release-callout__row,
-  .dashboard-timeline__header {
+  .dashboard-timeline__header,
+  .record-list__header {
     align-items: flex-start;
     flex-direction: column;
   }
