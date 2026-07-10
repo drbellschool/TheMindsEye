@@ -8,12 +8,16 @@ import { StatusChip } from "@/components/StatusChip";
 import type { CommunityDemoData } from "@/lib/demo-data";
 
 type CommunityShellProps = {
+  dataSource: "supabase" | "demo_fallback";
   demo: CommunityDemoData;
+  warningMessage?: string;
   children: ReactNode;
 };
 
-export function CommunityShell({ demo, children }: CommunityShellProps) {
+export function CommunityShell({ dataSource, demo, warningMessage, children }: CommunityShellProps) {
   const pathname = usePathname();
+  const title = demo.town.year > 0 ? `${demo.town.name} ${demo.town.year}` : demo.town.name;
+  const topbarChips = demo.statusChips.filter((chip) => ["Release", "Sources", "Sheets", "Buildings"].includes(chip.label));
 
   return (
     <div className="page-root">
@@ -23,19 +27,25 @@ export function CommunityShell({ demo, children }: CommunityShellProps) {
             <div className="community-shell__brand">
               <div>
                 <p className="community-shell__eyebrow">Community Verification Console</p>
-                <h1 className="community-shell__title">
-                  {demo.town.name} {demo.town.year}
-                </h1>
+                <h1 className="community-shell__title">{title}</h1>
                 <p className="community-shell__subtitle">
-                  {demo.town.packageId} · {demo.town.stateRegion} · {demo.town.scope}
+                  {demo.town.packageId} | {demo.town.stateRegion} | {demo.town.scope}
                 </p>
               </div>
               <div className="community-shell__meta" aria-label="Town summary">
-                <StatusChip label="Release" value={demo.town.releaseState} state={demo.town.releaseState} />
-                <StatusChip label="Sources" value={String(demo.summary.sources)} state="ready" />
-                <StatusChip label="Sheets" value={String(demo.summary.sheets)} state="reviewing" />
-                <StatusChip label="Buildings" value={String(demo.summary.buildings)} state="partial" />
+                {topbarChips.map((chip) => (
+                  <StatusChip key={chip.label} label={chip.label} state={chip.state} value={chip.value} />
+                ))}
               </div>
+            </div>
+
+            <div className="community-shell__status">
+              <div className="source-indicator-row">
+                <span className={`source-indicator ${dataSource === "supabase" ? "source-indicator--supabase" : "source-indicator--fallback"}`}>
+                  Data source: {dataSource === "supabase" ? "Supabase" : "Demo fallback"}
+                </span>
+              </div>
+              {warningMessage ? <p className="source-warning">{warningMessage}</p> : null}
             </div>
 
             <nav className="community-shell__nav" aria-label="Community routes">

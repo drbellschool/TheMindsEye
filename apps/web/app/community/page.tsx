@@ -10,7 +10,7 @@ export const metadata = {
 };
 
 export default async function CommunityDashboardPage() {
-  const { data: communityData, source, warningMessage } = await loadCommunityData();
+  const { data: communityData } = await loadCommunityData();
   const { communityDashboard, reviewLegend, routeCards } = communityData;
 
   return (
@@ -22,12 +22,6 @@ export default async function CommunityDashboardPage() {
           subtitle={communityDashboard.hero.subtitle}
           tone="paper"
         >
-          <div className="source-indicator-row">
-            <span className={`source-indicator ${source === "supabase" ? "source-indicator--supabase" : "source-indicator--fallback"}`}>
-              Data source: {source === "supabase" ? "Supabase" : "Demo fallback"}
-            </span>
-          </div>
-          {warningMessage ? <p className="source-warning">{warningMessage}</p> : null}
           <div className="panel-grid panel-grid--2">
             <div className="callout">
               <p className="muted">Year gate</p>
@@ -83,13 +77,17 @@ export default async function CommunityDashboardPage() {
 
       <aside className="content-grid">
         <Panel eyebrow="Release Gate" title="Blockers" subtitle="These keep the town in guarded status." tone="dark">
-          <div className="blocker-list">
-            {communityDashboard.blockers.map((blocker) => (
-              <span className="tag state-blocked" key={blocker}>
-                {blocker}
-              </span>
-            ))}
-          </div>
+          {communityDashboard.blockers.length > 0 ? (
+            <div className="blocker-list">
+              {communityDashboard.blockers.map((blocker) => (
+                <span className="tag state-blocked" key={blocker}>
+                  {blocker}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="small-muted">No unresolved review events are currently blocking release.</p>
+          )}
         </Panel>
 
         <Panel eyebrow="Evidence" title="Inspector" subtitle="Raw source trail and review state." tone="dark">

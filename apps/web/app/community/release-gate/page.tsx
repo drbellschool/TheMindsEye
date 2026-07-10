@@ -23,13 +23,17 @@ export default async function ReleaseGatePage() {
       </Panel>
 
       <Panel eyebrow="Blockers" title="Why it is not ready" subtitle="These items must remain visible until reviewed." tone="paper">
-        <div className="blocker-list">
-          {releaseGate.blockers.map((blocker) => (
-            <span className="tag state-blocked" key={blocker}>
-              {blocker}
-            </span>
-          ))}
-        </div>
+        {releaseGate.blockers.length > 0 ? (
+          <div className="blocker-list">
+            {releaseGate.blockers.map((blocker) => (
+              <span className="tag state-blocked" key={blocker}>
+                {blocker}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="small-muted">No unresolved review events are currently blocking release.</p>
+        )}
       </Panel>
 
       <Panel eyebrow="Criteria" title="Readiness matrix" subtitle="The gate is more than a single status chip." tone="paper">

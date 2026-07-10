@@ -51,13 +51,17 @@ export default async function PeopleAuditorPage() {
         </Panel>
 
         <Panel eyebrow="Unresolved" title="Open items" subtitle="These remain in the review queue." tone="dark">
-          <div className="blocker-list">
-            {peopleAuditor.unresolved.map((item) => (
-              <span className="tag state-blocked" key={item}>
-                {item}
-              </span>
-            ))}
-          </div>
+          {peopleAuditor.unresolved.length > 0 ? (
+            <div className="blocker-list">
+              {peopleAuditor.unresolved.map((item) => (
+                <span className="tag state-blocked" key={item}>
+                  {item}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="small-muted">No unresolved people or business review events are currently loaded.</p>
+          )}
         </Panel>
 
         <Panel eyebrow="History" title="Recent activity" subtitle="Human review and source linkage changes." tone="dark">

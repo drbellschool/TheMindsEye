@@ -8,7 +8,11 @@ export default async function CommunityLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const { data: communityData } = await loadCommunityData();
+  const { data: communityData, source, warningMessage } = await loadCommunityData();
 
-  return <CommunityShell demo={communityData}>{children}</CommunityShell>;
+  return (
+    <CommunityShell dataSource={source} demo={communityData} warningMessage={warningMessage}>
+      {children}
+    </CommunityShell>
+  );
 }
