@@ -1,389 +1,319 @@
 # The Mind's Eye Architecture
 
-This document is the architecture contract for **The Mind's Eye**. It is written for Adam Bell, human contributors, Codex, and future AI agents.
+This document translates `docs/CONSTITUTION.md` into the approved technical and product architecture. The Constitution controls if the documents conflict.
 
 ## Architecture Position
 
-The Mind's Eye should be designed from the beginning as a repeatable historical simulation platform, not as a one-off Texarkana game.
+The Mind's Eye is an evidence-first historical knowledge and learning platform that can later power interactive worlds and gameplay.
 
-That does **not** mean the first build should attempt every town, every school subject, or every game mechanic. It means the first build should prove the repeatable architecture with one narrow vertical slice.
+Texarkana is the first town package, not a one-town architecture.
 
-The correct balance is:
-
-> **Design for many towns. Build only Texarkana 1885 first.**
-
-This is not scope creep. It is the core product thesis. If town scalability is postponed until later, the first prototype may become a hard-coded historical demo that is expensive to generalize. The first prototype should therefore use a town-package contract even if only one town package exists at first.
-
-## North Star
-
-The first working system should prove this loop:
-
-1. Ingest real historical source material.
-2. Connect source facts to a numbered Sanborn/location map.
-3. Distinguish verified fact, source-based inference, and fictional gameplay.
-4. Generate one playable classroom mission.
-5. Show teacher-facing citations and source notes.
-6. Let students experience local history as an explorable world.
-
-## First Prototype Boundary
-
-The first prototype is the **Texarkana 1885 Quest Engine**.
-
-It should include:
-
-- one town package: `texarkana`;
-- one approximate historical period: 1885;
-- one map layer based on Sanborn Fire Insurance map evidence;
-- a numbered building/location index;
-- a small set of verified facts and source-based inferences;
-- one student-facing mission;
-- one teacher-facing source note;
-- a citation/provenance display pattern;
-- and a narrow interaction loop that can be tested.
-
-It should not attempt yet:
-
-- full multiplayer at scale;
-- every school subject;
-- every Texas standard;
-- every historical source type;
-- open-world generation without constraints;
-- automatic support for all towns;
-- production student rostering;
-- or district-level deployment.
-
-## Core Design Rule
-
-The product must always separate:
-
-1. **Verified historical facts** — directly supported by source evidence.
-2. **Source-based inferences** — reasonable conclusions based on available evidence.
-3. **Fictional gameplay additions** — invented for engagement, challenge, pacing, or story.
-
-No AI-generated mission, NPC line, map description, classroom handout, or teacher note should blur these categories.
-
-## Four-Engine Architecture
-
-The system should be organized around four conceptual engines. The exact code folders may evolve, but these boundaries should remain clear.
-
-### 1. World / Map Engine
-
-Purpose: represent the explorable historical town.
-
-Responsibilities:
-
-- streets;
-- intersections;
-- buildings;
-- numbered locations;
-- movement rules;
-- map bounds;
-- historical time window;
-- spatial relationship between places;
-- and map-linked source evidence.
-
-The Sanborn map is not decorative. It is a gameplay and reasoning layer. A student should eventually be able to say something like:
-
-> I walk down Fifth Street past the livery.
-
-The system should know whether that movement makes sense inside the mapped town.
-
-### 2. Knowledge / Provenance Engine
-
-Purpose: manage evidence, citations, confidence, and historical claims.
-
-Responsibilities:
-
-- source records;
-- citation metadata;
-- claims;
-- confidence levels;
-- source chains;
-- inferred relationships;
-- historical uncertainty;
-- retrieval over source text;
-- and claim inspection for teachers/students.
-
-Core principle:
-
-> Nothing historical in the world should exist without provenance.
-
-This does not mean every detail must be fully verified. It means the system must label whether a detail is verified, inferred, or fictional.
-
-### 3. Story / Mission Engine
-
-Purpose: turn teacher goals and historical evidence into playable missions.
-
-Responsibilities:
-
-- teacher-selected subject;
-- grade level;
-- standard or learning target;
-- mission hook;
-- mission objective;
-- NPC dialogue;
-- clue structure;
-- challenge design;
-- student handouts;
-- and teacher notes.
-
-The Story Engine may create dramatic framing, but it must respect the Knowledge / Provenance Engine.
-
-### 4. Game / Classroom Engine
-
-Purpose: run the classroom experience.
-
-Responsibilities:
-
-- player/session state;
-- student choices;
-- group progress;
-- classroom pacing;
-- clue inventory;
-- teacher controls;
-- mission completion;
-- and later multiplayer behavior.
-
-The first prototype may use a simple classroom loop instead of a full game engine.
-
-## Town Package Contract
-
-A town should be treated as a content/data package connected to the shared engine.
-
-A future structure may look like this:
+The build order is intentional:
 
 ```text
-data/
-  towns/
-    texarkana/
-      metadata.json
-      timeline.json
-      sources/
-      maps/
-      places/
-      buildings/
-      businesses/
-      people/
-      events/
-      claims/
-      citations/
-      missions/
+Provenance and Source Layer
+  -> Community Verification Layer
+  -> Released Historical Knowledge Layer
+  -> Historical World Layer
+  -> Educational Layer
+  -> Interactive Gameplay Layer
 ```
 
-For the first prototype, this structure may be lightweight, but the code should avoid hard-coding Texarkana-specific assumptions into the engine.
+The system must not begin at gameplay and work backward toward evidence.
 
-### Minimum Town Package Fields
+## Current Runtime Architecture
 
-A town package should eventually define:
+- **GitHub** — source control, pull requests, checks, and review history.
+- **Next.js in `apps/web`** — public product application.
+- **Vercel** — preview and production review surface.
+- **Supabase** — persistent application data and later authentication/RLS.
+- **Python** — ingestion, OCR support, transformation, analysis, geospatial processing, evaluation, exports, and background tools.
+- **Codex/AI agents** — bounded implementation and candidate generation.
+- **Humans** — historical verification, product acceptance, and merge authority.
 
-- town name;
-- state/region;
-- time window;
-- source manifest;
-- map layers;
-- street names;
-- location IDs;
-- building records;
-- known businesses;
-- known people;
-- known events;
-- historical claims;
-- citations;
-- confidence labels;
-- and allowed mission settings.
+A public feature is not complete merely because a local script or local page works.
 
-### Rule for Expansion
+## Layer 1 — Provenance and Source Engine
 
-Adding a new town should primarily mean adding structured historical data and source records, not rewriting the core engine.
+Purpose: preserve the evidence base and make every derived record traceable.
 
-This should guide every early code decision.
+Core responsibilities:
 
-## Provenance Model
+- source records;
+- archive and rights metadata;
+- URLs and stable identifiers;
+- page, issue, sheet, date, and excerpt references;
+- raw response caching;
+- OCR fragments;
+- source manifests;
+- source-to-claim links;
+- source-to-entity links;
+- AI contribution metadata;
+- citation rendering;
+- uncertainty and conflict preservation.
 
-Every historically meaningful claim should have a provenance record.
+Raw source records must remain separate from normalized and derived records.
 
-A claim should eventually include:
+## Layer 2 — Community Verification Engine
+
+Purpose: let community reviewers turn evidence into reviewed historical records.
+
+Primary product routes:
+
+- `/community`
+- `/community/map-auditor`
+- `/community/building-auditor`
+- `/community/people-auditor`
+- `/community/source-provenance-inspector`
+- `/community/release-gate`
+- `/community/sources/[sourceId]`
+
+Core responsibilities:
+
+- candidate queues;
+- status summaries;
+- evidence inspection;
+- map-layer review;
+- building review;
+- people and business review;
+- duplicate candidates;
+- append-only review events;
+- unresolved blockers;
+- release readiness.
+
+This layer is the first real product and must stabilize before teacher, student, or gameplay expansion.
+
+## Layer 3 — Historical Knowledge Graph
+
+Purpose: represent reviewed entities and relationships without losing provenance.
+
+Core entity families:
+
+- towns;
+- sources;
+- claims;
+- maps and map layers;
+- roads and railroads;
+- buildings;
+- people;
+- businesses;
+- institutions;
+- events;
+- artifacts and assets.
+
+Core relationship examples:
+
+- person -> owned -> business;
+- business -> occupied -> building;
+- building -> appeared_on -> map sheet;
+- event -> mentioned_in -> newspaper issue;
+- claim -> supported_by -> source;
+- world object -> derived_from -> released Community record.
+
+Relationships are reviewable historical records. They require classification, certainty, source linkage, and review state.
+
+## Layer 4 — Release Engine
+
+Purpose: prevent unfinished or unsupported history from entering public, educational, or gameplay products.
+
+Expected structures:
+
+- `release_gate_checks`;
+- `release_gate_blockers`;
+- `release_gate_runs`;
+- release reports and summaries.
+
+Typical blockers:
+
+- unreviewed buildings, people, businesses, claims, or map layers;
+- missing source records;
+- unsupported relationships;
+- unresolved duplicates;
+- citation or rights warnings;
+- illustrative assets mislabeled as evidence;
+- unresolved reviewer concerns.
+
+A release state should be explicit, such as ready, guarded, or blocked.
+
+## Layer 5 — Historical World Engine
+
+Purpose: turn released historical knowledge into a navigable and simulated town.
+
+Expected domains:
+
+- world locations;
+- world buildings;
+- world people and businesses;
+- routes and travel times;
+- time and event state;
+- commerce, goods, and inventory;
+- institutions and civic systems;
+- weather and environment;
+- NPC and social behavior.
+
+Historical world objects must link back to released Community records. Added dramatic or simulated details must remain clearly classified as illustrative or fictional gameplay.
+
+## Layer 6 — Educational Engine
+
+Purpose: let teachers create rigorous, standards-aligned learning experiences from released history.
+
+Expected domains:
+
+- classes and lesson plans;
+- standards and objectives;
+- mission packets;
+- source sets;
+- artifact assignments;
+- rubrics;
+- student progress;
+- teacher review and override.
+
+Teacher approval is required before AI-drafted missions, feedback, or assessments become student-facing or final.
+
+## Layer 7 — Interactive and Classroom Engine
+
+Purpose: run missions, NPC interactions, group sessions, and multiplayer experiences.
+
+Expected domains:
+
+- mission runtime;
+- AI narrator and NPC contracts;
+- map exploration;
+- player and group state;
+- classroom controls;
+- source interaction;
+- artifact creation and submission;
+- session logs.
+
+The AI Game Master must obey evidence classifications, teacher boundaries, safety rules, and source constraints.
+
+## Evidence Classification Contract
+
+Every historically meaningful record must use exactly one classification:
+
+```text
+verified_fact
+source_based_inference
+illustrative
+fictional_gameplay
+unknown
+rejected
+```
+
+Classification is distinct from review workflow status.
+
+A new imported, extracted, or AI-generated candidate must begin in a non-verified state.
+
+## Core Record Expectations
+
+A historical record should be capable of carrying:
 
 ```json
 {
-  "claim_id": "claim_texarkana_1885_0001",
-  "claim_text": "Example historical claim.",
-  "claim_type": "verified_fact | source_based_inference | fictional_gameplay",
-  "confidence": "high | medium | low | fictional",
-  "related_entities": ["building_001", "person_001"],
-  "sources": ["source_001"],
-  "reasoning_note": "Short explanation of why this claim is labeled this way.",
-  "student_visible": true,
-  "teacher_visible": true
+  "id": "stable-id",
+  "town_package_id": "texarkana-1885",
+  "evidence_classification": "source_based_inference",
+  "review_status": "pending",
+  "certainty": "medium",
+  "source_links": ["source-id"],
+  "review_event_ids": [],
+  "created_by_type": "human | ai | import | script",
+  "released_at": null,
+  "notes": "Reasoning, uncertainty, and review context"
 }
 ```
 
-### Citation Strength Concept
+Exact table shapes may evolve, but these concepts must remain available.
 
-The interface may represent support strength visually:
+## Review Event Contract
 
-- single-source support: subtle citation icon;
-- multiple independent sources: stronger citation indicator;
-- inference: distinct icon or label;
-- fictional gameplay: clearly marked as invented.
+Review actions should create an append-only event containing, as applicable:
 
-This should be implemented carefully so the citation display improves historical thinking instead of cluttering gameplay.
+- target table/type;
+- target ID;
+- previous status;
+- next status;
+- reviewer;
+- timestamp;
+- summary;
+- review note;
+- source or evidence impact.
 
-## Inference Rules
+Approve, needs evidence, reject, defer, and merge-candidate actions must not erase prior state.
 
-The system may infer likely relationships when sources are incomplete, but it must label those relationships honestly.
+## Town Package Contract
 
-Examples:
-
-- If a newspaper mentions an event at a business and the map identifies the business location, the system may connect the event to that location.
-- If a directory names a business owner and a Sanborn map identifies the business building, the system may infer a likely owner-building connection.
-- If a source gives a partial name, the system may suggest candidate matches only with a confidence label.
-
-The system must not present guesses as verified facts.
-
-## Source Ingestion Architecture
-
-The first ingestion work should be boring and reliable.
-
-Priority order:
-
-1. Source manifest.
-2. Raw source record.
-3. Normalized source record.
-4. Extracted claim.
-5. Entity link.
-6. Citation link.
-7. Mission use.
-
-Suggested data areas:
+A town package should contain, as available:
 
 ```text
-data/
-  raw/
-  normalized/
-  towns/
-  schemas/
-  citations/
-  eval_sets/
+town identity and time window
+source manifest and rights notes
+source records and cached raw responses
+maps, sheets, layers, and control points
+roads, railroads, annotations, and locations
+buildings, people, businesses, institutions, and events
+claims, relationships, citations, and certainty
+review queues, review events, and release reports
+approved assets, world objects, lesson packets, and missions
 ```
 
-Raw data should be preserved separately from normalized data.
+Reusable code must read town-specific data and configuration rather than embed Texarkana assumptions in shared logic.
 
-Normalized data should never destroy the source trail.
+## Safe Data-Source Behavior
 
-## AI Agent Readiness Rules
+While Supabase integration is stabilizing:
 
-AI agents may help build the project, but they must obey the architecture contract.
+- the app must build without authentication unless the current phase explicitly adds it;
+- missing environment variables must produce a visible warning, not a fabricated success;
+- empty or unavailable Supabase data must fail safely;
+- demo fallback may remain but must be clearly labeled;
+- every relevant route should visibly identify the active data source;
+- demo records must never be displayed as verified production records.
 
-Agents should:
+## Production Review Workflow
 
-- read `README.md`, `PROJECT_GOAL.md`, this file, and `AGENTS.md` before coding;
-- preserve the fact / inference / fiction boundary;
-- avoid hard-coding Texarkana into reusable engine code;
-- add or update tests when changing behavior;
-- add schema validation before adding complex data;
-- document any new architectural decision;
-- and keep the MVP focused on the Texarkana 1885 vertical slice.
+For each meaningful PR:
 
-Agents should not:
+1. Codex creates a focused branch and PR.
+2. Repository checks and the relevant build pass.
+3. ChatGPT or a human reviewer checks scope and `docs/PR_REVIEW_CHECKLIST.md`.
+4. Vercel preview is inspected for web-facing changes.
+5. The PR is merged only after acceptance.
+6. Production deployment is reviewed.
+7. The next PR begins only after the prior increment is accepted.
 
-- casually restructure the repository;
-- replace the prototype goal with a large platform build;
-- build unsupported AI behavior without evals;
-- mix provenance logic into mission prose generation without clear labels;
-- ingest copyrighted or restricted source content without source-rights notes;
-- collect student data before privacy rules are defined;
-- or create production deployment assumptions without documenting them.
+## Current Build Sequence
 
-## MVP Implementation Sequence
+The active roadmap is:
 
-### Phase 0 — Specification Gate
+1. Verify the Supabase-backed Community read foundation.
+2. Polish the Community dashboard without adding backend scope.
+3. Add real Supabase status summaries and review-event timelines.
+4. Build the Source / Provenance Inspector and reusable citation display.
+5. Build Map Auditor data and review foundations.
+6. Build Building Auditor candidates, details, and first review writes.
+7. Build People and Business review workflows.
+8. Build and enforce the Release Gate.
+9. Add conservative source ingestion and candidate generation.
+10. Add reviewed illustrative asset pipelines.
+11. Build the Historical World Engine from released records.
+12. Add teacher, student, assessment, AI Game Master, and classroom layers in that order.
+13. Prove repeatability with a second town package.
 
-Before heavy Codex implementation, add or confirm:
+## Architectural Guardrails
 
-- `ARCHITECTURE.md`;
-- `AGENTS.md`;
-- town package spec;
-- provenance model;
-- prompt registry;
-- MVP roadmap;
-- data/source manifest pattern;
-- testing expectations;
-- and IP/privacy cautions.
+Do not:
 
-### Phase 1 — Static Historical Dataset
-
-Build a small hand-curated Texarkana 1885 dataset:
-
-- source records;
-- map locations;
-- buildings;
-- claims;
-- citations;
-- and confidence labels.
-
-No AI magic yet. Get the data shape right first.
-
-### Phase 2 — Provenance-Aware Mission Generator
-
-Generate one mission from the dataset.
-
-The output must include:
-
-- student hook;
-- mission objective;
-- NPC/context text;
-- claim labels;
-- citations;
-- and teacher notes.
-
-### Phase 3 — Map-Linked Interaction
-
-Connect mission locations to numbered map/building IDs.
-
-The student should be able to reason spatially inside the historical town.
-
-### Phase 4 — Teacher Review Layer
-
-Add teacher-facing controls:
-
-- view claims;
-- inspect citations;
-- approve/edit mission text;
-- see which parts are fact, inference, or fiction;
-- and export/use classroom materials.
-
-### Phase 5 — Classroom Pilot Preparation
-
-Before real students use the system, add:
-
-- privacy baseline;
-- no unnecessary student data collection;
-- deletion/retention posture;
-- pilot agreement templates;
-- and basic usage analytics that do not expose student PII unless absolutely necessary.
-
-## Grant Readiness Alignment
-
-The architecture should support non-dilutive grant framing.
-
-Strong grant framing:
-
-> The Mind's Eye is a provenance-aware AI historical simulation platform that helps teachers generate standards-aligned, evidence-based learning missions from local primary sources.
-
-The technical novelty is not simply that AI writes missions. The technical novelty is the combination of:
-
-- town-package architecture;
-- map-linked historical simulation;
-- claim-level provenance;
-- confidence-labeled inference;
-- teacher-directed mission generation;
-- and classroom-ready historical inquiry.
+- treat Python pages as the public product;
+- merge the obsolete Python community web shell as-is;
+- introduce auth, teacher, student, or gameplay scope before its approved phase;
+- hard-code a one-town engine;
+- mix raw, normalized, reviewed, and released records without clear boundaries;
+- let AI verify its own historical output;
+- hide data-source or release state;
+- remove review history;
+- or build world/lesson/game objects that cannot trace back to provenance.
 
 ## Final Architecture Decision
 
-The system should remain simple in early implementation, but not conceptually one-off.
-
-The approved direction is:
-
-> Build the Texarkana 1885 prototype as the first town package in a repeatable engine. Do not hard-code the project into a single-town demo. Do not expand the MVP beyond what is needed to prove that repeatable engine.
+> Build the Community evidence and release system first. Every later world, lesson, and gameplay object must derive from reviewed, provenance-aware records in a repeatable town-package architecture.
