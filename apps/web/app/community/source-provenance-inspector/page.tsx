@@ -1,13 +1,14 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Source / Provenance Inspector | The Mind's Eye",
 };
 
-export default function SourceProvenanceInspectorPage() {
-  const { sourceProvenanceInspector } = communityDemo;
+export default async function SourceProvenanceInspectorPage() {
+  const { data: communityData } = await loadCommunityData();
+  const { sourceProvenanceInspector } = communityData;
 
   return (
     <div className="content-grid content-grid--split">

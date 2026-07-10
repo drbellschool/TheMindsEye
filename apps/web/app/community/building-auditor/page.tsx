@@ -1,13 +1,14 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Building Auditor | The Mind's Eye",
 };
 
-export default function BuildingAuditorPage() {
-  const { buildingAuditor } = communityDemo;
+export default async function BuildingAuditorPage() {
+  const { data: communityData } = await loadCommunityData();
+  const { buildingAuditor } = communityData;
 
   return (
     <div className="content-grid content-grid--three">

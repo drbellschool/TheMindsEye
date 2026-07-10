@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 
 import { CommunityShell } from "@/components/CommunityShell";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
-export default function CommunityLayout({
+export default async function CommunityLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
-  return <CommunityShell demo={communityDemo}>{children}</CommunityShell>;
+  const { data: communityData } = await loadCommunityData();
+
+  return <CommunityShell demo={communityData}>{children}</CommunityShell>;
 }

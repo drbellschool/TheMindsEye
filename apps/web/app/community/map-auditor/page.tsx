@@ -1,14 +1,15 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Map Auditor | The Mind's Eye",
 };
 
-export default function MapAuditorPage() {
-  const { mapAuditor } = communityDemo;
+export default async function MapAuditorPage() {
+  const { data: communityData } = await loadCommunityData();
+  const { mapAuditor } = communityData;
 
   return (
     <div className="content-grid content-grid--three">
@@ -95,7 +96,7 @@ export default function MapAuditorPage() {
         </Panel>
 
         <Panel eyebrow="Legend" title="Review states" subtitle="Align map decisions with provenance labels." tone="dark">
-          <LegendList items={communityDemo.reviewLegend} />
+          <LegendList items={communityData.reviewLegend} />
         </Panel>
 
         <Panel eyebrow="History" title="Recent actions" subtitle="Alignment history and unresolved items." tone="dark">

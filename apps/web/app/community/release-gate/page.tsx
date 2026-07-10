@@ -1,13 +1,14 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "Release Gate | The Mind's Eye",
 };
 
-export default function ReleaseGatePage() {
-  const { releaseGate } = communityDemo;
+export default async function ReleaseGatePage() {
+  const { data: communityData } = await loadCommunityData();
+  const { releaseGate } = communityData;
 
   return (
     <div className="content-grid content-grid--split">

@@ -1,14 +1,15 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
-import { communityDemo } from "@/lib/demo-data";
+import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
   title: "People Auditor | The Mind's Eye",
 };
 
-export default function PeopleAuditorPage() {
-  const { peopleAuditor } = communityDemo;
+export default async function PeopleAuditorPage() {
+  const { data: communityData } = await loadCommunityData();
+  const { peopleAuditor } = communityData;
 
   return (
     <div className="content-grid content-grid--three">
