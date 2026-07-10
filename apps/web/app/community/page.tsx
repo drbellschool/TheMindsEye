@@ -1,5 +1,6 @@
+import Link from "next/link";
+
 import { KeyValueList } from "@/components/KeyValueList";
-import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
 import { RouteCard } from "@/components/RouteCard";
 import { StatusChip } from "@/components/StatusChip";
@@ -9,92 +10,201 @@ export const metadata = {
   title: "Community Dashboard | The Mind's Eye",
 };
 
+function formatLastSync(source: "supabase" | "demo_fallback", history: string[]) {
+  if (source === "demo_fallback") {
+    return {
+      value: "Demo snapshot",
+      detail: "Supabase is unavailable, so the dashboard is using the safe demo fallback.",
+    };
+  }
+
+  const datedEntry = history.find((entry) => /\b\d{4}-\d{2}-\d{2}\b/.test(entry));
+  const match = datedEntry?.match(/\b\d{4}-\d{2}-\d{2}\b/);
+
+  return {
+    value: match?.[0] ?? "Live Supabase read",
+    detail: datedEntry ?? "Supabase data loaded, but no dated review history is available yet.",
+  };
+}
+
+function getChipState(chip: { state: string } | undefined, fallbackState: string) {
+  return chip?.state ?? fallbackState;
+}
+
+function getChipValue(chip: { value: string } | undefined, fallbackValue: string) {
+  return chip?.value ?? fallbackValue;
+}
+
 export default async function CommunityDashboardPage() {
-  const { data: communityData } = await loadCommunityData();
-  const { communityDashboard, reviewLegend, routeCards } = communityData;
+  const { data: communityData, source } = await loadCommunityData();
+  const { communityDashboard, routeCards, summary, town } = communityData;
+  const routeCardsByHref = new Map(routeCards.map((route) => [route.href, route]));
+  const primaryRouteCards = [
+    routeCardsByHref.get("/community/map-auditor"),
+    routeCardsByHref.get("/community/building-auditor"),
+    routeCardsByHref.get("/community/people-auditor"),
+  ].filter((route): route is NonNullable<typeof route> => Boolean(route));
+  const sourceInspectorRoute = routeCardsByHref.get("/community/source-provenance-inspector");
+  const releaseGateRoute = routeCardsByHref.get("/community/release-gate");
+  const statusChipByLabel = new Map(communityData.statusChips.map((chip) => [chip.label, chip]));
+  const sourcesChip = statusChipByLabel.get("Sources");
+  const sheetsChip = statusChipByLabel.get("Sheets");
+  const buildingsChip = statusChipByLabel.get("Buildings");
+  const peopleChip = statusChipByLabel.get("People");
+  const businessesChip = statusChipByLabel.get("Businesses");
+  const releaseChip = statusChipByLabel.get("Release");
+  const dashboardStatusChips = [
+    { label: "Sources", value: getChipValue(sourcesChip, String(summary.sources)), state: getChipState(sourcesChip, "guarded") },
+    { label: "Map layers", value: getChipValue(sheetsChip, String(summary.sheets)), state: getChipState(sheetsChip, "guarded") },
+    { label: "Buildings", value: getChipValue(buildingsChip, String(summary.buildings)), state: getChipState(buildingsChip, "guarded") },
+    { label: "People", value: getChipValue(peopleChip, String(summary.people)), state: getChipState(peopleChip, "guarded") },
+    { label: "Businesses", value: getChipValue(businessesChip, String(summary.businesses)), state: getChipState(businessesChip, "guarded") },
+    {
+      label: "Unresolved",
+      value: String(summary.unresolved),
+      state: summary.unresolved > 0 ? "blocked" : "ready",
+    },
+    { label: "Release", value: getChipValue(releaseChip, communityDashboard.releaseGate.state), state: getChipState(releaseChip, "guarded") },
+  ];
+  const activeYear = town.year > 0 ? town.year : null;
+  const yearGateStart = activeYear ? activeYear - 10 : null;
+  const yearGateEnd = activeYear ? activeYear + 10 : null;
+  const lastSync = formatLastSync(source, communityDashboard.history);
+  const packageFields = [
+    {
+      label: "Town package",
+      value: town.name,
+      detail: "Active Community verification surface.",
+    },
+    {
+      label: "Package ID",
+      value: town.packageId,
+      detail: "Reusable town-package identifier.",
+    },
+    {
+      label: "Region",
+      value: town.stateRegion,
+      detail: "Regional scope for the active package.",
+    },
+    {
+      label: "Active year",
+      value: activeYear ? String(activeYear) : "unknown",
+      detail: "Historical year centered in the review band.",
+    },
+    {
+      label: "Release state",
+      value: communityDashboard.releaseGate.state,
+      detail: communityDashboard.releaseGate.reason,
+    },
+    {
+      label: "Last sync",
+      value: lastSync.value,
+      detail: lastSync.detail,
+    },
+  ];
 
   return (
-    <div className="shell-grid shell-grid--dashboard">
-      <div className="content-grid">
-        <Panel
-          eyebrow={communityDashboard.hero.eyebrow}
-          title={communityDashboard.hero.title}
-          subtitle={communityDashboard.hero.subtitle}
-          tone="paper"
-        >
-          <div className="panel-grid panel-grid--2">
-            <div className="callout">
-              <p className="muted">Year gate</p>
-              <strong>{communityDashboard.yearGate.value}</strong>
-              <p className="small-muted">{communityDashboard.yearGate.detail}</p>
-            </div>
-            <div className="callout">
-              <p className="muted">Release gate</p>
-              <strong>{communityDashboard.releaseGate.state}</strong>
-              <p className="small-muted">{communityDashboard.releaseGate.reason}</p>
-            </div>
-          </div>
-          <div className="status-strip" style={{ marginTop: 16 }}>
-            {communityData.statusChips.map((chip) => (
-              <StatusChip key={chip.label} label={chip.label} value={chip.value} state={chip.state} />
-            ))}
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Primary Routes" title="Route cards" subtitle="Jump into the specialized community auditors." tone="paper">
-          <div className="panel-grid panel-grid--2">
-            {routeCards.map((route) => (
-              <RouteCard key={route.href} {...route} />
-            ))}
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Coverage" title="Review status overview" subtitle="Community readiness and scope gates." tone="paper">
-          <KeyValueList
-            items={communityDashboard.overviewCards.map((item) => ({
-              label: item.label,
-              value: item.value,
-              detail: item.detail,
-            }))}
-          />
-          <div className="progress" style={{ marginTop: 16 }}>
-            <span style={{ width: `${communityData.summary.progressPercent}%` }} />
-          </div>
-        </Panel>
-
-        <Panel eyebrow="Scope" title="Town ladder" subtitle="Community review sits upstream of classroom systems." tone="paper">
-          <div className="panel-grid panel-grid--3">
-            {communityDashboard.scopeLadder.map((item) => (
-              <div className="small-card" key={item.label}>
-                <p className="muted">{item.label}</p>
-                <strong>{item.value}</strong>
-                <p className="small-muted">{item.detail}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
-
-      <aside className="content-grid">
-        <Panel eyebrow="Release Gate" title="Blockers" subtitle="These keep the town in guarded status." tone="dark">
-          {communityDashboard.blockers.length > 0 ? (
-            <div className="blocker-list">
-              {communityDashboard.blockers.map((blocker) => (
-                <span className="tag state-blocked" key={blocker}>
-                  {blocker}
-                </span>
+    <div className="community-dashboard">
+      <Panel
+        className="dashboard-hero"
+        eyebrow={communityDashboard.hero.eyebrow}
+        title={communityDashboard.hero.title}
+        subtitle={communityDashboard.hero.subtitle}
+        tone="dark"
+      >
+        <div className="dashboard-hero__grid">
+          <div className="dashboard-hero__copy">
+            <div className="dashboard-package-grid">
+              {packageFields.map((field) => (
+                <div className="dashboard-package-card" key={field.label}>
+                  <p className="dashboard-package-card__label">{field.label}</p>
+                  <strong>{field.value}</strong>
+                  <p className="small-muted">{field.detail}</p>
+                </div>
               ))}
             </div>
-          ) : (
-            <p className="small-muted">No unresolved review events are currently blocking release.</p>
-          )}
-        </Panel>
 
-        <Panel eyebrow="Evidence" title="Inspector" subtitle="Raw source trail and review state." tone="dark">
+            <div className="dashboard-status-strip">
+              {dashboardStatusChips.map((chip) => (
+                <StatusChip key={chip.label} label={chip.label} value={chip.value} state={chip.state} />
+              ))}
+            </div>
+          </div>
+
+          <div className="dashboard-gate-stack">
+            <div className="dashboard-year-band">
+              <div className="dashboard-year-band__header">
+                <div>
+                  <p className="dashboard-section-label">Year Gate</p>
+                  <strong>{activeYear ? `${yearGateStart}-${yearGateEnd}` : "Historical year unavailable"}</strong>
+                  <p className="small-muted">{communityDashboard.yearGate.detail}</p>
+                </div>
+                <span className="dashboard-year-band__badge">{activeYear ? `${activeYear} center year` : "Awaiting year"}</span>
+              </div>
+
+              {activeYear ? (
+                <div className="dashboard-year-band__track" aria-label={`20-year evidence band centered on ${activeYear}`}>
+                  <span className="dashboard-year-band__edge">{yearGateStart}</span>
+                  <div className="dashboard-year-band__rail">
+                    <span className="dashboard-year-band__fill" />
+                    <span className="dashboard-year-band__marker" />
+                    <div className="dashboard-year-band__ticks" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                  <span className="dashboard-year-band__edge">{yearGateEnd}</span>
+                </div>
+              ) : (
+                <p className="small-muted">A 20-year evidence band will appear after the active historical year is loaded.</p>
+              )}
+            </div>
+
+            <div className="dashboard-release-callout">
+              <div className="dashboard-release-callout__row">
+                <div>
+                  <p className="dashboard-section-label">Release Gate</p>
+                  <strong>{communityDashboard.releaseGate.state}</strong>
+                </div>
+                <span className={`tag state-${communityDashboard.releaseGate.state}`}>{summary.progressPercent}% reviewed</span>
+              </div>
+              <p className="small-muted">{communityDashboard.releaseGate.reason}</p>
+              <div className="progress">
+                <span style={{ width: `${summary.progressPercent}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <section className="dashboard-route-grid" aria-label="Primary community auditor routes">
+        {primaryRouteCards.map((route) => (
+          <RouteCard className="route-card--feature" key={route.href} {...route} />
+        ))}
+      </section>
+
+      <div className="dashboard-summary-grid">
+        <Panel
+          action={
+            sourceInspectorRoute ? (
+              <Link className="dashboard-panel-link" href={sourceInspectorRoute.href}>
+                Open inspector
+              </Link>
+            ) : null
+          }
+          className="dashboard-summary-panel"
+          eyebrow="Source / Provenance Inspector"
+          title={communityDashboard.evidenceInspector.title}
+          subtitle={communityDashboard.evidenceInspector.summary}
+          tone="paper"
+        >
           <div className="callout">
             <p className="muted">{communityDashboard.evidenceInspector.sourceId}</p>
-            <strong>{communityDashboard.evidenceInspector.title}</strong>
-            <p className="small-muted">{communityDashboard.evidenceInspector.summary}</p>
+            <strong>{sourceInspectorRoute?.title ?? "Provenance drill-down"}</strong>
+            <p className="small-muted">{sourceInspectorRoute?.text ?? "Review the raw source trail, OCR, rights, and linked records."}</p>
           </div>
           <KeyValueList
             items={communityDashboard.evidenceInspector.fields.map((item) => ({
@@ -105,18 +215,71 @@ export default async function CommunityDashboardPage() {
           />
         </Panel>
 
-        <Panel eyebrow="Legend" title="Review states" subtitle="Verified, inferred, illustrative, unknown, rejected." tone="dark">
-          <LegendList items={reviewLegend} />
+        <Panel
+          action={
+            releaseGateRoute ? (
+              <Link className="dashboard-panel-link dashboard-panel-link--dark" href={releaseGateRoute.href}>
+                Open release gate
+              </Link>
+            ) : null
+          }
+          className="dashboard-summary-panel"
+          eyebrow="Release Gate Summary"
+          title={releaseGateRoute?.title ?? "Handoff report"}
+          subtitle={releaseGateRoute?.text ?? "Blockers, criteria, and readiness status."}
+          tone="dark"
+        >
+          <div className="release-banner">
+            <div className="release-banner__state">{communityDashboard.releaseGate.state}</div>
+            <div className="progress">
+              <span style={{ width: `${summary.progressPercent}%` }} />
+            </div>
+            <p className="small-muted">{communityDashboard.releaseGate.reason}</p>
+          </div>
+          <KeyValueList
+            items={communityData.releaseGate.criteria.slice(0, 4).map((criterion) => ({
+              label: criterion.label,
+              value: criterion.value,
+              detail: criterion.detail,
+            }))}
+          />
         </Panel>
+      </div>
 
-        <Panel eyebrow="History" title="Recent activity" subtitle="Town changes and review actions." tone="dark">
-          <div className="small-muted">
-            {communityDashboard.history.map((item) => (
-              <p key={item}>{item}</p>
+      <div className="dashboard-summary-grid">
+        <Panel eyebrow="Recent Review History" title="Latest review events" subtitle="Keep recent community decisions visible." tone="paper">
+          <div className="dashboard-history-list">
+            {communityDashboard.history.map((item, index) => (
+              <div className="dashboard-history-item" key={`${item}-${index}`}>
+                <span className="dashboard-history-item__marker" aria-hidden="true" />
+                <p>{item}</p>
+              </div>
             ))}
           </div>
         </Panel>
-      </aside>
+
+        <Panel eyebrow="Unresolved Blockers" title="What still blocks release" subtitle="These items stay visible until the release gate is satisfied." tone="dark">
+          <div className="dashboard-blocker-summary">
+            <div className="dashboard-blocker-summary__count">
+              <p className="dashboard-section-label">Open blockers</p>
+              <strong>{summary.unresolved}</strong>
+              <p className="small-muted">Items still blocking the town package handoff.</p>
+            </div>
+
+            {communityDashboard.blockers.length > 0 ? (
+              <div className="blocker-list">
+                {communityDashboard.blockers.map((blocker) => (
+                  <span className="tag state-blocked" key={blocker}>
+                    {blocker}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="small-muted">No unresolved review events are currently blocking release.</p>
+            )}
+          </div>
+        </Panel>
+      </div>
     </div>
   );
 }
