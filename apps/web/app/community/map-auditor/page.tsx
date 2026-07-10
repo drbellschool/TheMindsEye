@@ -1,6 +1,7 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -93,6 +94,7 @@ export default async function MapAuditorPage() {
               detail: item.detail,
             }))}
           />
+          <SourceLinkList links={mapAuditor.evidence.sourceLinks} emptyLabel="No linked source" />
         </Panel>
 
         <Panel eyebrow="Legend" title="Review states" subtitle="Align map decisions with provenance labels." tone="dark">

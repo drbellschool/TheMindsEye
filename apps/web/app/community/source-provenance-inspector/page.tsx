@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -11,15 +12,14 @@ export const metadata = {
 export default async function SourceProvenanceInspectorPage() {
   const { data: communityData } = await loadCommunityData();
   const { sourceProvenanceInspector } = communityData;
-  const sourceId = sourceProvenanceInspector.source.fields.find((field) => field.label === "Source ID")?.value;
-  const sourceDetailHref = sourceId && sourceId.startsWith("source_") ? `/community/sources/${encodeURIComponent(sourceId)}` : null;
+  const primarySourceLink = sourceProvenanceInspector.source.sourceLinks[0];
 
   return (
     <div className="content-grid content-grid--split">
       <Panel
         action={
-          sourceDetailHref ? (
-            <Link className="dashboard-panel-link" href={sourceDetailHref}>
+          primarySourceLink ? (
+            <Link className="dashboard-panel-link" href={primarySourceLink.href}>
               Open source detail
             </Link>
           ) : null
@@ -36,6 +36,7 @@ export default async function SourceProvenanceInspectorPage() {
             detail: item.detail,
           }))}
         />
+        <SourceLinkList links={sourceProvenanceInspector.source.sourceLinks} emptyLabel="Source unavailable" />
       </Panel>
 
       <Panel eyebrow="OCR" title="Page text" subtitle="OCR is an aid, not the canonical record." tone="map">

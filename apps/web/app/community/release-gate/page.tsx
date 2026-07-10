@@ -1,5 +1,6 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -44,6 +45,7 @@ export default async function ReleaseGatePage() {
             detail: criterion.detail,
           }))}
         />
+        <SourceLinkList links={releaseGate.sourceLinks} emptyLabel="No linked source" />
       </Panel>
 
       <Panel eyebrow="Export" title="Human handoff" subtitle="Preview, summarize, and export the current review state." tone="dark">

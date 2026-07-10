@@ -1,6 +1,7 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -23,6 +24,7 @@ export default async function PeopleAuditorPage() {
             </div>
           ))}
         </div>
+        <SourceLinkList links={peopleAuditor.sourceLinks} emptyLabel="No linked source" />
       </Panel>
 
       <Panel eyebrow="Person review" title={peopleAuditor.personReview.title} subtitle={peopleAuditor.personReview.subtitle} tone="dark">
@@ -33,6 +35,7 @@ export default async function PeopleAuditorPage() {
             detail: item.detail,
           }))}
         />
+        <SourceLinkList links={peopleAuditor.personReview.sourceLinks} emptyLabel="No linked source" />
       </Panel>
 
       <Panel eyebrow="Business review" title={peopleAuditor.businessReview.title} subtitle={peopleAuditor.businessReview.subtitle} tone="dark">
@@ -43,6 +46,7 @@ export default async function PeopleAuditorPage() {
             detail: item.detail,
           }))}
         />
+        <SourceLinkList links={peopleAuditor.businessReview.sourceLinks} emptyLabel="No linked source" />
       </Panel>
 
       <aside className="content-grid">
