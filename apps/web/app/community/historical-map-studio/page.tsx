@@ -1,5 +1,4 @@
 import { HistoricalMapStudio } from "@/components/HistoricalMapStudio";
-import { MapStudioLogin } from "@/components/MapStudioLogin";
 import { loadHistoricalMapStudioData } from "@/lib/historical-map-studio-data";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +18,9 @@ type HistoricalMapStudioPageProps = {
 export default async function HistoricalMapStudioPage({ searchParams }: HistoricalMapStudioPageProps) {
   const params = (await searchParams) ?? {};
   const studioState = await loadHistoricalMapStudioData({
-    isOwner: true,
     townPackageId: params.town,
     mapYear: params.year,
   });
-
-  if (studioState.mode === "setup_required") {
-    return <MapStudioLogin studioState={studioState} />;
-  }
 
   return <HistoricalMapStudio initialData={studioState} />;
 }

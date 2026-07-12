@@ -1391,19 +1391,11 @@ textarea {
   margin: 0;
 }
 
-.map-studio-login,
 .historical-map-studio {
   display: grid;
   gap: 18px;
 }
 
-.map-studio-login__form {
-  display: grid;
-  gap: 14px;
-  max-width: 520px;
-}
-
-.map-studio-login__form label,
 .map-studio-sidebar label,
 .map-studio-georef-controls label,
 .map-studio-inspector label,
@@ -1416,7 +1408,6 @@ textarea {
   color: rgba(245, 230, 202, 0.68);
 }
 
-.map-studio-login__form input,
 .map-studio-sidebar input,
 .map-studio-sidebar select,
 .map-studio-georef-controls input,
@@ -1575,12 +1566,15 @@ textarea {
 .map-studio-canvas-wrap {
   min-height: 76vh;
   overflow: hidden;
+  position: relative;
+  touch-action: none;
   background:
     radial-gradient(circle at 20% 12%, rgba(226, 190, 126, 0.12), transparent 26%),
     linear-gradient(180deg, rgba(15, 18, 20, 0.96), rgba(10, 9, 8, 0.98));
 }
 
 .map-studio-canvas-wrap canvas {
+  cursor: default;
   display: block;
 }
 

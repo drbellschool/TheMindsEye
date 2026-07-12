@@ -106,11 +106,15 @@ export async function PUT(request: NextRequest) {
     y: placement.y,
     scale_x: placement.scaleX,
     scale_y: placement.scaleY,
+    skew_x: placement.skewX,
+    skew_y: placement.skewY,
     rotation: placement.rotation,
     opacity: placement.opacity,
     layer_order: index,
     is_visible: placement.isVisible,
     is_locked: placement.isLocked,
+    is_flipped_horizontally: placement.isFlippedHorizontally,
+    is_flipped_vertically: placement.isFlippedVertically,
   }));
 
   if (placementRecords.length > 0) {

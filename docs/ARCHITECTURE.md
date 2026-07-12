@@ -86,7 +86,7 @@ This layer is the first real product and must stabilize before teacher, student,
 
 ### Historical Map Studio
 
-Historical Map Studio is the write-enabled Sanborn workspace inside the Community Verification layer. It remains owner-gated and is not broad user authentication.
+Historical Map Studio is the write-enabled Sanborn workspace inside the Community Verification layer. In the current app it does not use an owner-login screen or broad user authentication; write routes keep Supabase service-role credentials server-only.
 
 Core architecture:
 

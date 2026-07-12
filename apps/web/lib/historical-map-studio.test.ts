@@ -2,24 +2,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  applyInspectorTransformPatch,
   buildInitialHistory,
+  canAutosaveStudioMode,
+  canDragStudioPlacement,
   createDefaultGridPlacements,
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
   isControlledSanbornStoragePath,
   maxStudioOpacity,
   maxStudioScale,
+  maxStudioSkew,
   mergeSavedAndDefaultPlacements,
   minStudioOpacity,
   minStudioScale,
+  minStudioSkew,
   normalizePlacement,
   normalizeRotation,
+  normalizeSkew,
   planDeleteSheetOperations,
   planReplacementOperations,
   pushStudioHistory,
   redoStudioHistory,
   reorderPlacement,
+  shouldAttachStudioTransformer,
+  shouldClearStudioSelection,
   shouldIgnoreStudioShortcut,
+  shouldPanStudioStage,
   undoStudioHistory,
   updatePlacement,
   validateStudioMetadataInput,
@@ -41,6 +50,8 @@ test("normalizes placement boundaries and rotation", () => {
     scaleY: 99,
     opacity: 3,
     rotation: 725,
+    skewX: -99,
+    skewY: 99,
     layerOrder: 2,
   });
 
@@ -48,7 +59,29 @@ test("normalizes placement boundaries and rotation", () => {
   assert.equal(normalized.scaleY, maxStudioScale);
   assert.equal(normalized.opacity, maxStudioOpacity);
   assert.equal(normalized.rotation, 5);
+  assert.equal(normalized.skewX, minStudioSkew);
+  assert.equal(normalized.skewY, maxStudioSkew);
   assert.equal(normalizeRotation(-725), -5);
+  assert.equal(normalizeSkew(Number.POSITIVE_INFINITY), minStudioSkew);
+});
+
+test("selects and transforms sheets before drag begins", () => {
+  assert.equal(canDragStudioPlacement(placement("asset-1", { isVisible: true, isLocked: false })), true);
+  assert.equal(canDragStudioPlacement(placement("asset-1", { isVisible: true, isLocked: true })), false);
+  assert.equal(canDragStudioPlacement(placement("asset-1", { isVisible: false, isLocked: false })), false);
+  assert.equal(shouldAttachStudioTransformer({ isSelected: true, isLocked: false, nodeMounted: true }), true);
+  assert.equal(shouldAttachStudioTransformer({ isSelected: true, isLocked: true, nodeMounted: true }), false);
+  assert.equal(shouldAttachStudioTransformer({ isSelected: true, isLocked: false, nodeMounted: false }), false);
+});
+
+test("background clearing and stage panning require explicit pan mode", () => {
+  assert.equal(shouldClearStudioSelection({ targetIsStage: true, isStagePanning: false, pointerButton: 0 }), true);
+  assert.equal(shouldClearStudioSelection({ targetIsStage: false, isStagePanning: false, pointerButton: 0 }), false);
+  assert.equal(shouldClearStudioSelection({ targetIsStage: true, isStagePanning: true, pointerButton: 0 }), false);
+  assert.equal(shouldPanStudioStage({ targetIsStage: true, isSpacePanning: true, pointerButton: 0 }), true);
+  assert.equal(shouldPanStudioStage({ targetIsStage: true, isSpacePanning: false, pointerButton: 1 }), true);
+  assert.equal(shouldPanStudioStage({ targetIsStage: true, isSpacePanning: false, pointerButton: 0 }), false);
+  assert.equal(shouldPanStudioStage({ targetIsStage: false, isSpacePanning: true, pointerButton: 0 }), false);
 });
 
 test("creates useful non-overlapping default grid placements", () => {
@@ -78,6 +111,26 @@ test("merges saved placements with default placements for newly uploaded sheets"
   assert.equal(merged[1].assetId, "asset-2");
   assert.equal(merged[1].isPersisted, false);
   assert.equal(merged[1].layerOrder, 5);
+});
+
+test("preserves saved skew and flip transforms across reload normalization", () => {
+  const merged = mergeSavedAndDefaultPlacements(
+    [{ assetId: "asset-1", width: 1000, height: 800 }],
+    [
+      placement("asset-1", {
+        skewX: 12.5,
+        skewY: -8.25,
+        isFlippedHorizontally: true,
+        isFlippedVertically: true,
+        isPersisted: true,
+      }),
+    ],
+  );
+
+  assert.equal(merged[0].skewX, 12.5);
+  assert.equal(merged[0].skewY, -8.25);
+  assert.equal(merged[0].isFlippedHorizontally, true);
+  assert.equal(merged[0].isFlippedVertically, true);
 });
 
 test("detects duplicate and missing studio sheet numbers", () => {
@@ -120,7 +173,7 @@ test("validates metadata and never promotes invalid statuses", () => {
   assert.equal(validateStudioMetadataInput({ sheetNumber: -1 }).ok, false);
 });
 
-test("updates layer ordering, visibility, lock state, opacity, and scale safely", () => {
+test("updates layer ordering, visibility, lock state, opacity, scale, skew, and rotation safely", () => {
   const placements = [placement("asset-1", { layerOrder: 0 }), placement("asset-2", { layerOrder: 1 }), placement("asset-3", { layerOrder: 2 })];
   assert.deepEqual(reorderPlacement(placements, "asset-1", "front").map((item) => item.assetId), ["asset-2", "asset-3", "asset-1"]);
   assert.deepEqual(reorderPlacement(placements, "asset-3", "back").map((item) => item.assetId), ["asset-3", "asset-1", "asset-2"]);
@@ -128,14 +181,48 @@ test("updates layer ordering, visibility, lock state, opacity, and scale safely"
   const [updated] = updatePlacement([placement("asset-1")], "asset-1", {
     opacity: -5,
     scaleX: 100,
+    skewX: 72,
+    rotation: 540,
     isVisible: false,
     isLocked: true,
   });
 
   assert.equal(updated.opacity, minStudioOpacity);
   assert.equal(updated.scaleX, maxStudioScale);
+  assert.equal(updated.skewX, maxStudioSkew);
+  assert.equal(updated.rotation, 180);
   assert.equal(updated.isVisible, false);
   assert.equal(updated.isLocked, true);
+});
+
+test("normalizes inspector transform updates immediately", () => {
+  const updated = applyInspectorTransformPatch(
+    placement("asset-1", { scaleX: 1, scaleY: 1, rotation: 0, skewX: 0, skewY: 0 }),
+    {
+      x: 25,
+      y: 35,
+      scaleX: -2,
+      scaleY: 100,
+      skewX: -90,
+      skewY: 90,
+      rotation: 725,
+      opacity: 0,
+    },
+  );
+
+  assert.equal(updated.x, 25);
+  assert.equal(updated.y, 35);
+  assert.equal(updated.scaleX, minStudioScale);
+  assert.equal(updated.scaleY, maxStudioScale);
+  assert.equal(updated.skewX, minStudioSkew);
+  assert.equal(updated.skewY, maxStudioSkew);
+  assert.equal(updated.rotation, 5);
+  assert.equal(updated.opacity, minStudioOpacity);
+});
+
+test("public mode autosaves without login dependency", () => {
+  assert.equal(canAutosaveStudioMode("public"), true);
+  assert.equal(canAutosaveStudioMode("read_only"), false);
 });
 
 test("tracks bounded undo and redo state for layout changes", () => {

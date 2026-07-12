@@ -4,7 +4,7 @@
 
 This setup supports the Community Verification Console and the Historical Map Studio in `apps/web`.
 
-Community review pages remain public and read-only. The Historical Map Studio is owner-gated because it can upload Sanborn sheets, edit sheet metadata, save layouts, replace images, delete incorrect sheets, and save georeferencing data.
+Community review pages remain public and read-only. The Historical Map Studio currently opens without an owner-login screen and uses server routes for Sanborn sheet uploads, sheet metadata, saved layouts, image replacement, deletion, and georeferencing data.
 
 This does not add full authentication, teacher dashboards, student dashboards, gameplay, source ingestion, OCR, AI map interpretation, GeoTIFF export, MBTiles, or survey-grade GIS certification.
 
@@ -17,13 +17,10 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-anon-key
 
 SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
-MAP_STUDIO_OWNER_PASSWORD=choose-a-strong-owner-password
 SANBORN_MAX_UPLOAD_BYTES=26214400
 ```
 
-Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are browser-safe. `SUPABASE_SERVICE_ROLE_KEY` and `MAP_STUDIO_OWNER_PASSWORD` must stay server-only and must never use the `NEXT_PUBLIC_*` prefix.
-
-`MAP_STUDIO_OWNER_PASSWORD` powers the lightweight owner-session gate for `/community/historical-map-studio`. A successful login creates an HttpOnly, SameSite cookie that lasts about 30 days. This is intentionally not a full multi-user auth system.
+Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are browser-safe. `SUPABASE_SERVICE_ROLE_KEY` must stay server-only and must never use the `NEXT_PUBLIC_*` prefix.
 
 ## Create The Supabase Project
 
@@ -40,6 +37,7 @@ Run these SQL files in order from the Supabase SQL Editor:
 2. `supabase/migrations/0002_sanborn_sheet_assets.sql`
 3. `supabase/migrations/0003_historical_map_studio.sql`
 4. `supabase/migrations/0004_historical_map_georeferencing.sql`
+5. `supabase/migrations/0005_historical_map_sheet_placement_transforms.sql`
 
 The migrations create:
 
@@ -48,6 +46,7 @@ The migrations create:
 - `sanborn_sheet_assets` for original uploaded sheet metadata.
 - `historical_map_workspaces` and `historical_map_sheet_placements` for saved Konva layout state.
 - `historical_map_georeferences` and `historical_map_control_points` for GPS bounds, four-corner coordinates, control-point pairs, transform metadata, and overlay preferences.
+- Skew and flip placement fields used by the stitching canvas transform controls.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -96,7 +95,7 @@ The studio supports:
 - Konva-based stitching workspace with drag, scale, rotate, opacity, visibility, lock state, and layer order.
 - Manual save plus debounced autosave for layout transforms and viewport.
 - Metadata edits for source URL, archive, rights, notes, evidence classification, and review status.
-- Image replacement and deletion through owner-gated server routes.
+- Image replacement and deletion through server routes that keep Supabase service-role credentials server-only.
 - GPS georeferencing mode with historical image points matched to modern latitude/longitude markers.
 - Modern Leaflet overlay mode using saved geographic bounds and control points.
 
@@ -130,7 +129,6 @@ In Vercel Project Settings, add:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `MAP_STUDIO_OWNER_PASSWORD`
 - `SANBORN_MAX_UPLOAD_BYTES`
 
 Redeploy after saving variables. The public Community pages continue to fall back safely when Supabase is unavailable, but Historical Map Studio writes require the server-only variables.
@@ -139,17 +137,15 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 
 1. Open `/community` and confirm the data-source badge says `Supabase` or `Demo fallback`.
 2. Open `/community/historical-map-studio`.
-3. Log in with `MAP_STUDIO_OWNER_PASSWORD`.
-4. Upload PNG, JPEG, or WebP Sanborn sheets.
-5. Confirm thumbnails load from signed URLs and the bucket remains private.
-6. Drag, scale, rotate, hide, lock, reorder, and adjust opacity for sheets.
-7. Save the layout, reload, and confirm transforms and viewport restore.
-8. Edit metadata and confirm only allowed classifications are saved.
-9. Replace an incorrect image and confirm placement is preserved.
-10. Delete an incorrect sheet and confirm placement, metadata, and storage object cleanup.
-11. Switch to Georeferencing mode, add paired historical/GPS control points, calculate alignment, and save.
-12. Switch to Modern Overlay mode, adjust opacity, fit overlay bounds, reload, and confirm the saved alignment restores.
-13. Log out and confirm write routes reject unauthenticated requests.
+3. Upload PNG, JPEG, or WebP Sanborn sheets.
+4. Confirm thumbnails load from signed URLs and the bucket remains private.
+5. Drag, scale, rotate, skew, hide, lock, reorder, and adjust opacity for sheets.
+6. Save the layout, reload, and confirm transforms and viewport restore.
+7. Edit metadata and confirm only allowed classifications are saved.
+8. Replace an incorrect image and confirm placement is preserved.
+9. Delete an incorrect sheet and confirm placement, metadata, and storage object cleanup.
+10. Switch to Georeferencing mode, add paired historical/GPS control points, calculate alignment, and save.
+11. Switch to Modern Overlay mode, adjust opacity, fit overlay bounds, reload, and confirm the saved alignment restores.
 
 ## Local Validation
 
