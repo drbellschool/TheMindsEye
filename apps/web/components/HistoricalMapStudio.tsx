@@ -42,6 +42,7 @@ import {
   buildInitialSheetGeographicHistory,
   createSheetGeoreferencesFromStitching,
   moveSheetGeographicAssembly,
+  normalizeSheetGeographicTransform,
   normalizeGeographicMapSettings,
   isAccidentalZeroSheetPlacement,
   placeSheetAtMapCenter,
@@ -50,6 +51,8 @@ import {
   removeSheetGeographicPlacement,
   resetSheetGeographicPlacementToCenter,
   reorderSheetGeographicTransform,
+  selectManualSheetPlacementForSave,
+  sheetPlacementMatchesForPersistence,
   undoSheetGeographicHistory,
   updateSheetGeographicTransform,
   updateSheetGeographicCorner,
@@ -254,7 +257,7 @@ function getPlacementBounds(assets: StudioSheetAsset[], placements: StudioPlacem
 function getInitialGeoEditMode(studioState: HistoricalMapStudioState, selectedAssetId: string | null | undefined): GeoEditMode {
   const selected = selectedAssetId ? studioState.sheetGeoreferences.find((sheet) => sheet.assetId === selectedAssetId) : null;
 
-  return selected?.isVisible && selected.placementStatus !== "unplaced" ? "edit_historical_sheets" : "pan_modern_map";
+  return selected ? "edit_historical_sheets" : "pan_modern_map";
 }
 
 function getTownCenterFromState(studioState: HistoricalMapStudioState): GeoCoordinate | null {
@@ -595,19 +598,20 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [globalHistoricalOpacity, setGlobalHistoricalOpacity] = useState(initialData.geographicMap.globalHistoricalOpacity);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [placementAnchorAssetId, setPlacementAnchorAssetId] = useState("");
   const [georeferenceDraft, setGeoreferenceDraft] = useState<GeoreferenceDraft>(createGeoreferenceDraft(initialData, initialData.sheets[0]?.assetId ?? null));
   const [historicalClickMode, setHistoricalClickMode] = useState<"idle" | "adding_point">("idle");
-  const [mapCursor, setMapCursor] = useState<GeoCoordinate | null>(null);
+  const [mapCursor, setMapCursor] = useState<any>(null);
   const [mapCenter, setMapCenter] = useState<GeoCoordinate>(getDefaultTownCenter(initialData));
   const [modernMapZoom, setModernMapZoom] = useState(initialData.geographicMap.zoom);
   const [sheetImageStates, setSheetImageStates] = useState<Record<string, SheetImageLoadState>>({});
   const [fitOverlayRequest, setFitOverlayRequest] = useState(0);
   const present = history.present;
   const geoPresent = geoHistory.present;
-  const selectedAsset = sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
+  const selectedAsset: any = sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
   const selectedPlacement = present.placements.find((placement) => placement.assetId === selectedAssetId) ?? null;
-  const selectedSheetGeoreference = geoPresent.sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
+  const selectedSheetGeoreference: any = geoPresent.sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
   const visiblePlacements = present.placements.filter((placement) => placement.isVisible).length;
   const hiddenPlacements = present.placements.length - visiblePlacements;
   const lockedPlacements = present.placements.filter((placement) => placement.isLocked).length;
@@ -884,7 +888,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     const placed = placeSheetAtMapCenter(
       {
         ...sheet,
-        opacity: clampHistoricalOpacity(sheet.opacity),
+        opacity: 0.5,
       },
       safeCenter,
       { latitudeSpan, longitudeSpan },
@@ -1001,14 +1005,25 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setIsDirty(false);
   }
 
-  async function saveSheetGeoreferences(kind: "manual" | "autosave" = "manual") {
+  async function saveSheetGeoreferences(kind: "manual" | "autosave" = "manual", assetIdToSave?: string) {
     if (saveInFlightRef.current || !initialData.workspace || !initialData.activeTownPackage || !canAutosaveStudioMode(initialData.mode)) {
+      return;
+    }
+
+    const sheetsToSave =
+      kind === "manual"
+        ? selectManualSheetPlacementForSave(geoPresent.sheets, assetIdToSave ?? selectedAssetId)
+        : geoPresent.sheets.filter((sheet) => sheet.isVisible || sheet.isPersisted);
+
+    if (sheetsToSave.length === 0) {
+      setSaveStatus("error");
+      setSaveMessage("Save failed: select a placed Sanborn sheet first.");
       return;
     }
 
     saveInFlightRef.current = true;
     setSaveStatus("saving");
-    setSaveMessage(kind === "autosave" ? "Autosaving geographic sheet layout..." : "Saving geographic sheet layout...");
+    setSaveMessage(kind === "autosave" ? "Saving..." : "Saving placement...");
 
     const response = await fetch("/api/community/historical-map-studio/sheet-georeferences", {
       method: "PUT",
@@ -1022,22 +1037,112 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         mapCenter,
         mapZoom: modernMapZoom,
         editMode: geoEditMode,
-        globalHistoricalOpacity,
-        sheets: geoPresent.sheets,
+        globalHistoricalOpacity: 1,
+        sheets: sheetsToSave,
       }),
     });
-    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string; sheets?: SheetGeographicTransform[] } | null;
 
     saveInFlightRef.current = false;
 
     if (!response.ok || !payload?.ok) {
       setSaveStatus("error");
-      setSaveMessage(payload?.message ?? "Geographic sheet layout save failed.");
+      setSaveMessage(`Save failed: ${payload?.message ?? "Geographic sheet placement save failed."}`);
       return;
     }
 
+    const savedSheets = (payload.sheets ?? []).map((sheet) => normalizeSheetGeographicTransform({ ...sheet, assetId: sheet.assetId, isPersisted: true }));
+    const savedByAssetId = new Map(savedSheets.map((sheet) => [sheet.assetId, sheet]));
+    const selectedSaved = savedByAssetId.get(assetIdToSave ?? selectedAssetId);
+    const selectedDraft = sheetsToSave.find((sheet) => sheet.assetId === (assetIdToSave ?? selectedAssetId));
+
+    if (kind === "manual" && selectedDraft && (!selectedSaved || !sheetPlacementMatchesForPersistence(selectedDraft, selectedSaved))) {
+      setSaveStatus("error");
+      setSaveMessage("Save failed: database confirmation did not match the current sheet placement.");
+      return;
+    }
+
+    const nextSheets = geoPresent.sheets.map((sheet) => savedByAssetId.get(sheet.assetId) ?? sheet);
+    setSheetGeoPresent(
+      {
+        ...geoPresent,
+        mapSettings: normalizeGeographicMapSettings({
+          ...geoPresent.mapSettings,
+          center: mapCenter,
+          zoom: modernMapZoom,
+          editMode: geoEditMode,
+          globalHistoricalOpacity: 1,
+        }),
+        sheets: nextSheets,
+      },
+      false,
+    );
     setSaveStatus("saved");
-    setSaveMessage(kind === "autosave" ? "Geographic sheet layout autosaved." : "Geographic sheet layout saved.");
+    const savedAt = payload.savedAt ?? new Date().toISOString();
+    setSaveMessage(kind === "autosave" ? "Saved to database." : `Saved to database at ${new Date(savedAt).toLocaleTimeString()}.`);
+    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    setIsDirty(false);
+  }
+
+  async function reloadSavedPlacement() {
+    if (!initialData.workspace || !initialData.activeTownPackage) {
+      setSaveStatus("error");
+      setSaveMessage("Reload failed: no active Historical Map Studio workspace is available.");
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage("Reloading saved placement...");
+
+    const params = new URLSearchParams({
+      townPackageId: initialData.activeTownPackage.id,
+      mapYear: String(initialData.activeMapYear),
+      workspaceId: initialData.workspace.workspaceId,
+    });
+    const response = await fetch(`/api/community/historical-map-studio/sheet-georeferences?${params.toString()}`);
+    const payload = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      message?: string;
+      savedAt?: string | null;
+      mapCenter?: GeoCoordinate | null;
+      mapZoom?: number | null;
+      sheets?: SheetGeographicTransform[];
+    } | null;
+
+    if (!response.ok || !payload?.ok) {
+      setSaveStatus("error");
+      setSaveMessage(`Save failed: ${payload?.message ?? "Saved placement could not be reloaded."}`);
+      return;
+    }
+
+    const savedSheets = (payload.sheets ?? []).map((sheet) => normalizeSheetGeographicTransform({ ...sheet, assetId: sheet.assetId, isPersisted: true }));
+    const savedByAssetId = new Map(savedSheets.map((sheet) => [sheet.assetId, sheet]));
+    const nextSheets = geoPresent.sheets.map((sheet) => savedByAssetId.get(sheet.assetId) ?? sheet);
+
+    if (payload.mapCenter && isOperationalMapCenter(payload.mapCenter)) {
+      setMapCenter(payload.mapCenter);
+    }
+
+    if (typeof payload.mapZoom === "number") {
+      setModernMapZoom(payload.mapZoom);
+    }
+
+    setSheetGeoPresent(
+      {
+        ...geoPresent,
+        mapSettings: normalizeGeographicMapSettings({
+          ...geoPresent.mapSettings,
+          center: payload.mapCenter ?? mapCenter,
+          zoom: payload.mapZoom ?? modernMapZoom,
+          editMode: geoEditMode,
+          globalHistoricalOpacity: 1,
+        }),
+        sheets: nextSheets,
+      },
+      false,
+    );
+    setSaveStatus("saved");
+    setSaveMessage(`Reloaded saved placement${payload.savedAt ? ` from ${new Date(payload.savedAt).toLocaleTimeString()}` : ""}.`);
     setLastSavedAt(payload.savedAt ?? new Date().toISOString());
     setIsDirty(false);
   }
@@ -1306,8 +1411,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         setGeoEditMode("edit_historical_sheets");
         commitGeographicMapSettings({ center: nextCenter, editMode: "edit_historical_sheets" }, false);
       } else {
-        setGeoEditMode("pan_modern_map");
-        commitGeographicMapSettings({ editMode: "pan_modern_map" }, false);
+        setGeoEditMode("edit_historical_sheets");
+        commitGeographicMapSettings({ editMode: "edit_historical_sheets" }, false);
       }
       return;
     }
@@ -1772,12 +1877,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const visibleGeographicSheets = historicalSheetLayers.filter((layer) => layer.isVisible).length;
   const unplacedGeographicSheets = geoPresent.sheets.filter((sheet) => sheet.placementStatus === "unplaced").length;
   const workspaceComposite = useMemo(() => buildWorkspaceCompositeImage(sheets, present.placements), [sheets, present.placements]);
-  const selectedControlPoint = georeferenceDraft.controlPoints.find((point) => point.controlPointId === georeferenceDraft.selectedControlPointId) ?? null;
+  const selectedControlPoint: any = georeferenceDraft.controlPoints.find((point) => point.controlPointId === georeferenceDraft.selectedControlPointId) ?? null;
   const completeControlPoints = getCompleteControlPoints(georeferenceDraft.controlPoints);
-  const calculatedTransform = calculateAffineTransform(completeControlPoints);
+  const calculatedTransform: any = calculateAffineTransform(completeControlPoints);
   const selectedOverlayAsset = georeferenceDraft.targetType === "sheet" ? sheets.find((sheet) => sheet.assetId === georeferenceDraft.targetAssetId) ?? selectedAsset : null;
-  const activeTransform = studioMode === "stitching" ? selectedPlacement : selectedSheetGeoreference;
-  const selectedImageState = selectedAssetId ? sheetImageStates[selectedAssetId] : null;
+  const activeTransform: any = studioMode === "stitching" ? selectedPlacement : selectedSheetGeoreference;
+  const selectedImageState: any = selectedAssetId ? sheetImageStates[selectedAssetId] : null;
+  const georeferenceDraftBounds: any = georeferenceDraft.bounds;
   const selectedHasInvalidZeroPlacement = Boolean(selectedSheetGeoreference && isAccidentalZeroSheetPlacement(selectedSheetGeoreference));
   const selectedCanEditOnMap = Boolean(
     selectedSheetGeoreference &&
@@ -1787,7 +1893,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         isLocked: selectedSheetGeoreference.isLocked,
       }),
   );
-  const historicalReference =
+  const historicalReference: any =
     georeferenceDraft.targetType === "workspace"
       ? workspaceComposite
         ? {
@@ -1810,14 +1916,206 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           }
         : null;
   const overlayImageUrl = georeferenceDraft.targetType === "workspace" ? workspaceComposite?.url ?? null : selectedOverlayAsset?.signedUrl ?? null;
+  const selectedSheetPlaced = Boolean(selectedSheetGeoreference && selectedSheetGeoreference.isVisible && selectedSheetGeoreference.placementStatus !== "unplaced");
+  const selectedOpacity = selectedSheetGeoreference?.opacity ?? 0.5;
+  const saveStatusText =
+    saveStatus === "saving"
+      ? "Saving"
+      : saveStatus === "error"
+        ? saveMessage || "Save failed"
+        : saveStatus === "saved"
+          ? saveMessage || `Saved at ${lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : "database"}`
+          : isDirty
+            ? "Unsaved"
+            : lastSavedAt
+              ? `Saved at ${new Date(lastSavedAt).toLocaleTimeString()}`
+              : "Unsaved";
+
+  return (
+    <section className="minimal-sanborn-gps" aria-label="Minimal Sanborn GPS alignment tool">
+      <header className="minimal-sanborn-gps__toolbar">
+        <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
+        <select
+          aria-label="Town package"
+          className="minimal-sanborn-gps__select"
+          value={initialData.activeTownPackage?.id ?? ""}
+          onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}
+        >
+          {initialData.townPackages.map((town) => (
+            <option key={town.id} value={town.id}>{town.name}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Map year"
+          className="minimal-sanborn-gps__year"
+          value={initialData.activeMapYear ?? ""}
+          onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}
+        >
+          {initialData.availableMapYears.map((year) => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Sanborn sheet"
+          className="minimal-sanborn-gps__sheet"
+          value={selectedAssetId}
+          onChange={(event) => selectAndCenter(event.target.value)}
+        >
+          <option value="">Select sheet</option>
+          {sheets.map((sheet) => (
+            <option key={sheet.assetId} value={sheet.assetId}>
+              Sheet {sheet.sheetNumber ?? "?"} - {sheet.originalFilename}
+            </option>
+          ))}
+        </select>
+        <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
+          Add sheet to map
+        </button>
+        <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
+          <button
+            className={`sanborn-button${geoEditMode === "pan_modern_map" ? " sanborn-button--primary" : ""}`}
+            onClick={() => {
+              setGeoEditMode("pan_modern_map");
+              commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
+            }}
+            type="button"
+          >
+            Pan modern map
+          </button>
+          <button
+            className={`sanborn-button${geoEditMode === "edit_historical_sheets" ? " sanborn-button--primary" : ""}`}
+            onClick={() => {
+              setGeoEditMode("edit_historical_sheets");
+              commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
+            }}
+            type="button"
+          >
+            Edit Sanborn sheet
+          </button>
+        </div>
+        <label className="minimal-sanborn-gps__opacity">
+          <span>Opacity</span>
+          <input
+            disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
+            max="1"
+            min="0.05"
+            step="0.01"
+            type="range"
+            value={selectedOpacity}
+            onChange={(event) => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity: Number(event.target.value) }) : undefined}
+          />
+          <output>{Math.round(selectedOpacity * 100)}%</output>
+        </label>
+        <div className="minimal-sanborn-gps__quick-opacity" aria-label="Quick opacity">
+          {[0.25, 0.5, 0.75, 1].map((opacity) => (
+            <button
+              className="sanborn-button"
+              disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
+              key={opacity}
+              onClick={() => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity }) : undefined}
+              type="button"
+            >
+              {Math.round(opacity * 100)}%
+            </button>
+          ))}
+        </div>
+        <button className="sanborn-button sanborn-button--primary" disabled={!selectedSheetPlaced || saveStatus === "saving"} onClick={() => void saveSheetGeoreferences("manual", selectedAssetId)} type="button">
+          Save placement
+        </button>
+        <button className="sanborn-button" disabled={!initialData.workspace || saveStatus === "saving"} onClick={() => void reloadSavedPlacement()} type="button">
+          Reload saved placement
+        </button>
+        <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={resetSelectedPlacementToTownCenter} type="button">Reset</button>
+        <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={fitSelectedSheet} type="button">Fit sheet</button>
+        <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
+      </header>
+
+      <main className="minimal-sanborn-gps__map">
+        {initialData.warningMessage ? <p className="minimal-sanborn-gps__notice">{initialData.warningMessage}</p> : null}
+        {selectedAsset && !selectedSheetPlaced ? <p className="minimal-sanborn-gps__notice">Selected sheet is not on the map yet. Click Add sheet to map.</p> : null}
+        {selectedSheetPlaced && selectedAsset && !selectedAsset.signedUrl ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image is waiting for a signed URL.</p> : null}
+        {selectedAsset?.signedUrlError ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to get a signed URL: {selectedAsset.signedUrlError}</p> : null}
+        {selectedImageState?.state === "failed" ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to load. Retrying signed URL.</p> : null}
+        {placementAnchorAssetId ? <p className="minimal-sanborn-gps__notice">Click the modern map to place the selected sheet.</p> : null}
+        <HistoricalMapLeaflet
+          basemapKey="osm"
+          bounds={sheetAssemblyBounds}
+          center={[mapCenter.latitude, mapCenter.longitude]}
+          controlPoints={[]}
+          corners={selectedSheetGeoreference?.corners ?? createDefaultGeoCorners(mapCenter)}
+          fitBoundsRequest={fitOverlayRequest}
+          globalHistoricalOpacity={1}
+          imageUrl={null}
+          modernLayerVisible
+          onCornerDrag={(corner, latitude, longitude) => {
+            if (!selectedSheetGeoreference) return;
+            const next = updateSheetGeographicCorner(selectedSheetGeoreference, corner, { latitude, longitude });
+            commitSheetGeoreference(selectedSheetGeoreference.assetId, { corners: next.corners });
+          }}
+          onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
+          onMapClick={(latitude, longitude) => {
+            if (placementAnchorAssetId) {
+              addSheetToMap(placementAnchorAssetId, { latitude, longitude });
+            }
+          }}
+          onMapViewChange={(center, zoom) => {
+            setMapCenter({ latitude: center[0], longitude: center[1] });
+            setModernMapZoom(zoom);
+          }}
+          onMarkerDrag={() => undefined}
+          onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
+          onSelectSheet={(assetId) => {
+            setSelectedAssetId(assetId);
+            setGeoEditMode("edit_historical_sheets");
+            commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
+          }}
+          onSheetImageStateChange={(state) => setSheetImageStates((current) => ({ ...current, [state.assetId]: state }))}
+          onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
+          overlayOpacity={0.5}
+          overlayVisible={false}
+          selectedControlPointId=""
+          selectedSheetAssetId={selectedAssetId}
+          sheetEditMode={geoEditMode}
+          sheetLayers={historicalSheetLayers}
+          showControlPoints={false}
+          showSheetBoundaries
+          showSheetLabels
+          zoom={modernMapZoom}
+        />
+        <details
+          className="minimal-sanborn-gps__details"
+          onToggle={(event) => setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
+          open={detailsOpen}
+        >
+          <summary>Sheet details</summary>
+          {selectedAsset ? (
+            <dl>
+              <dt>Sheet number</dt>
+              <dd>{selectedAsset.sheetNumber ?? "Unknown"}</dd>
+              <dt>Filename</dt>
+              <dd>{selectedAsset.originalFilename}</dd>
+              <dt>Archive</dt>
+              <dd>{selectedAsset.archiveName || "Unavailable"}</dd>
+              <dt>Source URL</dt>
+              <dd>{selectedAsset.sourceUrl ? <a href={selectedAsset.sourceUrl} rel="noreferrer" target="_blank">{selectedAsset.sourceUrl}</a> : "Unavailable"}</dd>
+              <dt>Rights note</dt>
+              <dd>{selectedAsset.rightsNote || "Unavailable"}</dd>
+            </dl>
+          ) : (
+            <p>Select an uploaded Sanborn sheet.</p>
+          )}
+        </details>
+      </main>
+    </section>
+  );
 
   return (
     <section className="historical-map-studio">
       <header className="map-studio-topbar">
         <div>
           <p className="panel__eyebrow">Historical Map Studio</p>
-          <h2>{initialData.activeTownPackage ? `${initialData.activeTownPackage.name} ${initialData.activeMapYear}` : "No town package"}</h2>
-          <p className="small-muted">{initialData.activeTownPackage ? `${initialData.activeTownPackage.region} | ${initialData.activeTownPackage.packageId}` : initialData.warningMessage}</p>
+          <h2>{initialData.activeTownPackage ? `${initialData.activeTownPackage?.name} ${initialData.activeMapYear}` : "No town package"}</h2>
+          <p className="small-muted">{initialData.activeTownPackage ? `${initialData.activeTownPackage?.region} | ${initialData.activeTownPackage?.packageId}` : initialData.warningMessage}</p>
         </div>
         <div className="map-studio-topbar__metrics">
           <span className="tag state-ready">Sheets {sheets.length}</span>
@@ -2392,7 +2690,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                   <p className="small-muted">Control-point target status: {georeferenceDraft.status}</p>
                   <p className="small-muted">Control points: {completeControlPoints.length} complete / {georeferenceDraft.controlPoints.length} total</p>
                   <p className="small-muted">Estimated error: {calculatedTransform.ok ? calculatedTransform.residualError.toExponential(3) : calculatedTransform.error}</p>
-                  <p className="small-muted">Overlay bounds: {georeferenceDraft.bounds ? `${formatCoordinate(georeferenceDraft.bounds.northLatitude)}, ${formatCoordinate(georeferenceDraft.bounds.westLongitude)} to ${formatCoordinate(georeferenceDraft.bounds.southLatitude)}, ${formatCoordinate(georeferenceDraft.bounds.eastLongitude)}` : "unavailable"}</p>
+                  <p className="small-muted">Overlay bounds: {georeferenceDraftBounds ? `${formatCoordinate(georeferenceDraftBounds.northLatitude)}, ${formatCoordinate(georeferenceDraftBounds.westLongitude)} to ${formatCoordinate(georeferenceDraftBounds.southLatitude)}, ${formatCoordinate(georeferenceDraftBounds.eastLongitude)}` : "unavailable"}</p>
                   <label>Georeference notes<textarea value={georeferenceDraft.notes} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, notes: event.target.value })} /></label>
                   {selectedControlPoint ? (
                     <div className="map-studio-control-point-editor">

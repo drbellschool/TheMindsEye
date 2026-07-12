@@ -8,9 +8,9 @@ export const minStudioScale = 0.05;
 export const maxStudioScale = 8;
 export const minStudioSkew = -45;
 export const maxStudioSkew = 45;
-export const minStudioOpacity = 0.1;
+export const minStudioOpacity = 0.05;
 export const maxStudioOpacity = 1;
-export const defaultHistoricalSheetOpacity = 0.72;
+export const defaultHistoricalSheetOpacity = 0.5;
 export const maxStudioHistoryEntries = 60;
 export const studioTransformerAnchors = [
   "top-left",

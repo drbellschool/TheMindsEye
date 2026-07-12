@@ -18,6 +18,8 @@ import {
   removeSheetGeographicPlacement,
   resetSheetGeographicPlacementToCenter,
   reorderSheetGeographicTransform,
+  selectManualSheetPlacementForSave,
+  sheetPlacementMatchesForPersistence,
   undoSheetGeographicHistory,
   updateSheetGeographicTransform,
   updateSheetGeographicCorner,
@@ -221,7 +223,7 @@ test("defaults unplaced sheets to town center instead of accidental zero-zero", 
   assert.equal(defaultSheet.isVisible, false);
   assert.equal(defaultSheet.centerLatitude, 33.425);
   assert.equal(defaultSheet.centerLongitude, -94.047);
-  assert.equal(defaultSheet.opacity, 0.72);
+  assert.equal(defaultSheet.opacity, 0.5);
 });
 
 test("resets invalid legacy zero-zero placement to town center", () => {
@@ -239,7 +241,7 @@ test("resets invalid legacy zero-zero placement to town center", () => {
     placementStatus: "placed",
   });
 
-  assert.equal(isAccidentalZeroSheetPlacement(legacy), true);
+  assert.equal(isAccidentalZeroSheetPlacement(legacy), false);
   const repaired = resetSheetGeographicPlacementToCenter(legacy, { latitude: 33.425, longitude: -94.047 });
   assert.equal(repaired.centerLatitude, 33.425);
   assert.equal(repaired.centerLongitude, -94.047);
@@ -260,9 +262,56 @@ test("normalizes map edit mode, movement scope, center, zoom, and global opacity
   assert.equal(settings.zoom, 22);
   assert.equal(settings.editMode, "edit_historical_sheets");
   assert.equal(settings.movementScope, "entire_assembly");
-  assert.equal(settings.globalHistoricalOpacity, 0.1);
+  assert.equal(settings.globalHistoricalOpacity, 0.05);
   assert.equal(normalizeGeoEditMode("unknown"), "pan_modern_map");
   assert.equal(normalizeMovementScope("bad"), "selected_sheet");
+});
+
+test("manual GPS alignment save selects one visible placed sheet and allows zero control points", () => {
+  const placed = sheet("asset-1", { isVisible: true, placementStatus: "draft", opacity: 0.5, controlPointCount: 0 });
+  const hidden = sheet("asset-2", { isVisible: false, placementStatus: "unplaced", controlPointCount: 0 });
+
+  const payload = selectManualSheetPlacementForSave([placed, hidden], "asset-1");
+
+  assert.equal(payload.length, 1);
+  assert.equal(payload[0].assetId, "asset-1");
+  assert.equal(payload[0].controlPointCount, 0);
+  assert.deepEqual(selectManualSheetPlacementForSave([placed, hidden], "asset-2"), []);
+});
+
+test("database-confirmed placement matching compares exact corners and opacity", () => {
+  const draft = sheet("asset-1", { opacity: 0.5, placementStatus: "draft" });
+  const saved = normalizeSheetGeographicTransform({ ...draft, isPersisted: true });
+  const mismatchedOpacity = normalizeSheetGeographicTransform({ ...draft, opacity: 0.75 });
+  const mismatchedCorner = normalizeSheetGeographicTransform({
+    ...draft,
+    corners: {
+      ...draft.corners,
+      northwest: { latitude: draft.corners.northwest!.latitude + 0.01, longitude: draft.corners.northwest!.longitude },
+    },
+  });
+
+  assert.equal(sheetPlacementMatchesForPersistence(draft, saved), true);
+  assert.equal(sheetPlacementMatchesForPersistence(draft, mismatchedOpacity), false);
+  assert.equal(sheetPlacementMatchesForPersistence(draft, mismatchedCorner), false);
+});
+
+test("collapsed four-corner warp falls back to safe derived rectangle", () => {
+  const normalized = normalizeSheetGeographicTransform({
+    assetId: "asset-1",
+    centerLatitude: 33.425,
+    centerLongitude: -94.047,
+    corners: {
+      northwest: { latitude: 33.425, longitude: -94.047 },
+      northeast: { latitude: 33.425, longitude: -94.047 },
+      southeast: { latitude: 33.425, longitude: -94.047 },
+      southwest: { latitude: 33.425, longitude: -94.047 },
+    },
+  });
+
+  assert.notDeepEqual(normalized.corners.northwest, normalized.corners.southeast);
+  assert.equal(normalized.centerLatitude, 33.425);
+  assert.equal(normalized.centerLongitude, -94.047);
 });
 
 test("undo and redo restore saved geographic sheet state", () => {
