@@ -1,19 +1,25 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { LegendList } from "@/components/LegendList";
 import { Panel } from "@/components/Panel";
+import { SanbornSheetIntake } from "@/components/SanbornSheetIntake";
 import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
+import { loadSanbornIntakeData } from "@/lib/sanborn-intake-data";
 
 export const metadata = {
   title: "Map Auditor | The Mind's Eye",
 };
 
 export default async function MapAuditorPage() {
-  const { data: communityData } = await loadCommunityData();
+  const [{ data: communityData }, sanbornIntake] = await Promise.all([loadCommunityData(), loadSanbornIntakeData()]);
   const { mapAuditor } = communityData;
 
   return (
     <div className="content-grid content-grid--three">
+      <div className="content-grid__full">
+        <SanbornSheetIntake intake={sanbornIntake} />
+      </div>
+
       <Panel eyebrow="Sheet Strip" title="Sanborn sheets" subtitle="Select a sheet in the stitching workspace." tone="map">
         <div className="panel-grid">
           {mapAuditor.sheetStrip.map((sheet) => (
