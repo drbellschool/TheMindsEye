@@ -11,7 +11,7 @@ import {
   type StudioPlacement,
   type StudioSheetAsset,
 } from "./historical-map-studio.ts";
-import { isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoCoordinate, type GeoCorners } from "./historical-map-georeference.ts";
+import { isNearZeroCoordinate, isOperationalMapCenter, isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoCoordinate, type GeoCorners } from "./historical-map-georeference.ts";
 
 export const sheetGeoreferenceStatuses = ["not_started", "bounding_box", "control_points_draft", "aligned_draft", "reviewed"] as const;
 export const geoEditModes = ["pan_modern_map", "edit_historical_sheets"] as const;
@@ -125,7 +125,7 @@ export function normalizeProjectiveMatrix(value: unknown): ProjectiveMatrix | nu
 }
 
 export function normalizeGeographicMapSettings(input: Partial<GeographicMapSettings> | null | undefined): GeographicMapSettings {
-  const center = input?.center && validateGeoCoordinate(input.center).ok ? input.center : null;
+  const center = input?.center && isOperationalMapCenter(input.center) ? input.center : null;
 
   return {
     center,
@@ -165,7 +165,11 @@ function hasValidCorners(corners: GeoCorners | null | undefined): corners is Com
   const latitudes = [corners.northwest.latitude, corners.northeast.latitude, corners.southeast.latitude, corners.southwest.latitude];
   const longitudes = [corners.northwest.longitude, corners.northeast.longitude, corners.southeast.longitude, corners.southwest.longitude];
 
-  return Math.max(...latitudes) - Math.min(...latitudes) > minGeographicSpan / 10 && Math.max(...longitudes) - Math.min(...longitudes) > minGeographicSpan / 10;
+  return (
+    ![corners.northwest, corners.northeast, corners.southeast, corners.southwest].every((coordinate) => isNearZeroCoordinate(coordinate)) &&
+    Math.max(...latitudes) - Math.min(...latitudes) > minGeographicSpan / 10 &&
+    Math.max(...longitudes) - Math.min(...longitudes) > minGeographicSpan / 10
+  );
 }
 
 function getCornersBounds(corners: CompleteGeoCorners) {
@@ -391,11 +395,22 @@ export function isAccidentalZeroSheetPlacement(sheet: SheetGeographicTransform):
   );
 
   return (
-    Math.abs(sheet.centerLatitude) <= 0.000001 &&
-    Math.abs(sheet.centerLongitude) <= 0.000001 &&
+    isNearZeroCoordinate({ latitude: sheet.centerLatitude, longitude: sheet.centerLongitude }) &&
     coordinates.length === 4 &&
-    coordinates.every((coordinate) => Math.abs(coordinate.latitude) <= 0.000001 && Math.abs(coordinate.longitude) <= 0.000001)
+    coordinates.every((coordinate) => isNearZeroCoordinate(coordinate))
   );
+}
+
+export function hasOperationalSheetPlacement(sheet: SheetGeographicTransform): boolean {
+  if (!sheet.isVisible || sheet.placementStatus === "unplaced" || isAccidentalZeroSheetPlacement(sheet)) {
+    return false;
+  }
+
+  const coordinates = [sheet.corners.northwest, sheet.corners.northeast, sheet.corners.southeast, sheet.corners.southwest].filter(
+    (coordinate): coordinate is GeoCoordinate => Boolean(coordinate),
+  );
+
+  return coordinates.length === 4 && coordinates.some((coordinate) => isOperationalMapCenter(coordinate));
 }
 
 export function resetSheetGeographicPlacementToCenter(

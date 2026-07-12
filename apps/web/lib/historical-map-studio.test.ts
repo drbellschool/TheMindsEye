@@ -558,6 +558,62 @@ test("geocode view refresh forces Leaflet view, size invalidation, and tile redr
   assert.match(studioComponent, /viewRefreshRequest=\{mapViewRefreshRequest\}/);
 });
 
+test("location search priority blocks stale near-zero center and avoids automatic FitBounds", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const findLocationStart = component.indexOf("async function findLocation");
+  const findLocationEnd = component.indexOf("async function uploadSheets", findLocationStart);
+  const findLocationBody = component.slice(findLocationStart, findLocationEnd);
+
+  assert.match(component, /requestedGeocodeCenterRef\.current = view\.center/);
+  assert.match(component, /locationSearchGuardUntilRef\.current = Date\.now\(\) \+ 2_000/);
+  assert.match(component, /A stale saved map position was prevented from replacing your selected location/);
+  assert.match(component, /isNearZeroCoordinate\(nextCenter\)/);
+  assert.doesNotMatch(findLocationBody, /setFitOverlayRequest/);
+  assert.match(component, /fitBoundsEnabled=\{!requestedGeocodeCenter \|\| Date\.now\(\) >= locationSearchGuardUntilRef\.current\}/);
+});
+
+test("invalid legacy sheet bounds are excluded from map layers and FitBounds inputs", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const route = readFileSync("app/api/community/historical-map-studio/sheet-georeferences/route.ts", "utf8");
+
+  assert.match(component, /!hasOperationalSheetPlacement\(geoSheet\)/);
+  assert.match(component, /\.filter\(\(layer\) => hasOperationalSheetPlacement\(layer\)\)/);
+  assert.match(component, /const hasPlacedHistoricalSheets = historicalSheetLayers\.some\(\(layer\) => hasOperationalSheetPlacement\(layer\)\)/);
+  assert.match(component, /selectedSheetGeoreference && hasOperationalSheetPlacement\(selectedSheetGeoreference\)/);
+  assert.match(route, /isOperationalMapCenter\(workspaceCenter\) \? workspaceCenter : null/);
+});
+
+test("reset all sheet placements preserves assets and places selected sheet at current town location", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(component, /function resetAllSheetPlacementsToCurrentTownLocation/);
+  assert.match(component, /return hasOperationalSheetPlacement\(sheet\) \? sheet : removeSheetGeographicPlacement\(sheet\)/);
+  assert.match(component, /resetSheetGeographicPlacementToCenter/);
+  assert.match(component, /opacity: 0\.5/);
+  assert.match(component, /Reset all sheet placements to current town location/);
+});
+
+test("projective overlay is anchored to Leaflet pane coordinates and updates through zoom lifecycle", () => {
+  const component = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.match(component, /L\.DomUtil\.setPosition\(element, offset\)/);
+  assert.match(component, /map\.latLngToLayerPoint/);
+  assert.match(component, /movestart move moveend zoomstart zoom zoomend viewreset resize/);
+  assert.match(component, /window\.requestAnimationFrame/);
+  assert.match(component, /getProjectiveTransform\(imageSize\.width, imageSize\.height, points, offset\)/);
+});
+
+test("rectangular geographic overlay fallback uses native Leaflet ImageOverlay", () => {
+  const component = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(component, /overlayRenderMode\?: "projective" \| "rectangular"/);
+  assert.match(component, /overlayRenderMode === "rectangular"/);
+  assert.match(component, /<ImageOverlay bounds=\{boundsToLeaflet\(bounds\)\}/);
+  assert.match(studioComponent, /Rectangular geographic overlay/);
+  assert.match(studioComponent, /overlayRenderMode=\{overlayRenderMode\}/);
+});
+
 test("plain map test renders a fixed Texarkana OpenStreetMap TileLayer without studio overlays", () => {
   const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");

@@ -133,7 +133,7 @@ export function validateGeoCoordinate(coordinate: GeoCoordinate): { ok: true } |
   return { ok: true };
 }
 
-export function isNearZeroCoordinate(coordinate: GeoCoordinate | null | undefined, tolerance = 0.000001): boolean {
+export function isNearZeroCoordinate(coordinate: GeoCoordinate | null | undefined, tolerance = 0.01): boolean {
   return Boolean(coordinate && Math.abs(coordinate.latitude) <= tolerance && Math.abs(coordinate.longitude) <= tolerance);
 }
 

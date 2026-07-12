@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { ImageOverlay, MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
@@ -47,7 +47,8 @@ type HistoricalMapLeafletProps = {
   onMarkerDrag: (controlPointId: string, latitude: number, longitude: number) => void;
   onCornerDrag: (corner: keyof GeoCorners, latitude: number, longitude: number) => void;
   onCursorMove: (latitude: number, longitude: number) => void;
-  onMapViewChange: (center: LatLngTuple, zoom: number) => void;
+  onMapViewChange: (center: LatLngTuple, zoom: number, source?: string) => void;
+  onMapViewMutation?: (source: string) => void;
   onSelectSheet?: (assetId: string) => void;
   onSheetTransformCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
   onRefreshSheetSignedUrl?: (assetId: string) => void;
@@ -57,6 +58,8 @@ type HistoricalMapLeafletProps = {
   locationMarker?: GeoCoordinate | null;
   plainTileOnly?: boolean;
   viewRefreshRequest?: number;
+  fitBoundsEnabled?: boolean;
+  overlayRenderMode?: "projective" | "rectangular";
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -266,11 +269,11 @@ function MapEvents({
     },
     moveend() {
       const center = map.getCenter();
-      onMapViewChange([center.lat, center.lng], map.getZoom());
+      onMapViewChange([center.lat, center.lng], map.getZoom(), "leaflet_moveend");
     },
     zoomend() {
       const center = map.getCenter();
-      onMapViewChange([center.lat, center.lng], map.getZoom());
+      onMapViewChange([center.lat, center.lng], map.getZoom(), "leaflet_zoomend");
     },
   });
 
@@ -295,14 +298,27 @@ function MapInteractionMode({ mode }: { mode: HistoricalMapLeafletProps["sheetEd
   return null;
 }
 
-function FitBounds({ bounds, request }: { bounds: GeoBounds | null; request: number }) {
+function FitBounds({
+  bounds,
+  enabled,
+  onViewMutation,
+  request,
+}: {
+  bounds: GeoBounds | null;
+  enabled: boolean;
+  onViewMutation?: (source: string) => void;
+  request: number;
+}) {
   const map = useMap();
+  const lastRequest = useRef(0);
 
   useEffect(() => {
-    if (bounds) {
+    if (enabled && bounds && request > 0 && lastRequest.current !== request) {
+      lastRequest.current = request;
+      onViewMutation?.("fit_bounds");
       map.fitBounds(boundsToLeaflet(bounds), { padding: [40, 40] });
     }
-  }, [bounds, map, request]);
+  }, [bounds, enabled, map, onViewMutation, request]);
 
   return null;
 }
@@ -346,16 +362,19 @@ function InvalidateMapSize({ request }: { request: number }) {
 
 function ForceLeafletTileRedraw({
   center,
+  onViewMutation,
   request,
   zoom,
 }: {
   center: LatLngTuple;
+  onViewMutation?: (source: string) => void;
   request: number;
   zoom: number;
 }) {
   const map = useMap();
 
   useEffect(() => {
+    onViewMutation?.("force_tile_redraw");
     map.setView(center, zoom, { animate: false });
     map.invalidateSize({ animate: false });
     map.eachLayer((layer) => {
@@ -379,7 +398,7 @@ function ForceLeafletTileRedraw({
     return () => {
       timeouts.forEach((timeout) => window.clearTimeout(timeout));
     };
-  }, [center, map, request, zoom]);
+  }, [center, map, onViewMutation, request, zoom]);
 
   return null;
 }
@@ -910,10 +929,11 @@ function TransformedSheetLayer({
       };
       const pivotPoint = getPivotPoint(points, sheet);
 
-      element.style.left = `${bounds.minX}px`;
-      element.style.top = `${bounds.minY}px`;
+      element.style.left = "0";
+      element.style.top = "0";
       element.style.width = `${bounds.width}px`;
       element.style.height = `${bounds.height}px`;
+      L.DomUtil.setPosition(element, offset);
       element.style.opacity = String(Math.max(0.1, Math.min(1, sheet.opacity * latestRef.current.globalOpacity)));
       element.style.pointerEvents = editMode ? "auto" : "none";
       element.style.zIndex = String(400 + sheet.layerOrder + (selected ? 1000 : 0));
@@ -967,6 +987,19 @@ function TransformedSheetLayer({
       } else {
         element.style.display = "none";
       }
+    }
+
+    let animationFrame = 0;
+
+    function scheduleUpdateFromMap() {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = 0;
+        updateFromMap();
+      });
     }
 
     function finishInteraction(nextDraft: SheetGeographicTransform | null) {
@@ -1140,14 +1173,17 @@ function TransformedSheetLayer({
       updateFromMap();
     };
     element.addEventListener("pointerdown", startPointerInteraction);
-    map.on("move zoom viewreset", updateFromMap);
+    map.on("movestart move moveend zoomstart zoom zoomend viewreset resize", scheduleUpdateFromMap);
     updateFromMap();
 
     return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
       dragCleanup?.();
       interactionCleanupRef.current = null;
       element.removeEventListener("pointerdown", startPointerInteraction);
-      map.off("move zoom viewreset", updateFromMap);
+      map.off("movestart move moveend zoomstart zoom zoomend viewreset resize", scheduleUpdateFromMap);
       element.remove();
       containerRef.current = null;
     };
@@ -1174,6 +1210,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   const [tileRetry, setTileRetry] = useState(0);
   const showLegacyOverlayControls = !props.plainTileOnly && sheetLayers.length === 0 && props.overlayVisible;
   const tileStatus = tileDiagnostics.status;
+  const overlayRenderMode = props.overlayRenderMode ?? "projective";
 
   useEffect(() => {
     setTileDiagnostics(createTileDiagnostics());
@@ -1218,12 +1255,12 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       />
       <SyncMapView center={props.center} zoom={props.zoom} />
       <InvalidateMapSize request={props.fitBoundsRequest} />
-      <ForceLeafletTileRedraw center={props.center} request={props.viewRefreshRequest ?? 0} zoom={props.zoom} />
+      <ForceLeafletTileRedraw center={props.center} onViewMutation={props.onMapViewMutation} request={props.viewRefreshRequest ?? 0} zoom={props.zoom} />
       {props.plainTileOnly ? null : <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />}
       <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
-      <FitBounds bounds={derivedBounds} request={props.fitBoundsRequest} />
+      <FitBounds bounds={derivedBounds} enabled={props.fitBoundsEnabled ?? true} onViewMutation={props.onMapViewMutation} request={props.fitBoundsRequest} />
 
-      {sheetLayers
+      {overlayRenderMode === "projective" ? sheetLayers
         .filter((sheet) => sheet.imageUrl && sheet.isVisible)
         .sort((a, b) => a.layerOrder - b.layerOrder)
         .map((sheet) => (
@@ -1239,7 +1276,26 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             onSelect={props.onSelectSheet}
             showLabel={props.showSheetLabels ?? true}
           />
-        ))}
+        )) : null}
+
+      {overlayRenderMode === "rectangular" ? sheetLayers
+        .filter((sheet) => sheet.imageUrl && sheet.isVisible)
+        .sort((a, b) => a.layerOrder - b.layerOrder)
+        .map((sheet) => {
+          const bounds = boundsFromCorners(sheet.corners);
+          const polygon = getCornerPolygon(sheet.corners);
+
+          if (!bounds) {
+            return null;
+          }
+
+          return (
+            <Fragment key={sheet.assetId}>
+              <ImageOverlay bounds={boundsToLeaflet(bounds)} opacity={Math.max(0.05, Math.min(1, sheet.opacity * (props.globalHistoricalOpacity ?? 1)))} url={sheet.imageUrl!} />
+              {props.showSheetBoundaries && polygon.length >= 3 ? <Polygon pathOptions={{ color: "#e2be7e", weight: props.selectedSheetAssetId === sheet.assetId ? 3 : 1, fill: false }} positions={polygon} /> : null}
+            </Fragment>
+          );
+        }) : null}
 
       {showLegacyOverlayControls && props.imageUrl && derivedBounds ? (
         <ImageOverlay bounds={boundsToLeaflet(derivedBounds)} opacity={props.overlayOpacity} url={props.imageUrl} />
