@@ -11,8 +11,18 @@ import {
   getModernTileLayerOpacity,
   isConfiguredImageSourceAllowed,
   leafletPaneStack,
+  shouldAutoFallbackBasemap,
   updateTileDiagnostics,
 } from "./historical-map-basemap.ts";
+import {
+  buildTownPackageLocationUpdate,
+  geocodeLocation,
+  mapNominatimResult,
+  mapViewFromGeocodeResult,
+  normalizeLocationQuery,
+  parseDirectCoordinates,
+  parseNominatimBoundingBox,
+} from "./historical-map-geocode.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -42,6 +52,7 @@ import {
   shouldClearStudioSelection,
   shouldIgnoreStudioShortcut,
   shouldRefreshSignedUrl,
+  selectPreferredSheetAfterUpload,
   shouldPanModernMap,
   shouldPanStudioStage,
   undoStudioHistory,
@@ -368,6 +379,123 @@ test("configures OpenStreetMap and a no-secret fallback street basemap", () => {
   assert.deepEqual(configuredBasemaps.map((basemap) => basemap.key), ["osm", "esri_world_street"]);
 });
 
+test("minimal GPS workflow renders upload controls inside the early-return interface", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
+  const legacyStart = component.indexOf('className="historical-map-studio"');
+  const minimalInterface = component.slice(minimalStart, legacyStart);
+
+  assert.match(minimalInterface, /Upload Sanborn sheets/);
+  assert.match(minimalInterface, /ref=\{uploadInputRef\}/);
+  assert.match(minimalInterface, /type="file"/);
+  assert.match(minimalInterface, /multiple/);
+  assert.match(minimalInterface, /void uploadSheets\(event\.currentTarget\.files\)/);
+});
+
+test("upload refresh selects the newly returned uploaded sheet when present", () => {
+  const assets = [{ assetId: "asset-1" }, { assetId: "asset-2" }];
+
+  assert.equal(selectPreferredSheetAfterUpload(assets, "asset-2"), "asset-2");
+  assert.equal(selectPreferredSheetAfterUpload(assets, "missing"), "asset-1");
+  assert.equal(selectPreferredSheetAfterUpload([], "asset-2"), "");
+});
+
+test("normalizes town, ZIP, and direct coordinate location queries", () => {
+  assert.deepEqual(normalizeLocationQuery("  Texarkana,   Texas "), { ok: true, query: "Texarkana, Texas" });
+  assert.deepEqual(normalizeLocationQuery("75501"), { ok: true, query: "75501" });
+  assert.deepEqual(normalizeLocationQuery("Waco, Texas"), { ok: true, query: "Waco, Texas" });
+  assert.deepEqual(parseDirectCoordinates("33.425, -94.047"), { latitude: 33.425, longitude: -94.047 });
+  assert.equal(parseDirectCoordinates("94, -181"), null);
+});
+
+test("maps Nominatim responses and town-package location persistence payloads", () => {
+  const result = mapNominatimResult("Texarkana, Texas", {
+    display_name: "Texarkana, Bowie County, Texas, United States",
+    lat: "33.425",
+    lon: "-94.047",
+    boundingbox: ["33.33", "33.53", "-94.18", "-93.93"],
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+
+  assert.deepEqual(result.boundingBox, { south: 33.33, north: 33.53, west: -94.18, east: -93.93 });
+  assert.deepEqual(parseNominatimBoundingBox(["2", "1", "0", "1"]), null);
+  assert.deepEqual(mapViewFromGeocodeResult(result), { center: { latitude: 33.425, longitude: -94.047 }, zoom: 15 });
+  assert.deepEqual(buildTownPackageLocationUpdate(result), {
+    center_latitude: 33.425,
+    center_longitude: -94.047,
+    default_zoom: 15,
+    location_query: "Texarkana, Texas",
+    location_display_name: "Texarkana, Bowie County, Texas, United States",
+    location_north: 33.53,
+    location_south: 33.33,
+    location_east: -93.93,
+    location_west: -94.18,
+  });
+});
+
+test("town-location metadata migration adds location fields without a competing table", () => {
+  const migration = readFileSync("../../supabase/migrations/0009_town_package_location_metadata.sql", "utf8");
+
+  assert.match(migration, /alter table public\.town_packages/);
+  assert.match(migration, /location_query text/);
+  assert.match(migration, /location_display_name text/);
+  assert.match(migration, /location_north double precision/);
+  assert.match(migration, /location_south double precision/);
+  assert.match(migration, /location_east double precision/);
+  assert.match(migration, /location_west double precision/);
+  assert.doesNotMatch(migration, /create table/i);
+});
+
+test("geocoder supports direct coordinates, no results, and provider failures", async () => {
+  const direct = await geocodeLocation("33.425, -94.047", async () => {
+    throw new Error("fetch should not run for direct coordinates");
+  });
+  assert.equal(direct.ok, true);
+  if (direct.ok) {
+    assert.equal(direct.source, "direct_coordinates");
+    assert.equal(direct.latitude, 33.425);
+  }
+
+  const noResults = await geocodeLocation("No Such Place 123", async () => ({
+    ok: true,
+    status: 200,
+    json: async () => [],
+  }));
+  assert.deepEqual(noResults, { ok: false, code: "no_results", message: "No usable map location was found for that search." });
+
+  const failed = await geocodeLocation("Provider Failure Place", async () => ({
+    ok: false,
+    status: 503,
+    json: async () => [],
+  }));
+  assert.equal(failed.ok, false);
+  if (!failed.ok) {
+    assert.equal(failed.code, "provider_error");
+  }
+});
+
+test("server-side geocoder sends an identifying User-Agent and does not autocomplete", async () => {
+  let requestedUrl = "";
+  let requestedUserAgent = "";
+  const result = await geocodeLocation("Querytown, Texas", async (url, init) => {
+    requestedUrl = url;
+    requestedUserAgent = init?.headers?.["User-Agent"] ?? "";
+    return {
+      ok: true,
+      status: 200,
+      json: async () => [{ display_name: "Querytown", lat: "31.1", lon: "-97.1" }],
+    };
+  });
+
+  assert.equal(result.ok, true);
+  assert.match(requestedUrl, /nominatim\.openstreetmap\.org\/search/);
+  assert.match(requestedUrl, /limit=1/);
+  assert.doesNotMatch(requestedUrl, /autocomplete/i);
+  assert.match(requestedUserAgent, /TheMindsEye/);
+});
+
 test("modern tile diagnostics require real tile image success before loaded", () => {
   const initial = createTileDiagnostics();
   const loading = updateTileDiagnostics(initial, "loading");
@@ -394,6 +522,13 @@ test("modern tile failure and retry diagnostics are accurate", () => {
   assert.equal(retried.successfulTiles, 0);
   assert.equal(retried.failedTiles, 0);
   assert.equal(retried.retryToken, 1);
+});
+
+test("modern map auto-fallback only triggers when OpenStreetMap has no loaded tiles", () => {
+  assert.equal(shouldAutoFallbackBasemap({ basemapKey: "osm", status: "loading", successfulTiles: 0, failedTiles: 0, elapsedMs: 6_100 }), true);
+  assert.equal(shouldAutoFallbackBasemap({ basemapKey: "osm", status: "error", successfulTiles: 0, failedTiles: 1, elapsedMs: 200 }), true);
+  assert.equal(shouldAutoFallbackBasemap({ basemapKey: "osm", status: "loaded", successfulTiles: 1, failedTiles: 3, elapsedMs: 6_100 }), false);
+  assert.equal(shouldAutoFallbackBasemap({ basemapKey: "esri_world_street", status: "error", successfulTiles: 0, failedTiles: 2, elapsedMs: 6_100 }), false);
 });
 
 test("minimal GPS workflow cannot hide the modern tile layer", () => {

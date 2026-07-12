@@ -107,6 +107,7 @@ The studio supports:
 - Authoritative sheet-level geographic placement in Georeferencing mode.
 - Modern Leaflet overlay mode using saved independent Sanborn sheet transforms.
 - Town-package map center recovery; Texarkana 1885 should open near `33.425, -94.047`.
+- Town/address/ZIP lookup that can save `town_packages` center and location metadata for new towns.
 - Compact image diagnostics for signed URL state, image load state, natural dimensions, and transform fallback.
 
 Layouts are persisted as transform data, not screenshots. The original uploaded image remains unchanged.
@@ -120,6 +121,19 @@ https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
 ```
 
 Keep the required OpenStreetMap attribution visible. If a future tile provider is added, document the provider URL, attribution, usage limits, and any required environment variables.
+
+Location search runs through the server route at `/api/community/historical-map-studio/geocode`. It supports direct `latitude,longitude` input without an external request. Town, address, and ZIP searches use OpenStreetMap Nominatim server-side with an identifying User-Agent and cached successful responses; do not call Nominatim on every keystroke or expose geocoding logic from the browser. Set `GEOCODING_USER_AGENT` in Vercel if you want a project-specific contact string.
+
+Run `supabase/migrations/0009_town_package_location_metadata.sql` after `0008` to add:
+
+- `location_query`
+- `location_display_name`
+- `location_north`
+- `location_south`
+- `location_east`
+- `location_west`
+
+The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for the active map center.
 
 ## Georeferencing Accuracy
 
@@ -140,6 +154,7 @@ In Vercel Project Settings, add:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- Optional: `GEOCODING_USER_AGENT`
 - `SANBORN_MAX_UPLOAD_BYTES`
 
 Redeploy after saving variables. The public Community pages continue to fall back safely when Supabase is unavailable, but Historical Map Studio writes require the server-only variables.

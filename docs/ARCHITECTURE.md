@@ -97,6 +97,7 @@ Core architecture:
 - Leaflet powers client-only modern basemap and GPS overlay views;
 - OpenStreetMap is the default tile provider and attribution must remain visible;
 - town packages may carry `center_latitude`, `center_longitude`, and `default_zoom`; map workspaces must prefer saved map state but must not silently fall back to `0,0`;
+- server-side geocoding may update town-package location metadata (`location_query`, display name, and optional bounds) but must not create a competing town-location table;
 - Georeference Sheets mode is the default and authoritative stitching workspace;
 - each Sanborn sheet remains an independent geographic layer over the modern basemap;
 - sheet-level georeferencing persists four authoritative corner coordinates, center coordinates, geographic spans, rotation, non-uniform scale, affine skew, pivot, projective warp metadata, flips, opacity, layer order, visibility, lock state, placement status, review status, and evidence classification;

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 import { HistoricalMapLeaflet, basemaps, type HistoricalSheetMapLayer, type SheetImageLoadState } from "@/components/HistoricalMapLeaflet";
+import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
+import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
 import {
   canAutosaveStudioMode,
   canDragStudioPlacement,
@@ -25,6 +27,7 @@ import {
   shouldIgnoreStudioShortcut,
   shouldClearStudioSelection,
   shouldRefreshSignedUrl,
+  selectPreferredSheetAfterUpload,
   shouldPanStudioStage,
   studioAutosaveDelayMs,
   studioTransformerAnchors,
@@ -114,6 +117,11 @@ type GeoreferenceDraft = {
   showSheetBoundaries: boolean;
   notes: string;
   status: string;
+};
+
+type ModernTileDiagnostics = TileDiagnostics & {
+  basemapKey: string;
+  tileLayerMounted: boolean;
 };
 
 function formatDate(value: string | null | undefined): string {
@@ -567,6 +575,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const transformerRef = useRef<any | null>(null);
   const sheetNodeRefs = useRef<Map<string, any>>(new Map());
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingUploadedAssetIdRef = useRef<string>("");
+  const minimalMapRef = useRef<HTMLElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const saveInFlightRef = useRef(false);
   const [stageSize, setStageSize] = useState({ width: 1100, height: 720 });
@@ -607,6 +617,18 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [modernMapZoom, setModernMapZoom] = useState(initialData.geographicMap.zoom);
   const [sheetImageStates, setSheetImageStates] = useState<Record<string, SheetImageLoadState>>({});
   const [fitOverlayRequest, setFitOverlayRequest] = useState(0);
+  const [locationQuery, setLocationQuery] = useState(initialData.activeTownPackage?.locationQuery ?? initialData.activeTownPackage?.locationDisplayName ?? "");
+  const [locationResult, setLocationResult] = useState<GeocodeSuccess | null>(null);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "searching" | "found" | "saved" | "error">("idle");
+  const [locationMessage, setLocationMessage] = useState("");
+  const [resolvedLocationSource, setResolvedLocationSource] = useState(initialData.locationSource);
+  const [modernTileDiagnostics, setModernTileDiagnostics] = useState<ModernTileDiagnostics>({
+    ...createTileDiagnostics(),
+    basemapKey: georeferenceDraft.selectedBasemap,
+    tileLayerMounted: false,
+  });
+  const [mapContainerSize, setMapContainerSize] = useState({ width: 0, height: 0 });
+  const [autoFallbackNotice, setAutoFallbackNotice] = useState("");
   const present = history.present;
   const geoPresent = geoHistory.present;
   const selectedAsset: any = sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
@@ -643,22 +665,74 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   }, []);
 
   useEffect(() => {
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+
+      if (entry) {
+        setMapContainerSize({
+          width: Math.round(entry.contentRect.width),
+          height: Math.round(entry.contentRect.height),
+        });
+      }
+    });
+
+    if (minimalMapRef.current) {
+      resizeObserver.observe(minimalMapRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const handleTileDiagnosticsChange = useCallback((diagnostics: ModernTileDiagnostics) => {
+    setModernTileDiagnostics(diagnostics);
+  }, []);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timeout = window.setTimeout(() => {
+      if (
+        shouldAutoFallbackBasemap({
+          basemapKey: georeferenceDraft.selectedBasemap,
+          status: modernTileDiagnostics.status,
+          successfulTiles: modernTileDiagnostics.successfulTiles,
+          failedTiles: modernTileDiagnostics.failedTiles,
+          elapsedMs: Date.now() - startedAt,
+        })
+      ) {
+        setGeoreferenceDraft((current) => ({ ...current, selectedBasemap: "esri_world_street" }));
+        setAutoFallbackNotice("OpenStreetMap returned no visible tiles, so the studio switched to Alternate streets.");
+      }
+    }, 6_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [georeferenceDraft.selectedBasemap, modernTileDiagnostics.failedTiles, modernTileDiagnostics.status, modernTileDiagnostics.successfulTiles]);
+
+  useEffect(() => {
+    const preferredAssetId = selectPreferredSheetAfterUpload(initialData.sheets, pendingUploadedAssetIdRef.current);
+    const preferredAsset = initialData.sheets.find((sheet) => sheet.assetId === preferredAssetId) ?? initialData.sheets[0] ?? null;
+
+    pendingUploadedAssetIdRef.current = "";
     setSheets(initialData.sheets);
     setHistory(buildInitialHistory(createPresentFromState(initialData)));
     setGeoHistory(buildInitialSheetGeographicHistory(createSheetGeographicPresentFromState(initialData)));
-    setSelectedAssetId(initialData.sheets[0]?.assetId ?? "");
-    setMetadataDraft(createMetadataDraft(initialData.sheets[0] ?? null));
+    setSelectedAssetId(preferredAssetId);
+    setMetadataDraft(createMetadataDraft(preferredAsset));
     setIsDirty(initialData.placements.some((placement) => !placement.isPersisted) || !initialData.workspace?.isPersisted);
     setSaveStatus("idle");
     setSaveMessage("");
     setLastSavedAt(initialData.workspace?.updatedAt ?? "");
-    setGeoreferenceDraft(createGeoreferenceDraft(initialData, initialData.sheets[0]?.assetId ?? null));
+    setGeoreferenceDraft(createGeoreferenceDraft(initialData, preferredAssetId || null));
     setMapCenter(getDefaultTownCenter(initialData));
     setModernMapZoom(initialData.geographicMap.zoom);
-    setGeoEditMode(getInitialGeoEditMode(initialData, initialData.sheets[0]?.assetId ?? ""));
+    setGeoEditMode(getInitialGeoEditMode(initialData, preferredAssetId));
     setMovementScope(initialData.geographicMap.movementScope);
     setGlobalHistoricalOpacity(initialData.geographicMap.globalHistoricalOpacity);
     setSheetImageStates({});
+    setLocationQuery(initialData.activeTownPackage?.locationQuery ?? initialData.activeTownPackage?.locationDisplayName ?? "");
+    setLocationResult(null);
+    setLocationStatus("idle");
+    setLocationMessage("");
+    setResolvedLocationSource(initialData.locationSource);
   }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.geographicMap, initialData.workspace]);
 
   useEffect(() => {
@@ -1490,6 +1564,50 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     );
   }
 
+  async function findLocation(saveToTownPackage = false) {
+    if (!locationQuery.trim()) {
+      setLocationStatus("error");
+      setLocationMessage("Enter a town, address, ZIP code, or latitude and longitude.");
+      return;
+    }
+
+    setLocationStatus("searching");
+    setLocationMessage(saveToTownPackage ? "Saving resolved location..." : "Finding location...");
+
+    const response = await fetch("/api/community/historical-map-studio/geocode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: locationQuery,
+        townPackageId: initialData.activeTownPackage?.id,
+        saveToTownPackage,
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as (GeocodeSuccess & { saved?: boolean; message?: string }) | { ok?: false; message?: string } | null;
+
+    if (!response.ok || !payload?.ok) {
+      setLocationStatus("error");
+      setLocationMessage(payload?.message ?? "Location search failed.");
+      return;
+    }
+
+    const view = {
+      center: { latitude: payload.latitude, longitude: payload.longitude },
+      zoom: payload.defaultZoom,
+    };
+    setLocationResult(payload);
+    setMapCenter(view.center);
+    setModernMapZoom(view.zoom);
+    setResolvedLocationSource(saveToTownPackage ? "town_package" : "location_search");
+    setLocationStatus(saveToTownPackage ? "saved" : "found");
+    setLocationMessage(
+      saveToTownPackage
+        ? `Saved location for ${initialData.activeTownPackage?.name ?? "the active town"}: ${payload.displayName}`
+        : `Found ${payload.displayName}`,
+    );
+    setFitOverlayRequest((current) => current + 1);
+  }
+
   async function uploadSheets(files: FileList | null) {
     if (!files || !initialData.activeTownPackage) {
       return;
@@ -1498,6 +1616,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     const startingMissing = missingSheetNumbers[0] ?? sheets.length + 1;
     let offset = 0;
     const statuses: UploadStatus[] = [];
+    let newestUploadedAssetId = "";
 
     for (const file of Array.from(files)) {
       statuses.push({ filename: file.name, status: "uploading", message: "Uploading..." });
@@ -1511,14 +1630,22 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       offset += 1;
 
       const response = await fetch("/api/community/sanborn-sheets", { method: "POST", body: formData });
-      const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; asset?: { assetId?: string; originalFilename?: string } } | null;
+      if (response.ok && payload?.ok && payload.asset?.assetId) {
+        newestUploadedAssetId = payload.asset.assetId;
+      }
 
       statuses[statuses.length - 1] = {
         filename: file.name,
         status: response.ok && payload?.ok ? "saved" : "failed",
-        message: response.ok && payload?.ok ? "Uploaded. Refreshing workspace..." : payload?.message ?? "Upload failed.",
+        message: response.ok && payload?.ok ? "Uploaded. Refreshing sheet list..." : payload?.message ?? "Upload failed.",
       };
       setUploadStatuses([...statuses]);
+    }
+
+    if (newestUploadedAssetId) {
+      pendingUploadedAssetIdRef.current = newestUploadedAssetId;
+      setSelectedAssetId(newestUploadedAssetId);
     }
 
     router.refresh();
@@ -1930,6 +2057,22 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             : lastSavedAt
               ? `Saved at ${new Date(lastSavedAt).toLocaleTimeString()}`
               : "Unsaved";
+  const latestUploadStatus = uploadStatuses.length > 0 ? uploadStatuses[uploadStatuses.length - 1] : null;
+  const uploadStatusText = latestUploadStatus
+    ? `${latestUploadStatus.status === "uploading" ? "Uploading" : latestUploadStatus.status === "saved" ? "Uploaded" : "Upload failed"}: ${latestUploadStatus.filename}`
+    : "";
+  const selectedBasemap = basemaps.find((basemap) => basemap.key === georeferenceDraft.selectedBasemap) ?? basemaps[0];
+  const modernMapStatusText =
+    modernTileDiagnostics.successfulTiles > 0
+      ? `Modern map: ${selectedBasemap.label} ${modernTileDiagnostics.successfulTiles} tiles loaded`
+      : modernTileDiagnostics.status === "error"
+        ? `Modern map failed: ${selectedBasemap.label} ${modernTileDiagnostics.failedTiles} tiles failed`
+        : `Modern map: loading ${selectedBasemap.label}`;
+  const locationMarker = locationResult ? { latitude: locationResult.latitude, longitude: locationResult.longitude } : null;
+  const activeTownCenter =
+    typeof initialData.activeTownPackage?.centerLatitude === "number" && typeof initialData.activeTownPackage.centerLongitude === "number"
+      ? `${formatCoordinate(initialData.activeTownPackage.centerLatitude)}, ${formatCoordinate(initialData.activeTownPackage.centerLongitude)}`
+      : "unavailable";
 
   return (
     <section className="minimal-sanborn-gps" aria-label="Minimal Sanborn GPS alignment tool">
@@ -1955,6 +2098,41 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             <option key={year} value={year}>{year}</option>
           ))}
         </select>
+        <input
+          aria-label="Town, address, or ZIP"
+          className="minimal-sanborn-gps__location"
+          onChange={(event) => setLocationQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void findLocation(false);
+            }
+          }}
+          placeholder="Town, address, or ZIP"
+          value={locationQuery}
+        />
+        <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(false)} type="button">
+          Find location
+        </button>
+        {locationResult && initialData.activeTownPackage ? (
+          <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(true)} type="button">
+            Use this location for {initialData.activeTownPackage.name} {initialData.activeMapYear}
+          </button>
+        ) : null}
+        <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">
+          Upload Sanborn sheets
+        </button>
+        <input
+          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+          hidden
+          multiple
+          onChange={(event) => {
+            void uploadSheets(event.currentTarget.files);
+            event.currentTarget.value = "";
+          }}
+          ref={uploadInputRef}
+          type="file"
+        />
         <select
           aria-label="Sanborn sheet"
           className="minimal-sanborn-gps__sheet"
@@ -1968,18 +2146,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             </option>
           ))}
         </select>
-        <select
-          aria-label="Basemap"
-          className="minimal-sanborn-gps__basemap"
-          value={georeferenceDraft.selectedBasemap}
-          onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, selectedBasemap: event.target.value })}
-        >
-          {basemaps.map((basemap) => (
-            <option key={basemap.key} value={basemap.key}>{basemap.label}</option>
-          ))}
-        </select>
         <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
-          Add sheet to map
+          Place sheet
         </button>
         <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
           <button
@@ -2037,12 +2205,16 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         </button>
         <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={resetSelectedPlacementToTownCenter} type="button">Reset</button>
         <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={fitSelectedSheet} type="button">Fit sheet</button>
+        <span className="minimal-sanborn-gps__map-status">{modernMapStatusText}</span>
         <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
       </header>
 
-      <main className="minimal-sanborn-gps__map">
+      <main className="minimal-sanborn-gps__map" ref={minimalMapRef}>
         {initialData.warningMessage ? <p className="minimal-sanborn-gps__notice">{initialData.warningMessage}</p> : null}
-        {selectedAsset && !selectedSheetPlaced ? <p className="minimal-sanborn-gps__notice">Selected sheet is not on the map yet. Click Add sheet to map.</p> : null}
+        {locationMessage ? <p className={`minimal-sanborn-gps__notice ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</p> : null}
+        {autoFallbackNotice ? <p className="minimal-sanborn-gps__notice is-warning">{autoFallbackNotice}</p> : null}
+        {uploadStatusText ? <p className={`minimal-sanborn-gps__notice ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</p> : null}
+        {selectedAsset && !selectedSheetPlaced ? <p className="minimal-sanborn-gps__notice">Selected sheet is not on the map yet. Click Place sheet.</p> : null}
         {selectedSheetPlaced && selectedAsset && !selectedAsset.signedUrl ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image is waiting for a signed URL.</p> : null}
         {selectedAsset?.signedUrlError ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to get a signed URL: {selectedAsset.signedUrlError}</p> : null}
         {selectedImageState?.state === "failed" ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to load. Retrying signed URL.</p> : null}
@@ -2056,6 +2228,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           fitBoundsRequest={fitOverlayRequest}
           globalHistoricalOpacity={1}
           imageUrl={null}
+          locationMarker={locationMarker}
           modernLayerVisible
           onCornerDrag={(corner, latitude, longitude) => {
             if (!selectedSheetGeoreference) return;
@@ -2081,6 +2254,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           }}
           onSheetImageStateChange={(state) => setSheetImageStates((current) => ({ ...current, [state.assetId]: state }))}
           onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
+          onTileDiagnosticsChange={handleTileDiagnosticsChange}
           overlayOpacity={0.5}
           overlayVisible={false}
           selectedControlPointId=""
@@ -2114,6 +2288,47 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           ) : (
             <p>Select an uploaded Sanborn sheet.</p>
           )}
+        </details>
+        <details className="minimal-sanborn-gps__diagnostics">
+          <summary>Map diagnostics</summary>
+          <dl>
+            <dt>Current latitude</dt>
+            <dd>{formatCoordinate(mapCenter.latitude)}</dd>
+            <dt>Current longitude</dt>
+            <dd>{formatCoordinate(mapCenter.longitude)}</dd>
+            <dt>Current zoom</dt>
+            <dd>{modernMapZoom}</dd>
+            <dt>Selected basemap</dt>
+            <dd>{selectedBasemap.label}</dd>
+            <dt>TileLayer mounted</dt>
+            <dd>{modernTileDiagnostics.tileLayerMounted ? "yes" : "no"}</dd>
+            <dt>Successful tiles</dt>
+            <dd>{modernTileDiagnostics.successfulTiles}</dd>
+            <dt>Failed tiles</dt>
+            <dd>{modernTileDiagnostics.failedTiles}</dd>
+            <dt>Latest failed host</dt>
+            <dd>{modernTileDiagnostics.latestFailedTileHost ?? "none"}</dd>
+            <dt>Map container</dt>
+            <dd>{mapContainerSize.width} x {mapContainerSize.height}</dd>
+            <dt>Town package ID</dt>
+            <dd>{initialData.activeTownPackage?.id ?? "none"}</dd>
+            <dt>Town package center</dt>
+            <dd>{activeTownCenter}</dd>
+            <dt>Location source</dt>
+            <dd>{resolvedLocationSource}</dd>
+            <dt>Supabase</dt>
+            <dd>{initialData.dataSource === "supabase" ? "connected" : "setup required"}</dd>
+            <dt>Uploaded assets</dt>
+            <dd>{sheets.length}</dd>
+          </dl>
+          <div className="minimal-sanborn-gps__diagnostics-actions">
+            <button className="sanborn-button" disabled={georeferenceDraft.selectedBasemap !== defaultBasemapKey} onClick={() => setGeoreferenceDraft({ ...georeferenceDraft, selectedBasemap: "esri_world_street" })} type="button">
+              Switch to Alternate streets
+            </button>
+            <button className="sanborn-button" disabled={georeferenceDraft.selectedBasemap === defaultBasemapKey} onClick={() => setGeoreferenceDraft({ ...georeferenceDraft, selectedBasemap: defaultBasemapKey })} type="button">
+              Use OpenStreetMap
+            </button>
+          </div>
         </details>
       </main>
     </section>

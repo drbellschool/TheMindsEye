@@ -11,9 +11,10 @@ import {
   getBasemap,
   getModernTileLayerOpacity,
   leafletPaneStack,
+  type TileDiagnostics,
   updateTileDiagnostics,
 } from "@/lib/historical-map-basemap";
-import { boundsFromCorners, getGeoCornerLabel, type GeoBounds, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
+import { boundsFromCorners, getGeoCornerLabel, type GeoBounds, type GeoCoordinate, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
 import {
   normalizeSheetGeographicTransform,
   type GeoEditMode,
@@ -51,6 +52,8 @@ type HistoricalMapLeafletProps = {
   onSheetTransformCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
   onRefreshSheetSignedUrl?: (assetId: string) => void;
   onSheetImageStateChange?: (state: SheetImageLoadState) => void;
+  onTileDiagnosticsChange?: (diagnostics: TileDiagnostics & { basemapKey: string; tileLayerMounted: boolean }) => void;
+  locationMarker?: GeoCoordinate | null;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -70,6 +73,21 @@ export type SheetImageLoadState = {
   transformValid: boolean;
   message: string;
 };
+
+function getTileHost(details?: unknown): string | null {
+  const tile = (details as { tile?: HTMLImageElement } | undefined)?.tile;
+  const source = tile?.currentSrc || tile?.src;
+
+  if (!source) {
+    return null;
+  }
+
+  try {
+    return new URL(source).hostname;
+  } catch {
+    return null;
+  }
+}
 
 function markerIcon(className: string, label: string) {
   return L.divIcon({
@@ -826,7 +844,17 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
     setTileDiagnostics(createTileDiagnostics());
   }, [basemap.key, tileRetry]);
 
+  useEffect(() => {
+    props.onTileDiagnosticsChange?.({
+      ...tileDiagnostics,
+      basemapKey: basemap.key,
+      tileLayerMounted: true,
+    });
+  }, [basemap.key, props.onTileDiagnosticsChange, tileDiagnostics]);
+
   function recordTileEvent(event: "loading" | "tileload" | "tileerror" | "load", details?: unknown) {
+    const failedHost = event === "tileerror" ? getTileHost(details) : null;
+
     if (event === "tileerror" && process.env.NODE_ENV !== "production") {
       const tile = (details as { tile?: HTMLImageElement } | undefined)?.tile;
       console.warn("Historical Map Studio basemap tile failed", {
@@ -835,7 +863,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       });
     }
 
-    setTileDiagnostics((current) => updateTileDiagnostics(current, event));
+    setTileDiagnostics((current) => updateTileDiagnostics(current, event, { failedHost }));
   }
 
   return (
@@ -924,6 +952,10 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
               />
             ))
         : null}
+
+      {props.locationMarker ? (
+        <Marker icon={markerIcon("is-location", "LOC")} position={[props.locationMarker.latitude, props.locationMarker.longitude]} />
+      ) : null}
 
       <div className={`map-studio-tile-status is-${tileStatus}`}>
         {tileStatus === "idle" ? "Loading modern map" : null}

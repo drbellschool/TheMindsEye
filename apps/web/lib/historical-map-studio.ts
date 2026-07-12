@@ -35,6 +35,12 @@ export type StudioTownPackage = {
   centerLatitude: number | null;
   centerLongitude: number | null;
   defaultZoom: number | null;
+  locationQuery?: string | null;
+  locationDisplayName?: string | null;
+  locationNorth?: number | null;
+  locationSouth?: number | null;
+  locationEast?: number | null;
+  locationWest?: number | null;
 };
 
 export type StudioSourceOption = {
@@ -134,6 +140,7 @@ export type HistoricalMapStudioState = {
   selectedBasemap: string;
   overlayOpacity: number;
   overlayVisible: boolean;
+  locationSource: string;
   lastLoadedAt: string;
 };
 
@@ -282,6 +289,14 @@ export function normalizeOptionalString(value: string | null | undefined, maxLen
 
 export function getSheetNumbers(assets: Array<{ sheetNumber: number | null }>): number[] {
   return assets.map((asset) => asset.sheetNumber).filter((sheetNumber): sheetNumber is number => Number.isInteger(sheetNumber));
+}
+
+export function selectPreferredSheetAfterUpload(assets: Array<{ assetId: string }>, pendingAssetId: string | null | undefined): string {
+  if (pendingAssetId && assets.some((asset) => asset.assetId === pendingAssetId)) {
+    return pendingAssetId;
+  }
+
+  return assets[0]?.assetId ?? "";
 }
 
 export function findDuplicateStudioSheetNumbers(assets: Array<{ sheetNumber: number | null }>): number[] {

@@ -54,6 +54,12 @@ type TownPackageRow = {
   center_latitude?: number | null;
   center_longitude?: number | null;
   default_zoom?: number | null;
+  location_query?: string | null;
+  location_display_name?: string | null;
+  location_north?: number | null;
+  location_south?: number | null;
+  location_east?: number | null;
+  location_west?: number | null;
 };
 
 type SourceRecordRow = {
@@ -256,6 +262,7 @@ function createEmptyState(input: {
     selectedBasemap: "osm",
     overlayOpacity: 0.65,
     overlayVisible: true,
+    locationSource: "unresolved",
     lastLoadedAt: new Date().toISOString(),
   };
 }
@@ -270,6 +277,12 @@ function mapTown(row: TownPackageRow): StudioTownPackage {
     centerLatitude: typeof row.center_latitude === "number" ? row.center_latitude : null,
     centerLongitude: typeof row.center_longitude === "number" ? row.center_longitude : null,
     defaultZoom: typeof row.default_zoom === "number" ? row.default_zoom : null,
+    locationQuery: row.location_query ?? null,
+    locationDisplayName: row.location_display_name ?? null,
+    locationNorth: typeof row.location_north === "number" ? row.location_north : null,
+    locationSouth: typeof row.location_south === "number" ? row.location_south : null,
+    locationEast: typeof row.location_east === "number" ? row.location_east : null,
+    locationWest: typeof row.location_west === "number" ? row.location_west : null,
   };
 }
 
@@ -732,10 +745,24 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     });
   }
 
+  const townPackageLocationSelect =
+    "id, package_id, name, state_region, year, center_latitude, center_longitude, default_zoom, location_query, location_display_name, location_north, location_south, location_east, location_west";
+  const townPackageCenterSelect = "id, package_id, name, state_region, year, center_latitude, center_longitude, default_zoom";
+  const townPackageBaseSelect = "id, package_id, name, state_region, year";
   let townPackagesResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
     .from("town_packages")
-    .select("id, package_id, name, state_region, year, center_latitude, center_longitude, default_zoom")
+    .select(townPackageLocationSelect)
     .order("year", { ascending: false });
+
+  if (townPackagesResult.error && /location_query|location_display_name|location_north|location_south|location_east|location_west/i.test(townPackagesResult.error.message)) {
+    console.warn("[HistoricalMapStudio] Town location columns are unavailable; falling back to town center select.", {
+      message: townPackagesResult.error.message,
+    });
+    townPackagesResult = await supabase
+      .from("town_packages")
+      .select(townPackageCenterSelect)
+      .order("year", { ascending: false });
+  }
 
   if (townPackagesResult.error && /center_latitude|center_longitude|default_zoom/i.test(townPackagesResult.error.message)) {
     console.warn("[HistoricalMapStudio] Town center columns are unavailable; falling back to legacy town package select.", {
@@ -743,7 +770,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     });
     townPackagesResult = await supabase
       .from("town_packages")
-      .select("id, package_id, name, state_region, year")
+      .select(townPackageBaseSelect)
       .order("year", { ascending: false });
   }
 
@@ -922,6 +949,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     selectedBasemap: workspaceRow?.selected_basemap ?? primaryGeoreference?.selectedBasemap ?? "osm",
     overlayOpacity: primaryGeoreference?.overlayOpacity ?? 0.65,
     overlayVisible: primaryGeoreference?.overlayVisible ?? true,
+    locationSource: resolvedMapView.source,
     lastLoadedAt: new Date().toISOString(),
   };
 });
