@@ -6,6 +6,7 @@ import {
   buildInitialHistory,
   canAutosaveStudioMode,
   canDragStudioPlacement,
+  canEditHistoricalSheetOnMap,
   createDefaultGridPlacements,
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
@@ -28,13 +29,15 @@ import {
   shouldAttachStudioTransformer,
   shouldClearStudioSelection,
   shouldIgnoreStudioShortcut,
+  shouldRefreshSignedUrl,
+  shouldPanModernMap,
   shouldPanStudioStage,
   undoStudioHistory,
   updatePlacement,
   validateStudioMetadataInput,
   type StudioPlacement,
 } from "./historical-map-studio.ts";
-import { selectActiveTownPackage } from "./historical-map-studio-data.ts";
+import { resolveInitialGeographicMapView, selectActiveTownPackage } from "./historical-map-studio-data.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
   return normalizePlacement({
@@ -274,8 +277,8 @@ test("documents delete and replacement transaction operation order", () => {
 
 test("selects valid, single, and stale town packages safely", () => {
   const towns = [
-    { id: "town-1", packageId: "texarkana_1885", name: "Texarkana", region: "Texas / Arkansas", year: 1885 },
-    { id: "town-2", packageId: "other_1900", name: "Other", region: "Unknown", year: 1900 },
+    { id: "town-1", packageId: "texarkana_1885", name: "Texarkana", region: "Texas / Arkansas", year: 1885, centerLatitude: 33.425, centerLongitude: -94.047, defaultZoom: 15 },
+    { id: "town-2", packageId: "other_1900", name: "Other", region: "Unknown", year: 1900, centerLatitude: null, centerLongitude: null, defaultZoom: null },
   ];
 
   assert.equal(selectActiveTownPackage(towns, "town-1").town?.id, "town-1");
@@ -286,4 +289,58 @@ test("selects valid, single, and stale town packages safely", () => {
   assert.match(recovered.warningMessage ?? "", /Recovered from unavailable town package/);
 
   assert.equal(selectActiveTownPackage([], "deleted-town").town, null);
+});
+
+test("resolves Historical Map Studio center without accidental zero-zero defaults", () => {
+  const texarkana = { id: "town-1", packageId: "texarkana_1885", name: "Texarkana", region: "Texas / Arkansas", year: 1885, centerLatitude: 33.425, centerLongitude: -94.047, defaultZoom: 15 };
+
+  const fromTown = resolveInitialGeographicMapView({ town: texarkana, workspaceCenter: null, sheetGeoreferences: [], georeferences: [] });
+  assert.equal(fromTown.center?.latitude, 33.425);
+  assert.equal(fromTown.center?.longitude, -94.047);
+  assert.equal(fromTown.source, "town_package");
+
+  const saved = resolveInitialGeographicMapView({ town: texarkana, workspaceCenter: { latitude: 33.43, longitude: -94.05 }, workspaceZoom: 17 });
+  assert.equal(saved.center?.latitude, 33.43);
+  assert.equal(saved.zoom, 17);
+  assert.equal(saved.source, "workspace");
+
+  const recovered = resolveInitialGeographicMapView({ town: texarkana, workspaceCenter: { latitude: 0, longitude: 0 }, sheetGeoreferences: [], georeferences: [] });
+  assert.notDeepEqual(recovered.center, { latitude: 0, longitude: 0 });
+  assert.equal(recovered.recoveredFromInvalidWorkspaceCenter, true);
+});
+
+test("existing sheet bounds override configured fallback when town metadata is missing", () => {
+  const townWithoutCenter = { id: "town-1", packageId: "texarkana_1885", name: "Texarkana", region: "Texas / Arkansas", year: 1885, centerLatitude: null, centerLongitude: null, defaultZoom: null };
+  const sheet = {
+    assetId: "asset-1",
+    centerLatitude: 33.5,
+    centerLongitude: -94.2,
+    latitudeSpan: 0.01,
+    longitudeSpan: 0.01,
+    corners: {
+      northwest: { latitude: 33.505, longitude: -94.205 },
+      northeast: { latitude: 33.505, longitude: -94.195 },
+      southeast: { latitude: 33.495, longitude: -94.195 },
+      southwest: { latitude: 33.495, longitude: -94.205 },
+    },
+    isVisible: true,
+    placementStatus: "draft" as const,
+  };
+
+  const resolved = resolveInitialGeographicMapView({ town: townWithoutCenter, sheetGeoreferences: [sheet as never], georeferences: [] });
+  assert.equal(resolved.source, "sheet_bounds");
+  assert.equal(resolved.center?.latitude, 33.5);
+});
+
+test("map edit mode and signed URL refresh helpers distinguish pan, edit, and expiry states", () => {
+  assert.equal(shouldPanModernMap("pan_modern_map"), true);
+  assert.equal(shouldPanModernMap("edit_historical_sheets"), false);
+  assert.equal(canEditHistoricalSheetOnMap({ mode: "edit_historical_sheets", isVisible: true, isLocked: false }), true);
+  assert.equal(canEditHistoricalSheetOnMap({ mode: "pan_modern_map", isVisible: true, isLocked: false }), false);
+  assert.equal(canEditHistoricalSheetOnMap({ mode: "edit_historical_sheets", isVisible: true, isLocked: true }), false);
+
+  const now = Date.parse("2026-07-12T12:00:00Z");
+  assert.equal(shouldRefreshSignedUrl("2026-07-12T12:00:30Z", now), true);
+  assert.equal(shouldRefreshSignedUrl("2026-07-12T12:05:00Z", now), false);
+  assert.equal(shouldRefreshSignedUrl(null, now), true);
 });

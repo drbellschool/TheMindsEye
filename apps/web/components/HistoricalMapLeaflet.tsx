@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { ImageOverlay, MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 
-import { boundsFromCorners, type GeoBounds, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
+import { boundsFromCorners, getGeoCornerLabel, type GeoBounds, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
 import {
   normalizeSheetGeographicTransform,
   type GeoEditMode,
@@ -55,6 +55,8 @@ type HistoricalMapLeafletProps = {
   onMapViewChange: (center: LatLngTuple, zoom: number) => void;
   onSelectSheet?: (assetId: string) => void;
   onSheetTransformCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
+  onRefreshSheetSignedUrl?: (assetId: string) => void;
+  onSheetImageStateChange?: (state: SheetImageLoadState) => void;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -64,6 +66,15 @@ export type HistoricalSheetMapLayer = SheetGeographicTransform & {
   width: number;
   height: number;
   signedUrlError?: string;
+};
+
+export type SheetImageLoadState = {
+  assetId: string;
+  state: "idle" | "loading" | "loaded" | "failed";
+  naturalWidth: number | null;
+  naturalHeight: number | null;
+  transformValid: boolean;
+  message: string;
 };
 
 function markerIcon(className: string, label: string) {
@@ -139,6 +150,30 @@ function FitBounds({ bounds, request }: { bounds: GeoBounds | null; request: num
       map.fitBounds(boundsToLeaflet(bounds), { padding: [40, 40] });
     }
   }, [bounds, map, request]);
+
+  return null;
+}
+
+function SyncMapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
+  const map = useMap();
+  const lastRequestedView = useRef<string>("");
+
+  useEffect(() => {
+    const key = `${center[0].toFixed(7)},${center[1].toFixed(7)},${zoom}`;
+
+    if (lastRequestedView.current === key) {
+      return;
+    }
+
+    lastRequestedView.current = key;
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+    const centerChanged = Math.abs(currentCenter.lat - center[0]) > 0.0000001 || Math.abs(currentCenter.lng - center[1]) > 0.0000001;
+
+    if (centerChanged || currentZoom !== zoom) {
+      map.setView(center, zoom, { animate: false });
+    }
+  }, [center, map, zoom]);
 
   return null;
 }
@@ -237,7 +272,15 @@ function solveLinearSystem(matrix: number[][], vector: number[]): number[] | nul
   return augmented.map((row) => row[size]);
 }
 
-function getProjectiveTransform(width: number, height: number, points: QuadPoints, offset: L.Point): string {
+function getRectangularFallbackTransform(width: number, height: number, points: QuadPoints): string {
+  const bounds = getTransformedQuadBounds(points);
+  const scaleX = bounds.width / Math.max(width, 1);
+  const scaleY = bounds.height / Math.max(height, 1);
+
+  return `matrix3d(${scaleX},0,0,0,0,${scaleY},0,0,0,0,1,0,0,0,0,1)`;
+}
+
+function getProjectiveTransform(width: number, height: number, points: QuadPoints, offset: L.Point): { transform: string; valid: boolean } {
   const source = [
     [0, 0],
     [width, 0],
@@ -259,13 +302,17 @@ function getProjectiveTransform(width: number, height: number, points: QuadPoint
   const solved = solveLinearSystem(matrix, vector);
 
   if (!solved) {
-    return "matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)";
+    return { transform: getRectangularFallbackTransform(width, height, points), valid: false };
   }
 
   const [a, b, c, d, e, f, g, h] = solved;
   const cssMatrix = [a, d, 0, g, b, e, 0, h, 0, 0, 1, 0, c, f, 0, 1];
 
-  return `matrix3d(${cssMatrix.map((value) => Number(value.toFixed(12))).join(",")})`;
+  if (cssMatrix.some((value) => !Number.isFinite(value))) {
+    return { transform: getRectangularFallbackTransform(width, height, points), valid: false };
+  }
+
+  return { transform: `matrix3d(${cssMatrix.map((value) => Number(value.toFixed(12))).join(",")})`, valid: true };
 }
 
 function rotatePoints(points: QuadPoints, center: L.Point, degrees: number): QuadPoints {
@@ -336,6 +383,8 @@ function TransformedSheetLayer({
   showLabel,
   onSelect,
   onCommit,
+  onRefreshSignedUrl,
+  onImageStateChange,
 }: {
   layer: HistoricalSheetMapLayer;
   isSelected: boolean;
@@ -344,19 +393,30 @@ function TransformedSheetLayer({
   showLabel: boolean;
   onSelect?: (assetId: string) => void;
   onCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
+  onRefreshSignedUrl?: (assetId: string) => void;
+  onImageStateChange?: (state: SheetImageLoadState) => void;
 }) {
   const map = useMap();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const latestRef = useRef({ layer, isSelected, mode, globalOpacity, showLabel, onSelect, onCommit });
-  latestRef.current = { layer, isSelected, mode, globalOpacity, showLabel, onSelect, onCommit };
+  const interactionCleanupRef = useRef<(() => void) | null>(null);
+  const latestRef = useRef({ layer, isSelected, mode, globalOpacity, showLabel, onSelect, onCommit, onRefreshSignedUrl, onImageStateChange });
+  latestRef.current = { layer, isSelected, mode, globalOpacity, showLabel, onSelect, onCommit, onRefreshSignedUrl, onImageStateChange };
 
   useEffect(() => {
-    const pane = map.getPanes().overlayPane;
+    interactionCleanupRef.current?.();
+    interactionCleanupRef.current = null;
+  }, [layer.assetId, mode]);
+
+  useEffect(() => {
+    const pane = map.getPane("historical-sheet-pane") ?? map.createPane("historical-sheet-pane");
+    pane.style.zIndex = "450";
+    pane.style.pointerEvents = "auto";
     const element = L.DomUtil.create("div", "map-studio-sheet-overlay", pane);
     const image = L.DomUtil.create("img", "map-studio-sheet-overlay__image", element);
     const boundary = L.DomUtil.create("span", "map-studio-sheet-overlay__boundary", element);
     const label = L.DomUtil.create("span", "map-studio-sheet-overlay__label", element);
     const pivot = L.DomUtil.create("span", "map-studio-sheet-overlay__pivot", element);
+    const diagnostics = L.DomUtil.create("span", "map-studio-sheet-overlay__diagnostics", element);
     const handles = [
       ["rotate", "rotate"],
       ["center", "drag"],
@@ -378,10 +438,42 @@ function TransformedSheetLayer({
     });
     let draft: SheetGeographicTransform | null = null;
     let dragCleanup: (() => void) | null = null;
+    let naturalSize: { width: number; height: number } | null = null;
+    let imageLoadState: SheetImageLoadState["state"] = latestRef.current.layer.imageUrl ? "loading" : "idle";
+    let transformValid = true;
     containerRef.current = element;
+    L.DomEvent.disableClickPropagation(element);
+    L.DomEvent.disableScrollPropagation(element);
+
+    function emitImageState(state: SheetImageLoadState["state"], message: string) {
+      imageLoadState = state;
+      const width = naturalSize?.width ?? null;
+      const height = naturalSize?.height ?? null;
+      diagnostics.textContent = latestRef.current.isSelected
+        ? `Image: ${state}${width && height ? ` (${width}x${height})` : ""}${transformValid ? "" : " | rectangular fallback"}`
+        : "";
+      latestRef.current.onImageStateChange?.({
+        assetId: latestRef.current.layer.assetId,
+        state,
+        naturalWidth: width,
+        naturalHeight: height,
+        transformValid,
+        message,
+      });
+    }
 
     function effectiveLayer() {
       return draft ?? latestRef.current.layer;
+    }
+
+    function getImageSize() {
+      const configuredWidth = Number(latestRef.current.layer.width);
+      const configuredHeight = Number(latestRef.current.layer.height);
+
+      return {
+        width: Number.isFinite(configuredWidth) && configuredWidth > 0 ? configuredWidth : naturalSize?.width ?? 1000,
+        height: Number.isFinite(configuredHeight) && configuredHeight > 0 ? configuredHeight : naturalSize?.height ?? 800,
+      };
     }
 
     function setElementTransform(sheet: SheetGeographicTransform) {
@@ -391,6 +483,8 @@ function TransformedSheetLayer({
       const editMode = latestRef.current.mode === "edit_historical_sheets";
       const visibleHandles = selected && editMode && !sheet.isLocked;
       const offset = L.point(bounds.minX, bounds.minY);
+      const imageSize = getImageSize();
+      const projectiveTransform = getProjectiveTransform(imageSize.width, imageSize.height, points, offset);
       const centerPoint = getPointCenter(points);
       const handlePositions: Record<string, L.Point> = {
         "top-left": points.northwest,
@@ -410,21 +504,38 @@ function TransformedSheetLayer({
       element.style.top = `${bounds.minY}px`;
       element.style.width = `${bounds.width}px`;
       element.style.height = `${bounds.height}px`;
-      element.style.opacity = String(sheet.opacity * latestRef.current.globalOpacity);
-      element.style.pointerEvents = editMode || selected ? "auto" : "none";
+      element.style.opacity = String(Math.max(0.1, Math.min(1, sheet.opacity * latestRef.current.globalOpacity)));
+      element.style.pointerEvents = editMode ? "auto" : "none";
       element.style.zIndex = String(400 + sheet.layerOrder + (selected ? 1000 : 0));
+      element.style.cursor = sheet.isLocked ? "not-allowed" : editMode ? "grab" : "default";
       element.classList.toggle("is-selected", selected);
       element.classList.toggle("is-locked", sheet.isLocked);
       element.classList.toggle("is-hidden", !sheet.isVisible);
-      image.src = latestRef.current.layer.imageUrl ?? "";
+      element.classList.toggle("has-image-error", imageLoadState === "failed" || Boolean(latestRef.current.layer.signedUrlError));
+      element.classList.toggle("has-invalid-transform", !projectiveTransform.valid);
+      transformValid = projectiveTransform.valid;
+      if (latestRef.current.layer.imageUrl && image.src !== latestRef.current.layer.imageUrl) {
+        emitImageState("loading", "Loading signed Sanborn image.");
+        image.src = latestRef.current.layer.imageUrl;
+      }
       image.alt = `Sanborn sheet ${latestRef.current.layer.sheetNumber ?? "unknown"}`;
-      image.style.width = `${latestRef.current.layer.width}px`;
-      image.style.height = `${latestRef.current.layer.height}px`;
-      image.style.transform = getProjectiveTransform(latestRef.current.layer.width, latestRef.current.layer.height, points, offset);
+      image.style.display = latestRef.current.layer.imageUrl ? "block" : "none";
+      image.style.width = `${imageSize.width}px`;
+      image.style.height = `${imageSize.height}px`;
+      image.style.pointerEvents = editMode ? "auto" : "none";
+      image.style.transform = projectiveTransform.transform;
       label.textContent = latestRef.current.showLabel ? `Sheet ${latestRef.current.layer.sheetNumber ?? "unknown"}` : "";
       label.style.display = latestRef.current.showLabel ? "block" : "none";
       boundary.style.clipPath = `polygon(${points.northwest.x - offset.x}px ${points.northwest.y - offset.y}px, ${points.northeast.x - offset.x}px ${points.northeast.y - offset.y}px, ${points.southeast.x - offset.x}px ${points.southeast.y - offset.y}px, ${points.southwest.x - offset.x}px ${points.southwest.y - offset.y}px)`;
       boundary.style.display = selected || latestRef.current.showLabel ? "block" : "none";
+      diagnostics.style.display = selected && (imageLoadState === "failed" || latestRef.current.layer.signedUrlError || !projectiveTransform.valid) ? "block" : "none";
+      diagnostics.textContent = latestRef.current.layer.signedUrlError
+        ? `Image: signed URL failed (${latestRef.current.layer.signedUrlError})`
+        : imageLoadState === "failed"
+          ? "Image: failed to load. Retrying signed URL."
+          : !projectiveTransform.valid
+            ? "Transform: rectangular fallback"
+            : diagnostics.textContent;
       pivot.style.left = `${pivotPoint.x - offset.x}px`;
       pivot.style.top = `${pivotPoint.y - offset.y}px`;
       pivot.style.display = visibleHandles ? "block" : "none";
@@ -456,7 +567,7 @@ function TransformedSheetLayer({
       const committed = normalizeSheetGeographicTransform({
         ...nextDraft,
         warpType: "projective",
-        placementStatus: "placed",
+        placementStatus: nextDraft.placementStatus === "aligned" || nextDraft.placementStatus === "reviewed" ? nextDraft.placementStatus : "draft",
       });
 
       latestRef.current.onCommit?.(committed.assetId, {
@@ -489,6 +600,7 @@ function TransformedSheetLayer({
 
       L.DomEvent.stop(event);
       event.preventDefault();
+      event.stopPropagation();
       current.onSelect?.(sheet.assetId);
 
       if (sheet.isLocked) {
@@ -496,6 +608,11 @@ function TransformedSheetLayer({
       }
 
       map.dragging.disable();
+      try {
+        target.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Some browsers do not allow capture on every transformed child node.
+      }
       const startPoints = getSheetCornerPoints(map, sheet);
       const start = {
         x: event.clientX,
@@ -510,6 +627,12 @@ function TransformedSheetLayer({
       };
 
       function handleMove(moveEvent: PointerEvent) {
+        if (latestRef.current.mode !== "edit_historical_sheets") {
+          handleUp(moveEvent);
+          return;
+        }
+
+        moveEvent.preventDefault();
         const dx = moveEvent.clientX - start.x;
         const dy = moveEvent.clientY - start.y;
 
@@ -522,11 +645,14 @@ function TransformedSheetLayer({
             "bottom-left": "southwest",
           };
           const corner = cornerByPosition[position];
+          if (!corner) {
+            return;
+          }
           const nextPoints = { ...start.points, [corner]: L.point(start.points[corner].x + dx, start.points[corner].y + dy) };
-          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "placed" });
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "draft" });
         } else if (action === "edge") {
           const nextPoints = setEdge(start.points, target.dataset.position ?? "", L.point(start.centerPoint.x + dx, start.centerPoint.y + dy));
-          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "placed" });
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "draft" });
         } else if (action === "rotate") {
           const startAngle = Math.atan2(start.y - start.pivotPoint.y, start.x - start.pivotPoint.x);
           const nextAngle = Math.atan2(moveEvent.clientY - start.pivotPoint.y, moveEvent.clientX - start.pivotPoint.x);
@@ -544,36 +670,72 @@ function TransformedSheetLayer({
           draft = normalizeSheetGeographicTransform({
             ...start.sheet,
             corners: pointsToCorners(map, nextPoints),
-            placementStatus: "placed",
+            placementStatus: "draft",
           });
         }
 
         updateFromMap();
       }
 
-      function handleUp() {
+      function handleUp(upEvent: PointerEvent | Event = event) {
         document.removeEventListener("pointermove", handleMove);
         document.removeEventListener("pointerup", handleUp);
-        map.dragging.enable();
+        document.removeEventListener("pointercancel", handleUp);
+        const pointerId = "pointerId" in upEvent ? upEvent.pointerId : event.pointerId;
+        try {
+          target.releasePointerCapture?.(pointerId);
+        } catch {
+          // Pointer capture may already be released if the browser cancels the gesture.
+        }
+        if (latestRef.current.mode === "edit_historical_sheets") {
+          map.dragging.disable();
+        } else {
+          map.dragging.enable();
+        }
         finishInteraction(draft);
         draft = null;
         updateFromMap();
+        dragCleanup = null;
+        interactionCleanupRef.current = null;
       }
 
       document.addEventListener("pointermove", handleMove);
       document.addEventListener("pointerup", handleUp);
+      document.addEventListener("pointercancel", handleUp);
       dragCleanup = () => {
         document.removeEventListener("pointermove", handleMove);
         document.removeEventListener("pointerup", handleUp);
+        document.removeEventListener("pointercancel", handleUp);
+        try {
+          target.releasePointerCapture?.(event.pointerId);
+        } catch {
+          // Pointer capture may already be released if the browser cancels the gesture.
+        }
       };
+      interactionCleanupRef.current = dragCleanup;
     }
 
+    image.onload = () => {
+      naturalSize = {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      };
+      emitImageState("loaded", "Signed Sanborn image loaded.");
+      updateFromMap();
+    };
+    image.onerror = () => {
+      naturalSize = null;
+      emitImageState("failed", "Signed Sanborn image failed to load.");
+      latestRef.current.onRefreshSignedUrl?.(latestRef.current.layer.assetId);
+      updateFromMap();
+    };
     element.addEventListener("pointerdown", startPointerInteraction);
     map.on("move zoom viewreset", updateFromMap);
     updateFromMap();
 
     return () => {
       dragCleanup?.();
+      interactionCleanupRef.current = null;
       element.removeEventListener("pointerdown", startPointerInteraction);
       map.off("move zoom viewreset", updateFromMap);
       element.remove();
@@ -598,10 +760,24 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   const derivedBounds = props.bounds ?? boundsFromCorners(props.corners);
   const polygon = useMemo(() => getCornerPolygon(props.corners), [props.corners]);
   const sheetLayers = props.sheetLayers ?? [];
+  const [tileStatus, setTileStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [tileRetry, setTileRetry] = useState(0);
+  const showLegacyOverlayControls = sheetLayers.length === 0 && props.overlayVisible;
 
   return (
     <MapContainer center={props.center} className="map-studio-leaflet-map" scrollWheelZoom zoom={props.zoom}>
-      <TileLayer attribution={basemap.attribution} opacity={props.modernLayerVisible === false ? 0 : 1} url={basemap.url} />
+      <TileLayer
+        attribution={basemap.attribution}
+        eventHandlers={{
+          loading: () => setTileStatus("loading"),
+          load: () => setTileStatus("loaded"),
+          tileerror: () => setTileStatus("error"),
+        }}
+        key={`${basemap.key}-${tileRetry}`}
+        opacity={props.modernLayerVisible === false ? 0 : 1}
+        url={basemap.url}
+      />
+      <SyncMapView center={props.center} zoom={props.zoom} />
       <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />
       <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
       <FitBounds bounds={derivedBounds} request={props.fitBoundsRequest} />
@@ -617,18 +793,20 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             layer={sheet}
             mode={props.sheetEditMode ?? "pan_modern_map"}
             onCommit={props.onSheetTransformCommit}
+            onImageStateChange={props.onSheetImageStateChange}
+            onRefreshSignedUrl={props.onRefreshSheetSignedUrl}
             onSelect={props.onSelectSheet}
             showLabel={props.showSheetLabels ?? true}
           />
         ))}
 
-      {sheetLayers.length === 0 && props.overlayVisible && props.imageUrl && derivedBounds ? (
+      {showLegacyOverlayControls && props.imageUrl && derivedBounds ? (
         <ImageOverlay bounds={boundsToLeaflet(derivedBounds)} opacity={props.overlayOpacity} url={props.imageUrl} />
       ) : null}
 
-      {props.showSheetBoundaries && polygon.length >= 3 ? <Polygon pathOptions={{ color: "#e2be7e", weight: 2, fill: false }} positions={polygon} /> : null}
+      {showLegacyOverlayControls && props.showSheetBoundaries && polygon.length >= 3 ? <Polygon pathOptions={{ color: "#e2be7e", weight: 2, fill: false }} positions={polygon} /> : null}
 
-      {(["northwest", "northeast", "southeast", "southwest"] as Array<keyof GeoCorners>).map((corner) => {
+      {showLegacyOverlayControls ? (["northwest", "northeast", "southeast", "southwest"] as Array<keyof GeoCorners>).map((corner) => {
         const coordinate = props.corners[corner];
 
         if (!coordinate) {
@@ -644,12 +822,12 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
                 props.onCornerDrag(corner, latlng.lat, latlng.lng);
               },
             }}
-            icon={markerIcon("is-corner", corner.slice(0, 2).toUpperCase())}
+            icon={markerIcon("is-corner", getGeoCornerLabel(corner))}
             key={corner}
             position={[coordinate.latitude, coordinate.longitude]}
           />
         );
-      })}
+      }) : null}
 
       {props.showControlPoints
         ? props.controlPoints
@@ -669,6 +847,16 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
               />
             ))
         : null}
+
+      <div className={`map-studio-tile-status is-${tileStatus}`}>
+        {tileStatus === "loading" ? "Loading map tiles..." : null}
+        {tileStatus === "error" ? (
+          <>
+            <span>Map tile loading error.</span>
+            <button type="button" onClick={() => setTileRetry((value) => value + 1)}>Retry</button>
+          </>
+        ) : null}
+      </div>
     </MapContainer>
   );
 }

@@ -1,9 +1,9 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 import {
   clampNumber,
-  maxStudioOpacity,
+  clampHistoricalOpacity,
+  defaultHistoricalSheetOpacity,
   maxStudioScale,
-  minStudioOpacity,
   minStudioScale,
   normalizeReviewClassification,
   normalizeRotation,
@@ -17,7 +17,7 @@ export const sheetGeoreferenceStatuses = ["not_started", "bounding_box", "contro
 export const geoEditModes = ["pan_modern_map", "edit_historical_sheets"] as const;
 export const movementScopes = ["selected_sheet", "entire_assembly"] as const;
 export const sheetWarpTypes = ["projective", "affine", "rectangular"] as const;
-export const sheetPlacementStatuses = ["unplaced", "placed", "aligned", "reviewed"] as const;
+export const sheetPlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed"] as const;
 
 export type SheetGeoreferenceStatus = (typeof sheetGeoreferenceStatuses)[number];
 export type GeoEditMode = (typeof geoEditModes)[number];
@@ -132,7 +132,7 @@ export function normalizeGeographicMapSettings(input: Partial<GeographicMapSetti
     zoom: clampNumber(Number(input?.zoom ?? defaultGeographicZoom), 1, 22),
     editMode: normalizeGeoEditMode(input?.editMode),
     movementScope: normalizeMovementScope(input?.movementScope),
-    globalHistoricalOpacity: clampNumber(Number(input?.globalHistoricalOpacity ?? 1), 0, 1),
+    globalHistoricalOpacity: clampHistoricalOpacity(input?.globalHistoricalOpacity, defaultHistoricalSheetOpacity),
   };
 }
 
@@ -294,7 +294,7 @@ export function normalizeSheetGeographicTransform(
     placementStatus: normalizeSheetPlacementStatus(input.placementStatus, input.isVisible ?? true),
     isFlippedHorizontally: input.isFlippedHorizontally ?? false,
     isFlippedVertically: input.isFlippedVertically ?? false,
-    opacity: clampNumber(Number(input.opacity ?? 1), minStudioOpacity, maxStudioOpacity),
+    opacity: clampHistoricalOpacity(input.opacity, defaultHistoricalSheetOpacity),
     layerOrder: Number.isInteger(input.layerOrder) ? Number(input.layerOrder) : 0,
     isVisible: input.isVisible ?? true,
     isLocked: input.isLocked ?? false,
@@ -343,7 +343,7 @@ export function placeSheetAtMapCenter(
     longitudeSpan: options.longitudeSpan ?? sheet.longitudeSpan,
     latitudeSpan: options.latitudeSpan ?? sheet.latitudeSpan,
     isVisible: true,
-    placementStatus: "placed",
+    placementStatus: "draft",
     georeferenceStatus: sheet.georeferenceStatus === "not_started" ? "bounding_box" : sheet.georeferenceStatus,
     transformVersion: sheet.transformVersion + 1,
   });
@@ -376,6 +376,37 @@ export function removeSheetGeographicPlacement(sheet: SheetGeographicTransform):
     projectiveMatrix: null,
     transformVersion: sheet.transformVersion + 1,
   });
+}
+
+export function isAccidentalZeroSheetPlacement(sheet: SheetGeographicTransform): boolean {
+  const coordinates = [sheet.corners.northwest, sheet.corners.northeast, sheet.corners.southeast, sheet.corners.southwest].filter(
+    (coordinate): coordinate is GeoCoordinate => Boolean(coordinate),
+  );
+
+  return (
+    Math.abs(sheet.centerLatitude) <= 0.000001 &&
+    Math.abs(sheet.centerLongitude) <= 0.000001 &&
+    coordinates.length === 4 &&
+    coordinates.every((coordinate) => Math.abs(coordinate.latitude) <= 0.000001 && Math.abs(coordinate.longitude) <= 0.000001)
+  );
+}
+
+export function resetSheetGeographicPlacementToCenter(
+  sheet: SheetGeographicTransform,
+  center: GeoCoordinate,
+  options: { longitudeSpan?: number; latitudeSpan?: number } = {},
+): SheetGeographicTransform {
+  return placeSheetAtMapCenter(
+    normalizeSheetGeographicTransform({
+      ...sheet,
+      corners: undefined,
+      isVisible: true,
+      placementStatus: "draft",
+      opacity: sheet.opacity || defaultHistoricalSheetOpacity,
+    }),
+    center,
+    options,
+  );
 }
 
 export function updateSheetGeographicTransform(
@@ -521,6 +552,7 @@ export function createSheetGeoreferencesFromStitching(input: {
 export function mergeSavedAndDefaultSheetGeoreferences(
   assets: Array<Pick<StudioSheetAsset, "assetId" | "width" | "height">>,
   saved: SheetGeographicTransform[],
+  defaultCenter: GeoCoordinate | null = null,
 ): SheetGeographicTransform[] {
   const savedByAssetId = new Map(saved.map((sheet) => [sheet.assetId, sheet]));
   const defaults = assets
@@ -529,14 +561,15 @@ export function mergeSavedAndDefaultSheetGeoreferences(
       normalizeSheetGeographicTransform({
         assetId: asset.assetId,
         sheetGeoreferenceId: `${asset.assetId}-sheet-georef`,
-        centerLatitude: 0,
-        centerLongitude: 0,
+        centerLatitude: defaultCenter?.latitude ?? 0,
+        centerLongitude: defaultCenter?.longitude ?? 0,
         latitudeSpan: Math.max(minGeographicSpan, asset.height / 100000),
         longitudeSpan: Math.max(minGeographicSpan, asset.width / 100000),
         layerOrder: saved.length + index,
         isVisible: false,
         georeferenceStatus: "not_started",
         placementStatus: "unplaced",
+        opacity: defaultHistoricalSheetOpacity,
         warpType: "projective",
       }),
     );
