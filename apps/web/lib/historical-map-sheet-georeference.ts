@@ -149,16 +149,23 @@ function normalizeCenterLongitude(value: number | null | undefined): number {
 }
 
 function hasValidCorners(corners: GeoCorners | null | undefined): corners is CompleteGeoCorners {
-  return Boolean(
-    corners?.northwest &&
-      corners.northeast &&
-      corners.southeast &&
-      corners.southwest &&
-      validateGeoCoordinate(corners.northwest).ok &&
-      validateGeoCoordinate(corners.northeast).ok &&
-      validateGeoCoordinate(corners.southeast).ok &&
-      validateGeoCoordinate(corners.southwest).ok,
-  );
+  if (
+    !corners?.northwest ||
+    !corners.northeast ||
+    !corners.southeast ||
+    !corners.southwest ||
+    !validateGeoCoordinate(corners.northwest).ok ||
+    !validateGeoCoordinate(corners.northeast).ok ||
+    !validateGeoCoordinate(corners.southeast).ok ||
+    !validateGeoCoordinate(corners.southwest).ok
+  ) {
+    return false;
+  }
+
+  const latitudes = [corners.northwest.latitude, corners.northeast.latitude, corners.southeast.latitude, corners.southwest.latitude];
+  const longitudes = [corners.northwest.longitude, corners.northeast.longitude, corners.southeast.longitude, corners.southwest.longitude];
+
+  return Math.max(...latitudes) - Math.min(...latitudes) > minGeographicSpan / 10 && Math.max(...longitudes) - Math.min(...longitudes) > minGeographicSpan / 10;
 }
 
 function getCornersBounds(corners: CompleteGeoCorners) {
@@ -407,6 +414,41 @@ export function resetSheetGeographicPlacementToCenter(
     center,
     options,
   );
+}
+
+function coordinatesMatch(left: GeoCoordinate | null | undefined, right: GeoCoordinate | null | undefined, tolerance: number): boolean {
+  return Boolean(
+    left &&
+      right &&
+      Math.abs(left.latitude - right.latitude) <= tolerance &&
+      Math.abs(left.longitude - right.longitude) <= tolerance,
+  );
+}
+
+export function sheetPlacementMatchesForPersistence(
+  expected: SheetGeographicTransform,
+  saved: SheetGeographicTransform,
+  tolerance = 0.0000001,
+): boolean {
+  return (
+    expected.assetId === saved.assetId &&
+    Math.abs(expected.opacity - saved.opacity) <= 0.0001 &&
+    coordinatesMatch(expected.corners.northwest, saved.corners.northwest, tolerance) &&
+    coordinatesMatch(expected.corners.northeast, saved.corners.northeast, tolerance) &&
+    coordinatesMatch(expected.corners.southeast, saved.corners.southeast, tolerance) &&
+    coordinatesMatch(expected.corners.southwest, saved.corners.southwest, tolerance)
+  );
+}
+
+export function selectManualSheetPlacementForSave(
+  sheets: SheetGeographicTransform[],
+  assetId: string | null | undefined,
+): SheetGeographicTransform[] {
+  if (!assetId) {
+    return [];
+  }
+
+  return sheets.filter((sheet) => sheet.assetId === assetId && sheet.isVisible && sheet.placementStatus !== "unplaced");
 }
 
 export function updateSheetGeographicTransform(

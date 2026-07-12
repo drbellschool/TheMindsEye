@@ -178,6 +178,19 @@ function SyncMapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
   return null;
 }
 
+function InvalidateMapSize({ request }: { request: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.invalidateSize({ animate: false });
+    const timeout = window.setTimeout(() => map.invalidateSize({ animate: false }), 120);
+
+    return () => window.clearTimeout(timeout);
+  }, [map, request]);
+
+  return null;
+}
+
 type QuadPoints = {
   northwest: L.Point;
   northeast: L.Point;
@@ -778,6 +791,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
         url={basemap.url}
       />
       <SyncMapView center={props.center} zoom={props.zoom} />
+      <InvalidateMapSize request={props.fitBoundsRequest} />
       <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />
       <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
       <FitBounds bounds={derivedBounds} request={props.fitBoundsRequest} />
@@ -849,10 +863,12 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
         : null}
 
       <div className={`map-studio-tile-status is-${tileStatus}`}>
-        {tileStatus === "loading" ? "Loading map tiles..." : null}
+        {tileStatus === "idle" ? "Modern map loading..." : null}
+        {tileStatus === "loading" ? "Modern map loading..." : null}
+        {tileStatus === "loaded" ? "Modern map loaded" : null}
         {tileStatus === "error" ? (
           <>
-            <span>Map tile loading error.</span>
+            <span>Modern map failed to load.</span>
             <button type="button" onClick={() => setTileRetry((value) => value + 1)}>Retry</button>
           </>
         ) : null}
