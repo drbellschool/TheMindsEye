@@ -34,6 +34,7 @@ import {
   validateStudioMetadataInput,
   type StudioPlacement,
 } from "./historical-map-studio.ts";
+import { selectActiveTownPackage } from "./historical-map-studio-data.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
   return normalizePlacement({
@@ -269,4 +270,20 @@ test("filters keyboard shortcuts while typing into form controls", () => {
 test("documents delete and replacement transaction operation order", () => {
   assert.deepEqual(planDeleteSheetOperations(), ["delete_workspace_placements", "delete_metadata_record", "remove_storage_object"]);
   assert.deepEqual(planReplacementOperations(), ["upload_replacement_object", "update_metadata_record", "remove_previous_storage_object"]);
+});
+
+test("selects valid, single, and stale town packages safely", () => {
+  const towns = [
+    { id: "town-1", packageId: "texarkana_1885", name: "Texarkana", region: "Texas / Arkansas", year: 1885 },
+    { id: "town-2", packageId: "other_1900", name: "Other", region: "Unknown", year: 1900 },
+  ];
+
+  assert.equal(selectActiveTownPackage(towns, "town-1").town?.id, "town-1");
+  assert.equal(selectActiveTownPackage([towns[0]], undefined).town?.id, "town-1");
+
+  const recovered = selectActiveTownPackage(towns, "deleted-town");
+  assert.equal(recovered.town?.id, "town-1");
+  assert.match(recovered.warningMessage ?? "", /Recovered from unavailable town package/);
+
+  assert.equal(selectActiveTownPackage([], "deleted-town").town, null);
 });

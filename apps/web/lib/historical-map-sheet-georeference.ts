@@ -16,10 +16,21 @@ import { isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoCoord
 export const sheetGeoreferenceStatuses = ["not_started", "bounding_box", "control_points_draft", "aligned_draft", "reviewed"] as const;
 export const geoEditModes = ["pan_modern_map", "edit_historical_sheets"] as const;
 export const movementScopes = ["selected_sheet", "entire_assembly"] as const;
+export const sheetWarpTypes = ["projective", "affine", "rectangular"] as const;
+export const sheetPlacementStatuses = ["unplaced", "placed", "aligned", "reviewed"] as const;
 
 export type SheetGeoreferenceStatus = (typeof sheetGeoreferenceStatuses)[number];
 export type GeoEditMode = (typeof geoEditModes)[number];
 export type MovementScope = (typeof movementScopes)[number];
+export type SheetWarpType = (typeof sheetWarpTypes)[number];
+export type SheetPlacementStatus = (typeof sheetPlacementStatuses)[number];
+export type ProjectiveMatrix = [number, number, number, number, number, number, number, number, number];
+type CompleteGeoCorners = {
+  northwest: GeoCoordinate;
+  northeast: GeoCoordinate;
+  southeast: GeoCoordinate;
+  southwest: GeoCoordinate;
+};
 
 export type SheetGeographicTransform = {
   sheetGeoreferenceId: string;
@@ -34,6 +45,12 @@ export type SheetGeographicTransform = {
   scaleY: number;
   skewX: number;
   skewY: number;
+  pivotX: number;
+  pivotY: number;
+  warpType: SheetWarpType;
+  projectiveMatrix: ProjectiveMatrix | null;
+  transformVersion: number;
+  placementStatus: SheetPlacementStatus;
   isFlippedHorizontally: boolean;
   isFlippedVertically: boolean;
   opacity: number;
@@ -85,6 +102,28 @@ export function normalizeSheetGeoreferenceStatus(value: string | null | undefine
   return sheetGeoreferenceStatuses.includes(value as SheetGeoreferenceStatus) ? (value as SheetGeoreferenceStatus) : "not_started";
 }
 
+export function normalizeSheetWarpType(value: string | null | undefined): SheetWarpType {
+  return sheetWarpTypes.includes(value as SheetWarpType) ? (value as SheetWarpType) : "projective";
+}
+
+export function normalizeSheetPlacementStatus(value: string | null | undefined, isVisible = true): SheetPlacementStatus {
+  if (sheetPlacementStatuses.includes(value as SheetPlacementStatus)) {
+    return value as SheetPlacementStatus;
+  }
+
+  return isVisible ? "placed" : "unplaced";
+}
+
+export function normalizeProjectiveMatrix(value: unknown): ProjectiveMatrix | null {
+  if (!Array.isArray(value) || value.length !== 9) {
+    return null;
+  }
+
+  const matrix = value.map((item) => Number(item));
+
+  return matrix.every((item) => Number.isFinite(item)) ? (matrix as ProjectiveMatrix) : null;
+}
+
 export function normalizeGeographicMapSettings(input: Partial<GeographicMapSettings> | null | undefined): GeographicMapSettings {
   const center = input?.center && validateGeoCoordinate(input.center).ok ? input.center : null;
 
@@ -109,7 +148,7 @@ function normalizeCenterLongitude(value: number | null | undefined): number {
   return isValidLongitude(value) ? Number(value) : 0;
 }
 
-function hasValidCorners(corners: GeoCorners | null | undefined): corners is Required<GeoCorners> {
+function hasValidCorners(corners: GeoCorners | null | undefined): corners is CompleteGeoCorners {
   return Boolean(
     corners?.northwest &&
       corners.northeast &&
@@ -120,6 +159,22 @@ function hasValidCorners(corners: GeoCorners | null | undefined): corners is Req
       validateGeoCoordinate(corners.southeast).ok &&
       validateGeoCoordinate(corners.southwest).ok,
   );
+}
+
+function getCornersBounds(corners: CompleteGeoCorners) {
+  const latitudes = [corners.northwest.latitude, corners.northeast.latitude, corners.southeast.latitude, corners.southwest.latitude];
+  const longitudes = [corners.northwest.longitude, corners.northeast.longitude, corners.southeast.longitude, corners.southwest.longitude];
+
+  return {
+    northLatitude: Math.max(...latitudes),
+    southLatitude: Math.min(...latitudes),
+    eastLongitude: Math.max(...longitudes),
+    westLongitude: Math.min(...longitudes),
+  };
+}
+
+function normalizePivot(value: number | null | undefined): number {
+  return Number(clampNumber(Number(value ?? 0.5), 0, 1).toFixed(4));
 }
 
 function rotatePoint(x: number, y: number, degrees: number) {
@@ -185,15 +240,39 @@ export function normalizeSheetGeographicTransform(
     assetId: string;
   },
 ): SheetGeographicTransform {
-  const centerLatitude = normalizeCenterLatitude(input.centerLatitude);
-  const centerLongitude = normalizeCenterLongitude(input.centerLongitude);
-  const latitudeSpan = normalizeSpan(input.latitudeSpan);
-  const longitudeSpan = normalizeSpan(input.longitudeSpan);
+  let centerLatitude = normalizeCenterLatitude(input.centerLatitude);
+  let centerLongitude = normalizeCenterLongitude(input.centerLongitude);
+  let latitudeSpan = normalizeSpan(input.latitudeSpan);
+  let longitudeSpan = normalizeSpan(input.longitudeSpan);
   const rotation = normalizeRotation(Number(input.rotation ?? 0));
   const scaleX = clampNumber(Number(input.scaleX ?? 1), minStudioScale, maxStudioScale);
   const scaleY = clampNumber(Number(input.scaleY ?? 1), minStudioScale, maxStudioScale);
   const skewX = normalizeSkew(Number(input.skewX ?? 0));
   const skewY = normalizeSkew(Number(input.skewY ?? 0));
+  const corners = hasValidCorners(input.corners)
+    ? input.corners
+    : deriveSheetGeoCorners({
+        centerLatitude,
+        centerLongitude,
+        latitudeSpan,
+        longitudeSpan,
+        rotation,
+        scaleX,
+        scaleY,
+        skewX,
+        skewY,
+        isFlippedHorizontally: input.isFlippedHorizontally,
+        isFlippedVertically: input.isFlippedVertically,
+      });
+
+  if (hasValidCorners(corners)) {
+    const bounds = getCornersBounds(corners);
+    centerLatitude = Number(((bounds.northLatitude + bounds.southLatitude) / 2).toFixed(8));
+    centerLongitude = Number(((bounds.eastLongitude + bounds.westLongitude) / 2).toFixed(8));
+    latitudeSpan = normalizeSpan(bounds.northLatitude - bounds.southLatitude);
+    longitudeSpan = normalizeSpan(bounds.eastLongitude - bounds.westLongitude);
+  }
+
   const normalized = {
     sheetGeoreferenceId: input.sheetGeoreferenceId?.trim() || `${input.assetId}-sheet-georef`,
     assetId: input.assetId,
@@ -201,26 +280,18 @@ export function normalizeSheetGeographicTransform(
     centerLongitude,
     longitudeSpan,
     latitudeSpan,
-    corners: hasValidCorners(input.corners)
-      ? input.corners
-      : deriveSheetGeoCorners({
-            centerLatitude,
-            centerLongitude,
-            latitudeSpan,
-            longitudeSpan,
-            rotation,
-            scaleX,
-            scaleY,
-            skewX,
-            skewY,
-            isFlippedHorizontally: input.isFlippedHorizontally,
-            isFlippedVertically: input.isFlippedVertically,
-        }),
+    corners,
     rotation,
     scaleX,
     scaleY,
     skewX,
     skewY,
+    pivotX: normalizePivot(input.pivotX),
+    pivotY: normalizePivot(input.pivotY),
+    warpType: normalizeSheetWarpType(input.warpType),
+    projectiveMatrix: normalizeProjectiveMatrix(input.projectiveMatrix),
+    transformVersion: Number.isInteger(input.transformVersion) && Number(input.transformVersion) > 0 ? Number(input.transformVersion) : 1,
+    placementStatus: normalizeSheetPlacementStatus(input.placementStatus, input.isVisible ?? true),
     isFlippedHorizontally: input.isFlippedHorizontally ?? false,
     isFlippedVertically: input.isFlippedVertically ?? false,
     opacity: clampNumber(Number(input.opacity ?? 1), minStudioOpacity, maxStudioOpacity),
@@ -239,12 +310,90 @@ export function normalizeSheetGeographicTransform(
   return normalized;
 }
 
+function patchRequiresDerivedCorners(patch: Partial<SheetGeographicTransform>): boolean {
+  if (patch.corners) {
+    return false;
+  }
+
+  return [
+    "centerLatitude",
+    "centerLongitude",
+    "latitudeSpan",
+    "longitudeSpan",
+    "rotation",
+    "scaleX",
+    "scaleY",
+    "skewX",
+    "skewY",
+    "isFlippedHorizontally",
+    "isFlippedVertically",
+  ].some((key) => Object.prototype.hasOwnProperty.call(patch, key));
+}
+
+export function placeSheetAtMapCenter(
+  sheet: SheetGeographicTransform,
+  center: GeoCoordinate,
+  options: { longitudeSpan?: number; latitudeSpan?: number } = {},
+): SheetGeographicTransform {
+  return normalizeSheetGeographicTransform({
+    ...sheet,
+    corners: undefined,
+    centerLatitude: center.latitude,
+    centerLongitude: center.longitude,
+    longitudeSpan: options.longitudeSpan ?? sheet.longitudeSpan,
+    latitudeSpan: options.latitudeSpan ?? sheet.latitudeSpan,
+    isVisible: true,
+    placementStatus: "placed",
+    georeferenceStatus: sheet.georeferenceStatus === "not_started" ? "bounding_box" : sheet.georeferenceStatus,
+    transformVersion: sheet.transformVersion + 1,
+  });
+}
+
+export function updateSheetGeographicCorner(
+  sheet: SheetGeographicTransform,
+  corner: keyof GeoCorners,
+  coordinate: GeoCoordinate,
+): SheetGeographicTransform {
+  return normalizeSheetGeographicTransform({
+    ...sheet,
+    corners: {
+      ...sheet.corners,
+      [corner]: coordinate,
+    },
+    isVisible: true,
+    placementStatus: "placed",
+    warpType: "projective",
+    transformVersion: sheet.transformVersion + 1,
+  });
+}
+
+export function removeSheetGeographicPlacement(sheet: SheetGeographicTransform): SheetGeographicTransform {
+  return normalizeSheetGeographicTransform({
+    ...sheet,
+    isVisible: false,
+    placementStatus: "unplaced",
+    georeferenceStatus: "not_started",
+    projectiveMatrix: null,
+    transformVersion: sheet.transformVersion + 1,
+  });
+}
+
 export function updateSheetGeographicTransform(
   sheets: SheetGeographicTransform[],
   assetId: string,
   patch: Partial<SheetGeographicTransform>,
 ): SheetGeographicTransform[] {
-  return sheets.map((sheet) => (sheet.assetId === assetId ? normalizeSheetGeographicTransform({ ...sheet, ...patch, assetId }) : sheet));
+  return sheets.map((sheet) =>
+    sheet.assetId === assetId
+      ? normalizeSheetGeographicTransform({
+          ...sheet,
+          ...(patchRequiresDerivedCorners(patch) ? { corners: undefined } : null),
+          ...patch,
+          assetId,
+          transformVersion: sheet.transformVersion + 1,
+        })
+      : sheet,
+  );
 }
 
 export function moveSheetGeographicTransform(sheet: SheetGeographicTransform, delta: { latitude: number; longitude: number }): SheetGeographicTransform {
@@ -257,6 +406,8 @@ export function moveSheetGeographicTransform(sheet: SheetGeographicTransform, de
       centerLatitude: sheet.centerLatitude + delta.latitude,
       centerLongitude: sheet.centerLongitude + delta.longitude,
     }),
+    placementStatus: sheet.placementStatus === "unplaced" ? "placed" : sheet.placementStatus,
+    transformVersion: sheet.transformVersion + 1,
   });
 }
 
@@ -357,6 +508,10 @@ export function createSheetGeoreferencesFromStitching(input: {
         georeferenceStatus: "bounding_box",
         reviewStatus: "unknown",
         evidenceClassification: "unknown",
+        pivotX: 0.5,
+        pivotY: 0.5,
+        warpType: "projective",
+        placementStatus: "placed",
         isPersisted: false,
       });
     })
@@ -381,6 +536,8 @@ export function mergeSavedAndDefaultSheetGeoreferences(
         layerOrder: saved.length + index,
         isVisible: false,
         georeferenceStatus: "not_started",
+        placementStatus: "unplaced",
+        warpType: "projective",
       }),
     );
 

@@ -9,11 +9,15 @@ import {
   normalizeGeoEditMode,
   normalizeGeographicMapSettings,
   normalizeMovementScope,
+  normalizeProjectiveMatrix,
   normalizeSheetGeographicTransform,
+  placeSheetAtMapCenter,
   redoSheetGeographicHistory,
+  removeSheetGeographicPlacement,
   reorderSheetGeographicTransform,
   undoSheetGeographicHistory,
   updateSheetGeographicTransform,
+  updateSheetGeographicCorner,
   type SheetGeographicTransform,
 } from "./historical-map-sheet-georeference.ts";
 import { normalizePlacement, type StudioPlacement } from "./historical-map-studio.ts";
@@ -68,6 +72,10 @@ test("normalizes independent sheet geographic transforms and invalid coordinates
   assert.equal(normalized.skewY, -45);
   assert.equal(normalized.opacity, 1);
   assert.equal(normalized.rotation, 5);
+  assert.equal(normalized.pivotX, 0.5);
+  assert.equal(normalized.pivotY, 0.5);
+  assert.equal(normalized.warpType, "projective");
+  assert.equal(normalized.placementStatus, "placed");
 });
 
 test("invalid provided corner coordinates are replaced with derived safe corners", () => {
@@ -109,6 +117,47 @@ test("derives four geographic corners from affine sheet transform values", () =>
   assert.notEqual(corners.northwest?.longitude, corners.northeast?.longitude);
 });
 
+test("places an unplaced sheet at map center and preserves four corners", () => {
+  const unplaced = sheet("asset-1", { isVisible: false, placementStatus: "unplaced", georeferenceStatus: "not_started" });
+  const placed = placeSheetAtMapCenter(unplaced, { latitude: 33.45, longitude: -94.02 }, { latitudeSpan: 0.002, longitudeSpan: 0.003 });
+
+  assert.equal(placed.isVisible, true);
+  assert.equal(placed.placementStatus, "placed");
+  assert.equal(placed.georeferenceStatus, "bounding_box");
+  assert.equal(placed.centerLatitude, 33.45);
+  assert.equal(placed.centerLongitude, -94.02);
+  assert.ok(placed.corners.northwest);
+  assert.ok(placed.corners.southeast);
+});
+
+test("independent corner movement updates center and persists projective warp metadata", () => {
+  const original = sheet("asset-1", { warpType: "projective", pivotX: 0.25, pivotY: 0.75 });
+  const moved = updateSheetGeographicCorner(original, "northwest", { latitude: 33.01, longitude: -94.02 });
+
+  assert.equal(moved.corners.northwest?.latitude, 33.01);
+  assert.equal(moved.corners.northwest?.longitude, -94.02);
+  assert.notEqual(moved.centerLatitude, original.centerLatitude);
+  assert.equal(moved.warpType, "projective");
+  assert.equal(moved.pivotX, 0.25);
+  assert.equal(moved.pivotY, 0.75);
+});
+
+test("projective matrix and pivot values normalize safely", () => {
+  const normalized = normalizeSheetGeographicTransform({
+    assetId: "asset-1",
+    pivotX: -4,
+    pivotY: 4,
+    warpType: "unsupported",
+    projectiveMatrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+  });
+
+  assert.equal(normalized.pivotX, 0);
+  assert.equal(normalized.pivotY, 1);
+  assert.equal(normalized.warpType, "projective");
+  assert.deepEqual(normalized.projectiveMatrix, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  assert.equal(normalizeProjectiveMatrix([1, 2, Number.NaN, 4, 5, 6, 7, 8, 9]), null);
+});
+
 test("copies stitching layout into independent georeferenced sheets while preserving relative placement", () => {
   const copied = createSheetGeoreferencesFromStitching({
     assets: [
@@ -144,6 +193,16 @@ test("updates selected sheet, assembly movement, layer order, visibility, lock, 
   assert.equal(movedAssembly[1].centerLongitude, -94.1);
 
   assert.deepEqual(reorderSheetGeographicTransform(sheets, "asset-1", "front").map((item) => item.assetId), ["asset-2", "asset-1"]);
+});
+
+test("removes geographic placement without deleting uploaded sheet identity", () => {
+  const placed = sheet("asset-1", { isVisible: true, placementStatus: "placed", georeferenceStatus: "bounding_box" });
+  const removed = removeSheetGeographicPlacement(placed);
+
+  assert.equal(removed.assetId, "asset-1");
+  assert.equal(removed.isVisible, false);
+  assert.equal(removed.placementStatus, "unplaced");
+  assert.equal(removed.georeferenceStatus, "not_started");
 });
 
 test("normalizes map edit mode, movement scope, center, zoom, and global opacity", () => {

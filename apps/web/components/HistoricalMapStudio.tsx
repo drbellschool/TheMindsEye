@@ -40,11 +40,14 @@ import {
   createSheetGeoreferencesFromStitching,
   moveSheetGeographicAssembly,
   normalizeGeographicMapSettings,
+  placeSheetAtMapCenter,
   pushSheetGeographicHistory,
   redoSheetGeographicHistory,
+  removeSheetGeographicPlacement,
   reorderSheetGeographicTransform,
   undoSheetGeographicHistory,
   updateSheetGeographicTransform,
+  updateSheetGeographicCorner,
   type GeoEditMode,
   type MovementScope,
   type SheetGeographicHistoryState,
@@ -518,13 +521,16 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [canvasCoordinates, setCanvasCoordinates] = useState({ x: 0, y: 0 });
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>(createMetadataDraft(initialData.sheets[0] ?? null));
-  const [studioMode, setStudioMode] = useState<StudioWorkspaceMode>("stitching");
+  const [studioMode, setStudioMode] = useState<StudioWorkspaceMode>("georeferencing");
   const [geoEditMode, setGeoEditMode] = useState<GeoEditMode>(initialData.geographicMap.editMode);
   const [movementScope, setMovementScope] = useState<MovementScope>(initialData.geographicMap.movementScope);
   const [showSheetLabels, setShowSheetLabels] = useState(true);
   const [showHistoricalLayers, setShowHistoricalLayers] = useState(true);
   const [comparisonMode, setComparisonMode] = useState<"both" | "modern_only" | "historical_only">("both");
   const [globalHistoricalOpacity, setGlobalHistoricalOpacity] = useState(initialData.geographicMap.globalHistoricalOpacity);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [placementAnchorAssetId, setPlacementAnchorAssetId] = useState("");
   const [georeferenceDraft, setGeoreferenceDraft] = useState<GeoreferenceDraft>(createGeoreferenceDraft(initialData, initialData.sheets[0]?.assetId ?? null));
   const [historicalClickMode, setHistoricalClickMode] = useState<"idle" | "adding_point">("idle");
   const [mapCursor, setMapCursor] = useState<GeoCoordinate | null>(null);
@@ -657,6 +663,18 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         return;
       }
 
+      if (event.key === "[") {
+        event.preventDefault();
+        setLeftPanelCollapsed((value) => !value);
+        return;
+      }
+
+      if (event.key === "]") {
+        event.preventDefault();
+        setRightPanelCollapsed((value) => !value);
+        return;
+      }
+
       if (event.key === "0") {
         event.preventDefault();
         fitAllSheets();
@@ -681,13 +699,18 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         return;
       }
 
-      if (selected && !selected.isLocked && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+      const canNudgeSelected =
+        studioMode === "stitching"
+          ? Boolean(selected && !selected.isLocked)
+          : Boolean(selectedSheetGeoreference && !selectedSheetGeoreference.isLocked && selectedSheetGeoreference.isVisible);
+
+      if (canNudgeSelected && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
         event.preventDefault();
         const amount = event.shiftKey ? 20 : 2;
         const dx = event.key === "ArrowLeft" ? -amount : event.key === "ArrowRight" ? amount : 0;
         const dy = event.key === "ArrowUp" ? -amount : event.key === "ArrowDown" ? amount : 0;
 
-        if (studioMode === "stitching") {
+        if (studioMode === "stitching" && selected) {
           commitPlacement(selected.assetId, { x: selected.x + dx, y: selected.y + dy });
         } else if (selectedSheetGeoreference && !selectedSheetGeoreference.isLocked) {
           const degreeStep = (event.shiftKey ? 0.0006 : 0.00008) / Math.max(1, modernMapZoom / 15);
@@ -753,6 +776,48 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     }
 
     setSheetGeoPresent({ ...geoPresent, sheets: nextSheets }, recordHistory);
+  }
+
+  function addSheetToMap(assetId: string, center: GeoCoordinate = mapCenter) {
+    const sheet = geoPresent.sheets.find((candidate) => candidate.assetId === assetId);
+    const asset = sheets.find((candidate) => candidate.assetId === assetId);
+
+    if (!sheet || !asset) {
+      setSaveStatus("error");
+      setSaveMessage("Sheet could not be added because its upload metadata is unavailable.");
+      return;
+    }
+
+    const aspectRatio = asset.width / Math.max(1, asset.height);
+    const latitudeSpan = Math.max(0.0008, Math.min(0.01, sheet.latitudeSpan || 0.003));
+    const longitudeSpan = Math.max(0.0008, Math.min(0.012, latitudeSpan * aspectRatio));
+    const placed = placeSheetAtMapCenter(sheet, center, { latitudeSpan, longitudeSpan });
+    const nextSheets = geoPresent.sheets.map((candidate) => (candidate.assetId === assetId ? placed : candidate));
+
+    setSelectedAssetId(assetId);
+    setGeoEditMode("edit_historical_sheets");
+    setStudioMode("georeferencing");
+    setPlacementAnchorAssetId("");
+    setSheetGeoPresent({ ...geoPresent, sheets: nextSheets }, true);
+  }
+
+  function removeSelectedGeographicPlacement() {
+    if (!selectedSheetGeoreference) {
+      return;
+    }
+
+    const removed = removeSheetGeographicPlacement(selectedSheetGeoreference);
+    const nextSheets = geoPresent.sheets.map((sheet) => (sheet.assetId === removed.assetId ? removed : sheet));
+    setSheetGeoPresent({ ...geoPresent, sheets: nextSheets }, true);
+  }
+
+  function handleModernMapClick(latitude: number, longitude: number) {
+    if (placementAnchorAssetId) {
+      addSheetToMap(placementAnchorAssetId, { latitude, longitude });
+      return;
+    }
+
+    completeSelectedControlPoint(latitude, longitude);
   }
 
   function commitGeographicMapSettings(patch: Partial<SheetGeographicPresentState["mapSettings"]>, recordHistory = false) {
@@ -899,6 +964,11 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   }
 
   function fitAllSheets() {
+    if (studioMode !== "stitching") {
+      setFitOverlayRequest((current) => current + 1);
+      return;
+    }
+
     const bounds = getPlacementBounds(sheets, present.placements);
 
     if (!bounds) {
@@ -1473,7 +1543,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     }
 
     setSaveStatus("saved");
-    setSaveMessage(payload.transformWarning ? `Georeference saved as rectangular preview. ${payload.transformWarning}` : "Georeference saved.");
+    setSaveMessage(payload.transformWarning ? `Georeference saved for visual alignment. ${payload.transformWarning}` : "Georeference saved.");
     router.refresh();
   }
 
@@ -1489,7 +1559,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       const warning = duplicateSheetNumbers.includes(sheet.sheetNumber ?? -1) || sheet.signedUrlError;
       const matchesFilter =
         sheetFilter === "all" ||
-        (sheetFilter === "unplaced" && (!geoSheet || geoSheet.georeferenceStatus === "not_started")) ||
+        (sheetFilter === "unplaced" && (!geoSheet || geoSheet.placementStatus === "unplaced")) ||
         (sheetFilter === "draft" && Boolean(geoSheet && ["bounding_box", "control_points_draft"].includes(geoSheet.georeferenceStatus))) ||
         (sheetFilter === "aligned" && geoSheet?.georeferenceStatus === "aligned_draft") ||
         (sheetFilter === "reviewed" && geoSheet?.georeferenceStatus === "reviewed") ||
@@ -1545,7 +1615,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     });
   }, [historicalSheetLayers]);
   const visibleGeographicSheets = historicalSheetLayers.filter((layer) => layer.isVisible).length;
-  const unplacedGeographicSheets = geoPresent.sheets.filter((sheet) => sheet.georeferenceStatus === "not_started").length;
+  const unplacedGeographicSheets = geoPresent.sheets.filter((sheet) => sheet.placementStatus === "unplaced").length;
   const workspaceComposite = useMemo(() => buildWorkspaceCompositeImage(sheets, present.placements), [sheets, present.placements]);
   const selectedControlPoint = georeferenceDraft.controlPoints.find((point) => point.controlPointId === georeferenceDraft.selectedControlPointId) ?? null;
   const completeControlPoints = getCompleteControlPoints(georeferenceDraft.controlPoints);
@@ -1589,9 +1659,9 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           <span className={`tag state-${missingSheetNumbers.length > 0 ? "guarded" : "ready"}`}>Missing {missingSheetNumbers.length}</span>
           <span className={`tag state-${isDirty ? "reviewing" : "ready"}`}>{isDirty ? "Unsaved changes" : "Saved"}</span>
           <span className={`tag state-${saveStatus === "error" ? "blocked" : saveStatus === "saving" ? "reviewing" : "ready"}`}>{saveStatus}</span>
-          <span className="tag state-guarded">Zoom {Math.round(present.viewport.scale * 100)}%</span>
+          <span className="tag state-guarded">Map {modernMapZoom}z</span>
           <span className="tag state-ready">Data source: {initialData.dataSource === "supabase" ? "Supabase" : "Setup required"}</span>
-          <span className="tag state-reviewing">Workspace: {studioMode === "stitching" ? "Prep stitching" : studioMode === "georeferencing" ? "Authoritative georeferencing" : "Modern overlay preview"}</span>
+          <span className="tag state-reviewing">Workspace: {studioMode === "stitching" ? "Optional Prep Canvas" : studioMode === "georeferencing" ? "Georeference Sheets" : "Presentation Overlay"}</span>
         </div>
         <div className="map-studio-actions">
           <button className="sanborn-button sanborn-button--primary" disabled={!isDirty || saveStatus === "saving"} onClick={() => (studioMode === "stitching" ? void saveLayout("manual") : void saveSheetGeoreferences("manual"))} type="button">
@@ -1601,15 +1671,17 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           <button className="sanborn-button" disabled={studioMode === "stitching" ? history.future.length === 0 : geoHistory.future.length === 0} onClick={redo} type="button">Redo</button>
           <button className="sanborn-button" onClick={fitAllSheets} type="button">Fit all sheets</button>
           <button className="sanborn-button" onClick={resetView} type="button">Reset view</button>
-          <button className="sanborn-button" onClick={copyStitchingLayoutIntoGeoreferencing} type="button">Copy stitching layout into georeferencing</button>
-          <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">Upload sheets</button>
+          <button className="sanborn-button" onClick={() => setLeftPanelCollapsed((value) => !value)} title="Toggle sheet panel ([)" type="button">Sheets</button>
+          <button className="sanborn-button" onClick={() => setRightPanelCollapsed((value) => !value)} title="Toggle inspector (])" type="button">Inspector</button>
+          <button className="sanborn-button" onClick={copyStitchingLayoutIntoGeoreferencing} title="Optional: initialize geographic placements from the prep canvas" type="button">Copy prep to map</button>
+          <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">Add sheets</button>
           <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden multiple onChange={(event) => void uploadSheets(event.target.files)} ref={uploadInputRef} type="file" />
         </div>
         <div className="map-studio-mode-switch" aria-label="Historical Map Studio modes">
           {[
-            ["stitching", "Stitching"],
-            ["georeferencing", "Georeferencing"],
-            ["modern_overlay", "Modern Overlay"],
+            ["georeferencing", "Georeference Sheets"],
+            ["modern_overlay", "Presentation Overlay"],
+            ["stitching", "Optional Prep Canvas"],
           ].map(([mode, label]) => (
             <button className={`sanborn-button${studioMode === mode ? " sanborn-button--primary" : ""}`} key={mode} onClick={() => setStudioMode(mode as StudioWorkspaceMode)} type="button">
               {label}
@@ -1624,11 +1696,11 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         </div>
       </header>
 
-      {initialData.warningMessage ? <p className="sanborn-intake__warning">{initialData.warningMessage}</p> : null}
-      {saveMessage ? <p className={saveStatus === "error" ? "sanborn-intake__warning" : "small-muted"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
+      {initialData.warningMessage ? <p className="map-studio-toast">{initialData.warningMessage}</p> : null}
+      {saveMessage ? <p className={saveStatus === "error" ? "map-studio-toast is-error" : "map-studio-toast"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
 
-      <div className="map-studio-layout">
-        <aside className="map-studio-sidebar">
+      <div className={`map-studio-layout${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
+        <aside className="map-studio-sidebar" hidden={leftPanelCollapsed}>
           <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name} {town.year}</option>)}</select></label>
           <label>Map year<select value={initialData.activeMapYear ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}>{initialData.availableMapYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
           <label>Search sheets<input onChange={(event) => setSearch(event.target.value)} placeholder="Sheet, filename, status..." value={search} /></label>
@@ -1667,7 +1739,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               <label><input checked={showHistoricalLayers} onChange={(event) => setShowHistoricalLayers(event.target.checked)} type="checkbox" /> Historical layers visible</label>
               <label><input checked={showSheetLabels} onChange={(event) => setShowSheetLabels(event.target.checked)} type="checkbox" /> Sheet labels and boundaries</label>
               <label>Comparison view<select value={comparisonMode} onChange={(event) => setComparisonMode(event.target.value as typeof comparisonMode)}><option value="both">Both layers</option><option value="modern_only">Modern only</option><option value="historical_only">Historical only</option></select></label>
-              <p className="small-muted">Rendering: real affine transformed sheet layers over Leaflet. Full survey-grade perspective warping and GIS export remain deferred.</p>
+              <p className="small-muted">Rendering: four-corner projective sheet layers over Leaflet. GIS export remains deferred.</p>
             </div>
           ) : null}
           <div className="map-studio-filter-strip" aria-label="Sheet filters">
@@ -1698,7 +1770,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               <button className="sanborn-button" onClick={clearDraftPoints} type="button">Clear draft points</button>
               <button className="sanborn-button" onClick={resetGeographicAlignment} type="button">Reset geographic alignment</button>
               <button className="sanborn-button" onClick={() => setFitOverlayRequest((current) => current + 1)} type="button">Fit overlay bounds</button>
-              <p className="small-muted">Rendering mode: rectangular preview. Four independent corners and control points are persisted for later warp/GDAL export.</p>
+              <p className="small-muted">Manual placement is map-first. Control points can refine the four-corner warp but do not block visual alignment.</p>
             </div>
           ) : null}
           <div className="map-studio-sheet-list">
@@ -1706,18 +1778,45 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             {filteredSheets.map((sheet) => {
               const placement = placementByAssetId.get(sheet.assetId);
               const geoSheet = sheetGeoreferenceByAssetId.get(sheet.assetId);
+              const isUnplaced = !geoSheet || geoSheet.placementStatus === "unplaced" || geoSheet.georeferenceStatus === "not_started" || geoSheet.isVisible === false;
               const warning = duplicateSheetNumbers.includes(sheet.sheetNumber ?? -1) || sheet.signedUrlError;
               return (
-                <button className={`map-studio-sheet-row${selectedAssetId === sheet.assetId ? " is-selected" : ""}`} key={sheet.assetId} onClick={() => selectAndCenter(sheet.assetId)} type="button">
+                <div
+                  className={`map-studio-sheet-row${selectedAssetId === sheet.assetId ? " is-selected" : ""}`}
+                  key={sheet.assetId}
+                  onClick={() => selectAndCenter(sheet.assetId)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      selectAndCenter(sheet.assetId);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   {sheet.signedUrl ? <img alt="" src={sheet.signedUrl} /> : <span className="map-studio-thumb-fallback">No image</span>}
-                  <span><strong>Sheet {sheet.sheetNumber ?? "unknown"}</strong><small>{sheet.originalFilename}</small></span>
-                  <span className={`tag state-${warning ? "blocked" : geoSheet?.isVisible === false || placement?.isVisible === false ? "guarded" : "ready"}`}>{warning ? "warning" : geoSheet?.isVisible === false || placement?.isVisible === false ? "hidden" : "visible"}</span>
-                  <span className={`tag state-${geoSheet?.isLocked || placement?.isLocked ? "guarded" : "ready"}`}>{geoSheet?.isLocked || placement?.isLocked ? "locked" : "unlocked"}</span>
-                  <span className="tag state-reviewing">{geoSheet?.georeferenceStatus ?? "not_started"}</span>
-                  <span className="tag state-ready">CP {geoSheet?.controlPointCount ?? 0}</span>
-                  <span className={`tag state-${geoSheet?.residualError ? "reviewing" : "ready"}`}>{geoSheet?.residualError ? `Err ${geoSheet.residualError.toFixed(3)}` : "No error"}</span>
-                  <span className="tag state-reviewing">{sheet.reviewStatus}</span>
-                </button>
+                  <span className="map-studio-sheet-row__main"><strong>{sheet.sheetNumber ?? "?"}</strong><small title={sheet.originalFilename}>{sheet.originalFilename}</small></span>
+                  <span className="map-studio-sheet-row__icons" aria-label="Sheet status">
+                    <span title={warning ? "Warning" : "No warning"}>{warning ? "!" : "ok"}</span>
+                    <span title={geoSheet?.isVisible === false || placement?.isVisible === false ? "Hidden" : "Visible"}>{geoSheet?.isVisible === false || placement?.isVisible === false ? "hide" : "show"}</span>
+                    <span title={geoSheet?.isLocked || placement?.isLocked ? "Locked" : "Unlocked"}>{geoSheet?.isLocked || placement?.isLocked ? "lock" : "open"}</span>
+                    <span title={geoSheet?.georeferenceStatus ?? "not_started"}>{geoSheet?.placementStatus ?? "unplaced"}</span>
+                  </span>
+                  {isUnplaced ? (
+                    <span className="map-studio-sheet-row__actions">
+                      <button className="sanborn-button" onClick={(event) => {
+                        event.stopPropagation();
+                        addSheetToMap(sheet.assetId);
+                      }} type="button">Center</button>
+                      <button className="sanborn-button" onClick={(event) => {
+                        event.stopPropagation();
+                        setPlacementAnchorAssetId(sheet.assetId);
+                        setStudioMode("georeferencing");
+                        setGeoEditMode("pan_modern_map");
+                      }} type="button">Click</button>
+                    </span>
+                  ) : null}
+                </div>
               );
             })}
           </div>
@@ -1894,7 +1993,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                   modernLayerVisible={comparisonMode !== "historical_only"}
                   onCornerDrag={moveCorner}
                   onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
-                  onMapClick={completeSelectedControlPoint}
+                  onMapClick={handleModernMapClick}
                   onMapViewChange={(center, zoom) => {
                     setMapCenter({ latitude: center[0], longitude: center[1] });
                     setModernMapZoom(zoom);
@@ -1934,7 +2033,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                 modernLayerVisible={comparisonMode !== "historical_only"}
                 onCornerDrag={moveCorner}
                 onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
-                onMapClick={completeSelectedControlPoint}
+                onMapClick={handleModernMapClick}
                 onMapViewChange={(center, zoom) => {
                   setMapCenter({ latitude: center[0], longitude: center[1] });
                   setModernMapZoom(zoom);
@@ -1957,7 +2056,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           )}
         </main>
 
-        <aside className="map-studio-inspector">
+        <aside className="map-studio-inspector" hidden={rightPanelCollapsed}>
           {!selectedAsset || !activeTransform ? (
             <div className="sanborn-empty-state"><strong>No sheet selected.</strong><p className="small-muted">Select a sheet from the gallery or canvas.</p></div>
           ) : (
@@ -2001,10 +2100,46 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                 <label>Skew X<input disabled={activeTransform.isLocked} max="45" min="-45" step="0.5" type="number" value={Number(activeTransform.skewX.toFixed(2))} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { skewX: Number(event.target.value) }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { skewX: Number(event.target.value) }) : undefined} /></label>
                 <label>Skew Y<input disabled={activeTransform.isLocked} max="45" min="-45" step="0.5" type="number" value={Number(activeTransform.skewY.toFixed(2))} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { skewY: Number(event.target.value) }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { skewY: Number(event.target.value) }) : undefined} /></label>
                 <label>Opacity<input disabled={activeTransform.isLocked} max="1" min="0.1" step="0.05" type="number" value={Number(activeTransform.opacity.toFixed(2))} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { opacity: Number(event.target.value) }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity: Number(event.target.value) }) : undefined} /></label>
+                {studioMode !== "stitching" && selectedSheetGeoreference ? (
+                  <>
+                    <label>Pivot X<input disabled={activeTransform.isLocked} max="1" min="0" step="0.01" type="number" value={Number(selectedSheetGeoreference.pivotX.toFixed(2))} onChange={(event) => commitSheetGeoreference(selectedSheetGeoreference.assetId, { pivotX: Number(event.target.value) })} /></label>
+                    <label>Pivot Y<input disabled={activeTransform.isLocked} max="1" min="0" step="0.01" type="number" value={Number(selectedSheetGeoreference.pivotY.toFixed(2))} onChange={(event) => commitSheetGeoreference(selectedSheetGeoreference.assetId, { pivotY: Number(event.target.value) })} /></label>
+                  </>
+                ) : null}
                 <label>Layer order<input type="number" value={activeTransform.layerOrder} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { layerOrder: Number(event.target.value) }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { layerOrder: Number(event.target.value) }) : undefined} /></label>
                 <label>Visible<input type="checkbox" checked={activeTransform.isVisible} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { isVisible: event.target.checked }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { isVisible: event.target.checked }) : undefined} /></label>
                 <label>Locked<input type="checkbox" checked={activeTransform.isLocked} onChange={(event) => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { isLocked: event.target.checked }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { isLocked: event.target.checked }) : undefined} /></label>
               </div>
+
+              {studioMode !== "stitching" && selectedSheetGeoreference ? (
+                <details className="map-studio-inspector-section" open>
+                  <summary>Corners</summary>
+                  <div className="map-studio-inspector__grid">
+                    {([
+                      ["NW", "northwest"],
+                      ["NE", "northeast"],
+                      ["SE", "southeast"],
+                      ["SW", "southwest"],
+                    ] as const).map(([label, corner]) => (
+                      <label key={corner}>{label}
+                        <input
+                          disabled={activeTransform.isLocked}
+                          step="0.000001"
+                          type="text"
+                          value={`${formatCoordinate(selectedSheetGeoreference.corners[corner]?.latitude)}, ${formatCoordinate(selectedSheetGeoreference.corners[corner]?.longitude)}`}
+                          onChange={(event) => {
+                            const [latitude, longitude] = event.target.value.split(",").map((value) => Number(value.trim()));
+                            if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+                              const next = updateSheetGeographicCorner(selectedSheetGeoreference, corner, { latitude, longitude });
+                              commitSheetGeoreference(selectedSheetGeoreference.assetId, { corners: next.corners });
+                            }
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
 
               <div className="map-studio-layer-actions">
                 <button className="sanborn-button" disabled={activeTransform.isLocked} onClick={() => rotateSelectedSheet(-1)} type="button">Rotate left 1</button>
@@ -2028,6 +2163,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                 <button className="sanborn-button" disabled={activeTransform.isLocked} onClick={resetSelectedTransform} type="button">Reset transform</button>
                 <button className="sanborn-button" onClick={() => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { isLocked: !selectedPlacement.isLocked }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { isLocked: !selectedSheetGeoreference.isLocked }) : undefined} type="button">Lock/unlock</button>
                 <button className="sanborn-button" onClick={() => studioMode === "stitching" && selectedPlacement ? commitPlacement(selectedPlacement.assetId, { isVisible: !selectedPlacement.isVisible }) : selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { isVisible: !selectedSheetGeoreference.isVisible }) : undefined} type="button">Show/hide</button>
+                {studioMode !== "stitching" ? <button className="sanborn-button" onClick={removeSelectedGeographicPlacement} type="button">Remove placement</button> : null}
                 <button className="sanborn-button" onClick={() => replaceInputRef.current?.click()} type="button">Replace image</button>
                 <button className="sanborn-button" onClick={() => void deleteSelectedSheet()} type="button">Delete sheet</button>
                 <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden onChange={(event) => void replaceSelectedImage(event)} ref={replaceInputRef} type="file" />
@@ -2050,7 +2186,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                   <p className="small-muted">Sheet geographic status: {selectedSheetGeoreference?.georeferenceStatus ?? "not_started"}</p>
                   <p className="small-muted">Center: {selectedSheetGeoreference ? `${formatCoordinate(selectedSheetGeoreference.centerLatitude)}, ${formatCoordinate(selectedSheetGeoreference.centerLongitude)}` : "unavailable"}</p>
                   <p className="small-muted">Corners: {selectedSheetGeoreference?.corners.northwest ? `NW ${formatCoordinate(selectedSheetGeoreference.corners.northwest.latitude)}, ${formatCoordinate(selectedSheetGeoreference.corners.northwest.longitude)}` : "unavailable"}</p>
-                  <p className="small-muted">Rendering limitation: affine sheet transform, not survey-grade perspective warping.</p>
+                  <p className="small-muted">Rendering: browser four-corner projective warp for visual alignment, not survey-grade GIS output.</p>
                   <p className="small-muted">Control-point target status: {georeferenceDraft.status}</p>
                   <p className="small-muted">Control points: {completeControlPoints.length} complete / {georeferenceDraft.controlPoints.length} total</p>
                   <p className="small-muted">Estimated error: {calculatedTransform.ok ? calculatedTransform.residualError.toExponential(3) : calculatedTransform.error}</p>

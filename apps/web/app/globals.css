@@ -1846,6 +1846,325 @@ textarea {
   padding: 0.45rem 0.65rem;
 }
 
+body:has(.historical-map-studio) {
+  overflow: hidden;
+}
+
+.community-shell:has(.historical-map-studio) {
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.historical-map-studio {
+  height: calc(100vh - 56px);
+  display: grid;
+  grid-template-rows: 52px auto minmax(0, 1fr) 32px;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.historical-map-studio .sanborn-button {
+  min-height: 30px;
+  padding: 0.34rem 0.55rem;
+  border-radius: 9px;
+  font-size: 0.72rem;
+}
+
+.map-studio-toast {
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  background: rgba(37, 28, 20, 0.88);
+  color: rgba(246, 231, 203, 0.88);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-studio-toast.is-error {
+  border-color: rgba(201, 93, 74, 0.62);
+  color: #ffd7cc;
+}
+
+.map-studio-topbar {
+  grid-template-columns: minmax(190px, 0.72fr) minmax(250px, 1.3fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 6px 8px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.map-studio-topbar h2 {
+  font-size: 1rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.map-studio-topbar .panel__eyebrow,
+.map-studio-topbar .small-muted {
+  margin: 0;
+  font-size: 0.64rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-studio-topbar__metrics,
+.map-studio-actions,
+.map-studio-mode-switch,
+.map-studio-layer-actions,
+.map-studio-mode-toggle,
+.map-studio-filter-strip {
+  gap: 5px;
+}
+
+.map-studio-topbar__metrics .tag {
+  padding: 0.22rem 0.42rem;
+  font-size: 0.64rem;
+}
+
+.map-studio-layout {
+  grid-template-columns: 246px minmax(0, 1fr) 296px;
+  gap: 6px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.map-studio-layout.is-left-collapsed {
+  grid-template-columns: minmax(0, 1fr) 296px;
+}
+
+.map-studio-layout.is-right-collapsed {
+  grid-template-columns: 246px minmax(0, 1fr);
+}
+
+.map-studio-layout.is-left-collapsed.is-right-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.map-studio-sidebar,
+.map-studio-inspector,
+.map-studio-canvas-wrap,
+.map-studio-statusbar {
+  border-radius: 12px;
+}
+
+.map-studio-sidebar,
+.map-studio-inspector {
+  gap: 7px;
+  padding: 8px;
+  max-height: none;
+  min-height: 0;
+  overflow: auto;
+}
+
+.map-studio-sidebar label,
+.map-studio-georef-controls label,
+.map-studio-inspector label,
+.map-studio-statusbar label {
+  gap: 3px;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+}
+
+.map-studio-sidebar input,
+.map-studio-sidebar select,
+.map-studio-georef-controls input,
+.map-studio-georef-controls select,
+.map-studio-inspector input,
+.map-studio-inspector select,
+.map-studio-inspector textarea {
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.76rem;
+}
+
+.map-studio-inspector textarea {
+  min-height: 48px;
+}
+
+.map-studio-sidebar__summary,
+.map-studio-upload-status,
+.map-studio-georef-controls,
+.map-studio-readonly,
+.map-studio-georef-inspector,
+.map-studio-control-point-editor,
+.map-studio-inspector-section {
+  gap: 5px;
+  padding: 7px;
+  border-radius: 10px;
+}
+
+.map-studio-sidebar__summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  font-size: 0.68rem;
+}
+
+.map-studio-sheet-list {
+  gap: 5px;
+}
+
+.map-studio-sheet-row {
+  min-height: 54px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 6px;
+  padding: 5px;
+  border-radius: 10px;
+}
+
+.map-studio-sheet-row img,
+.map-studio-thumb-fallback {
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+}
+
+.map-studio-sheet-row__main {
+  min-width: 0;
+}
+
+.map-studio-sheet-row__main strong {
+  font-size: 0.76rem;
+}
+
+.map-studio-sheet-row__main small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+}
+
+.map-studio-sheet-row__icons,
+.map-studio-sheet-row__actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+
+.map-studio-sheet-row__icons span {
+  border-radius: 999px;
+  background: rgba(226, 190, 126, 0.12);
+  color: rgba(246, 231, 203, 0.76);
+  font-size: 0.57rem;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.map-studio-sheet-row__actions .sanborn-button {
+  min-height: 24px;
+  padding: 0.18rem 0.38rem;
+  font-size: 0.62rem;
+}
+
+.map-studio-canvas-wrap,
+.map-studio-georef-split,
+.map-studio-historical-point-pane,
+.map-studio-modern-map-pane,
+.map-studio-overlay-mode,
+.map-studio-leaflet-map {
+  min-height: 0;
+  height: 100%;
+}
+
+.map-studio-georef-split {
+  display: block;
+}
+
+.mode-georeferencing .map-studio-historical-point-pane {
+  display: none;
+}
+
+.map-studio-leaflet-map {
+  min-height: 0;
+}
+
+.map-studio-sheet-overlay {
+  overflow: visible;
+  transform-origin: 0 0;
+}
+
+.map-studio-sheet-overlay__image {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.map-studio-sheet-overlay__boundary {
+  inset: 0;
+  background: rgba(226, 190, 126, 0.08);
+  border: 2px solid rgba(226, 190, 126, 0.82);
+}
+
+.map-studio-sheet-overlay__pivot {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 999px;
+  border: 2px solid #101010;
+  background: #6d9f67;
+  box-shadow: 0 0 0 2px rgba(109, 159, 103, 0.3);
+  pointer-events: none;
+}
+
+.map-studio-sheet-overlay__handle {
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+}
+
+.map-studio-sheet-overlay__handle.handle-center {
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  cursor: move;
+  background: #e2be7e;
+}
+
+.map-studio-inspector {
+  grid-auto-rows: min-content;
+}
+
+.map-studio-inspector h3,
+.map-studio-inspector h4 {
+  font-size: 0.96rem;
+}
+
+.map-studio-inspector__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.map-studio-statusbar {
+  position: static;
+  min-height: 32px;
+  padding: 4px 8px;
+  gap: 5px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.map-studio-statusbar span,
+.map-studio-statusbar label {
+  padding: 0.2rem 0.42rem;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 @media (max-width: 1200px) {
   .content-grid--dashboard,
   .content-grid--three,

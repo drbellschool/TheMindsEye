@@ -7,7 +7,6 @@ import type { LatLngExpression, LatLngTuple } from "leaflet";
 
 import { boundsFromCorners, type GeoBounds, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
 import {
-  deriveSheetGeoCorners,
   normalizeSheetGeographicTransform,
   type GeoEditMode,
   type SheetGeographicTransform,
@@ -144,23 +143,189 @@ function FitBounds({ bounds, request }: { bounds: GeoBounds | null; request: num
   return null;
 }
 
-function getSheetBasePixelSize(map: L.Map, sheet: SheetGeographicTransform) {
-  const center = L.latLng(sheet.centerLatitude, sheet.centerLongitude);
-  const west = L.latLng(sheet.centerLatitude, sheet.centerLongitude - sheet.longitudeSpan / 2);
-  const east = L.latLng(sheet.centerLatitude, sheet.centerLongitude + sheet.longitudeSpan / 2);
-  const north = L.latLng(sheet.centerLatitude + sheet.latitudeSpan / 2, sheet.centerLongitude);
-  const south = L.latLng(sheet.centerLatitude - sheet.latitudeSpan / 2, sheet.centerLongitude);
-  const centerPoint = map.latLngToLayerPoint(center);
-  const westPoint = map.latLngToLayerPoint(west);
-  const eastPoint = map.latLngToLayerPoint(east);
-  const northPoint = map.latLngToLayerPoint(north);
-  const southPoint = map.latLngToLayerPoint(south);
+type QuadPoints = {
+  northwest: L.Point;
+  northeast: L.Point;
+  southeast: L.Point;
+  southwest: L.Point;
+};
+
+function getSheetCornerPoints(map: L.Map, sheet: SheetGeographicTransform): QuadPoints {
+  return {
+    northwest: map.latLngToLayerPoint([sheet.corners.northwest?.latitude ?? sheet.centerLatitude, sheet.corners.northwest?.longitude ?? sheet.centerLongitude]),
+    northeast: map.latLngToLayerPoint([sheet.corners.northeast?.latitude ?? sheet.centerLatitude, sheet.corners.northeast?.longitude ?? sheet.centerLongitude]),
+    southeast: map.latLngToLayerPoint([sheet.corners.southeast?.latitude ?? sheet.centerLatitude, sheet.corners.southeast?.longitude ?? sheet.centerLongitude]),
+    southwest: map.latLngToLayerPoint([sheet.corners.southwest?.latitude ?? sheet.centerLatitude, sheet.corners.southwest?.longitude ?? sheet.centerLongitude]),
+  };
+}
+
+function getPointCenter(points: QuadPoints) {
+  const values = [points.northwest, points.northeast, points.southeast, points.southwest];
+
+  return L.point(values.reduce((sum, point) => sum + point.x, 0) / values.length, values.reduce((sum, point) => sum + point.y, 0) / values.length);
+}
+
+function getPivotPoint(points: QuadPoints, sheet: SheetGeographicTransform) {
+  return L.point(
+    points.northwest.x + (points.northeast.x - points.northwest.x) * sheet.pivotX + (points.southwest.x - points.northwest.x) * sheet.pivotY,
+    points.northwest.y + (points.northeast.y - points.northwest.y) * sheet.pivotX + (points.southwest.y - points.northwest.y) * sheet.pivotY,
+  );
+}
+
+function pointToCoordinate(map: L.Map, point: L.Point) {
+  const latLng = map.layerPointToLatLng(point);
+
+  return { latitude: latLng.lat, longitude: latLng.lng };
+}
+
+function pointsToCorners(map: L.Map, points: QuadPoints): GeoCorners {
+  return {
+    northwest: pointToCoordinate(map, points.northwest),
+    northeast: pointToCoordinate(map, points.northeast),
+    southeast: pointToCoordinate(map, points.southeast),
+    southwest: pointToCoordinate(map, points.southwest),
+  };
+}
+
+function getTransformedQuadBounds(points: QuadPoints) {
+  const values = [points.northwest, points.northeast, points.southeast, points.southwest];
+  const minX = Math.min(...values.map((point) => point.x));
+  const minY = Math.min(...values.map((point) => point.y));
+  const maxX = Math.max(...values.map((point) => point.x));
+  const maxY = Math.max(...values.map((point) => point.y));
+
+  return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+}
+
+function solveLinearSystem(matrix: number[][], vector: number[]): number[] | null {
+  const size = vector.length;
+  const augmented = matrix.map((row, index) => [...row, vector[index]]);
+
+  for (let column = 0; column < size; column += 1) {
+    let pivotRow = column;
+
+    for (let row = column + 1; row < size; row += 1) {
+      if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivotRow][column])) {
+        pivotRow = row;
+      }
+    }
+
+    if (Math.abs(augmented[pivotRow][column]) < 1e-9) {
+      return null;
+    }
+
+    [augmented[column], augmented[pivotRow]] = [augmented[pivotRow], augmented[column]];
+    const pivot = augmented[column][column];
+
+    for (let col = column; col <= size; col += 1) {
+      augmented[column][col] /= pivot;
+    }
+
+    for (let row = 0; row < size; row += 1) {
+      if (row === column) {
+        continue;
+      }
+
+      const factor = augmented[row][column];
+
+      for (let col = column; col <= size; col += 1) {
+        augmented[row][col] -= factor * augmented[column][col];
+      }
+    }
+  }
+
+  return augmented.map((row) => row[size]);
+}
+
+function getProjectiveTransform(width: number, height: number, points: QuadPoints, offset: L.Point): string {
+  const source = [
+    [0, 0],
+    [width, 0],
+    [width, height],
+    [0, height],
+  ];
+  const target = [points.northwest, points.northeast, points.southeast, points.southwest].map((point) => [point.x - offset.x, point.y - offset.y]);
+  const matrix: number[][] = [];
+  const vector: number[] = [];
+
+  source.forEach(([x, y], index) => {
+    const [u, v] = target[index];
+    matrix.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+    vector.push(u);
+    matrix.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+    vector.push(v);
+  });
+
+  const solved = solveLinearSystem(matrix, vector);
+
+  if (!solved) {
+    return "matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)";
+  }
+
+  const [a, b, c, d, e, f, g, h] = solved;
+  const cssMatrix = [a, d, 0, g, b, e, 0, h, 0, 0, 1, 0, c, f, 0, 1];
+
+  return `matrix3d(${cssMatrix.map((value) => Number(value.toFixed(12))).join(",")})`;
+}
+
+function rotatePoints(points: QuadPoints, center: L.Point, degrees: number): QuadPoints {
+  const radians = (degrees * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const rotate = (point: L.Point) => {
+    const x = point.x - center.x;
+    const y = point.y - center.y;
+
+    return L.point(center.x + x * cos - y * sin, center.y + x * sin + y * cos);
+  };
 
   return {
-    centerPoint,
-    width: Math.max(24, Math.abs(eastPoint.x - westPoint.x)),
-    height: Math.max(24, Math.abs(southPoint.y - northPoint.y)),
+    northwest: rotate(points.northwest),
+    northeast: rotate(points.northeast),
+    southeast: rotate(points.southeast),
+    southwest: rotate(points.southwest),
   };
+}
+
+function scalePoints(points: QuadPoints, center: L.Point, scaleX: number, scaleY: number): QuadPoints {
+  const scale = (point: L.Point) => L.point(center.x + (point.x - center.x) * scaleX, center.y + (point.y - center.y) * scaleY);
+
+  return {
+    northwest: scale(points.northwest),
+    northeast: scale(points.northeast),
+    southeast: scale(points.southeast),
+    southwest: scale(points.southwest),
+  };
+}
+
+function translatePoints(points: QuadPoints, dx: number, dy: number): QuadPoints {
+  return {
+    northwest: L.point(points.northwest.x + dx, points.northwest.y + dy),
+    northeast: L.point(points.northeast.x + dx, points.northeast.y + dy),
+    southeast: L.point(points.southeast.x + dx, points.southeast.y + dy),
+    southwest: L.point(points.southwest.x + dx, points.southwest.y + dy),
+  };
+}
+
+function setEdge(points: QuadPoints, edge: string, nextPoint: L.Point): QuadPoints {
+  if (edge === "top-center") {
+    const current = L.point((points.northwest.x + points.northeast.x) / 2, (points.northwest.y + points.northeast.y) / 2);
+    return { ...points, northwest: L.point(points.northwest.x + nextPoint.x - current.x, points.northwest.y + nextPoint.y - current.y), northeast: L.point(points.northeast.x + nextPoint.x - current.x, points.northeast.y + nextPoint.y - current.y) };
+  }
+  if (edge === "middle-right") {
+    const current = L.point((points.northeast.x + points.southeast.x) / 2, (points.northeast.y + points.southeast.y) / 2);
+    return { ...points, northeast: L.point(points.northeast.x + nextPoint.x - current.x, points.northeast.y + nextPoint.y - current.y), southeast: L.point(points.southeast.x + nextPoint.x - current.x, points.southeast.y + nextPoint.y - current.y) };
+  }
+  if (edge === "bottom-center") {
+    const current = L.point((points.southwest.x + points.southeast.x) / 2, (points.southwest.y + points.southeast.y) / 2);
+    return { ...points, southwest: L.point(points.southwest.x + nextPoint.x - current.x, points.southwest.y + nextPoint.y - current.y), southeast: L.point(points.southeast.x + nextPoint.x - current.x, points.southeast.y + nextPoint.y - current.y) };
+  }
+  if (edge === "middle-left") {
+    const current = L.point((points.northwest.x + points.southwest.x) / 2, (points.northwest.y + points.southwest.y) / 2);
+    return { ...points, northwest: L.point(points.northwest.x + nextPoint.x - current.x, points.northwest.y + nextPoint.y - current.y), southwest: L.point(points.southwest.x + nextPoint.x - current.x, points.southwest.y + nextPoint.y - current.y) };
+  }
+
+  return points;
 }
 
 function TransformedSheetLayer({
@@ -189,18 +354,20 @@ function TransformedSheetLayer({
     const pane = map.getPanes().overlayPane;
     const element = L.DomUtil.create("div", "map-studio-sheet-overlay", pane);
     const image = L.DomUtil.create("img", "map-studio-sheet-overlay__image", element);
-    const label = L.DomUtil.create("span", "map-studio-sheet-overlay__label", element);
     const boundary = L.DomUtil.create("span", "map-studio-sheet-overlay__boundary", element);
+    const label = L.DomUtil.create("span", "map-studio-sheet-overlay__label", element);
+    const pivot = L.DomUtil.create("span", "map-studio-sheet-overlay__pivot", element);
     const handles = [
       ["rotate", "rotate"],
-      ["top-left", "scale"],
-      ["top-center", "scale"],
-      ["top-right", "scale"],
-      ["middle-left", "scale"],
-      ["middle-right", "scale"],
-      ["bottom-left", "scale"],
-      ["bottom-center", "scale"],
-      ["bottom-right", "scale"],
+      ["center", "drag"],
+      ["top-left", "corner"],
+      ["top-center", "edge"],
+      ["top-right", "corner"],
+      ["middle-left", "edge"],
+      ["middle-right", "edge"],
+      ["bottom-left", "corner"],
+      ["bottom-center", "edge"],
+      ["bottom-right", "corner"],
     ].map(([position, action]) => {
       const handle = L.DomUtil.create("button", `map-studio-sheet-overlay__handle handle-${position}`, element);
       handle.type = "button";
@@ -218,32 +385,56 @@ function TransformedSheetLayer({
     }
 
     function setElementTransform(sheet: SheetGeographicTransform) {
-      const { centerPoint, width, height } = getSheetBasePixelSize(map, sheet);
+      const points = getSheetCornerPoints(map, sheet);
+      const bounds = getTransformedQuadBounds(points);
       const selected = latestRef.current.isSelected;
-      const currentMode = latestRef.current.mode;
-      const editMode = currentMode === "edit_historical_sheets";
+      const editMode = latestRef.current.mode === "edit_historical_sheets";
       const visibleHandles = selected && editMode && !sheet.isLocked;
-      const signedScaleX = sheet.scaleX * (sheet.isFlippedHorizontally ? -1 : 1);
-      const signedScaleY = sheet.scaleY * (sheet.isFlippedVertically ? -1 : 1);
+      const offset = L.point(bounds.minX, bounds.minY);
+      const centerPoint = getPointCenter(points);
+      const handlePositions: Record<string, L.Point> = {
+        "top-left": points.northwest,
+        "top-center": L.point((points.northwest.x + points.northeast.x) / 2, (points.northwest.y + points.northeast.y) / 2),
+        "top-right": points.northeast,
+        "middle-left": L.point((points.northwest.x + points.southwest.x) / 2, (points.northwest.y + points.southwest.y) / 2),
+        "middle-right": L.point((points.northeast.x + points.southeast.x) / 2, (points.northeast.y + points.southeast.y) / 2),
+        "bottom-left": points.southwest,
+        "bottom-center": L.point((points.southwest.x + points.southeast.x) / 2, (points.southwest.y + points.southeast.y) / 2),
+        "bottom-right": points.southeast,
+        center: centerPoint,
+        rotate: L.point((points.northwest.x + points.northeast.x) / 2, (points.northwest.y + points.northeast.y) / 2 - 38),
+      };
+      const pivotPoint = getPivotPoint(points, sheet);
 
-      element.style.left = `${centerPoint.x}px`;
-      element.style.top = `${centerPoint.y}px`;
-      element.style.width = `${width}px`;
-      element.style.height = `${height}px`;
+      element.style.left = `${bounds.minX}px`;
+      element.style.top = `${bounds.minY}px`;
+      element.style.width = `${bounds.width}px`;
+      element.style.height = `${bounds.height}px`;
       element.style.opacity = String(sheet.opacity * latestRef.current.globalOpacity);
       element.style.pointerEvents = editMode || selected ? "auto" : "none";
       element.style.zIndex = String(400 + sheet.layerOrder + (selected ? 1000 : 0));
-      element.style.transform = `translate(-50%, -50%) rotate(${sheet.rotation}deg) skew(${sheet.skewX}deg, ${sheet.skewY}deg) scale(${signedScaleX}, ${signedScaleY})`;
       element.classList.toggle("is-selected", selected);
       element.classList.toggle("is-locked", sheet.isLocked);
       element.classList.toggle("is-hidden", !sheet.isVisible);
       image.src = latestRef.current.layer.imageUrl ?? "";
       image.alt = `Sanborn sheet ${latestRef.current.layer.sheetNumber ?? "unknown"}`;
+      image.style.width = `${latestRef.current.layer.width}px`;
+      image.style.height = `${latestRef.current.layer.height}px`;
+      image.style.transform = getProjectiveTransform(latestRef.current.layer.width, latestRef.current.layer.height, points, offset);
       label.textContent = latestRef.current.showLabel ? `Sheet ${latestRef.current.layer.sheetNumber ?? "unknown"}` : "";
       label.style.display = latestRef.current.showLabel ? "block" : "none";
+      boundary.style.clipPath = `polygon(${points.northwest.x - offset.x}px ${points.northwest.y - offset.y}px, ${points.northeast.x - offset.x}px ${points.northeast.y - offset.y}px, ${points.southeast.x - offset.x}px ${points.southeast.y - offset.y}px, ${points.southwest.x - offset.x}px ${points.southwest.y - offset.y}px)`;
       boundary.style.display = selected || latestRef.current.showLabel ? "block" : "none";
+      pivot.style.left = `${pivotPoint.x - offset.x}px`;
+      pivot.style.top = `${pivotPoint.y - offset.y}px`;
+      pivot.style.display = visibleHandles ? "block" : "none";
       handles.forEach((handle) => {
+        const point = handlePositions[handle.dataset.position ?? ""];
         handle.style.display = visibleHandles ? "block" : "none";
+        if (point) {
+          handle.style.left = `${point.x - offset.x}px`;
+          handle.style.top = `${point.y - offset.y}px`;
+        }
       });
     }
 
@@ -264,7 +455,8 @@ function TransformedSheetLayer({
 
       const committed = normalizeSheetGeographicTransform({
         ...nextDraft,
-        corners: deriveSheetGeoCorners(nextDraft),
+        warpType: "projective",
+        placementStatus: "placed",
       });
 
       latestRef.current.onCommit?.(committed.assetId, {
@@ -275,6 +467,12 @@ function TransformedSheetLayer({
         rotation: committed.rotation,
         scaleX: committed.scaleX,
         scaleY: committed.scaleY,
+        skewX: committed.skewX,
+        skewY: committed.skewY,
+        pivotX: committed.pivotX,
+        pivotY: committed.pivotY,
+        warpType: committed.warpType,
+        placementStatus: committed.placementStatus,
         corners: committed.corners,
       });
     }
@@ -282,7 +480,8 @@ function TransformedSheetLayer({
     function startPointerInteraction(event: PointerEvent) {
       const current = latestRef.current;
       const sheet = current.layer;
-      const action = (event.target as HTMLElement).dataset.action ?? "drag";
+      const target = event.target as HTMLElement;
+      const action = target.dataset.action ?? "drag";
 
       if (current.mode !== "edit_historical_sheets") {
         return;
@@ -297,11 +496,14 @@ function TransformedSheetLayer({
       }
 
       map.dragging.disable();
+      const startPoints = getSheetCornerPoints(map, sheet);
       const start = {
         x: event.clientX,
         y: event.clientY,
         sheet,
-        centerPoint: map.latLngToLayerPoint([sheet.centerLatitude, sheet.centerLongitude]),
+        points: startPoints,
+        centerPoint: getPointCenter(startPoints),
+        pivotPoint: getPivotPoint(startPoints, sheet),
         rotation: sheet.rotation,
         scaleX: sheet.scaleX,
         scaleY: sheet.scaleY,
@@ -311,33 +513,38 @@ function TransformedSheetLayer({
         const dx = moveEvent.clientX - start.x;
         const dy = moveEvent.clientY - start.y;
 
-        if (action === "rotate") {
-          const center = getSheetBasePixelSize(map, start.sheet).centerPoint;
-          const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
-          const nextAngle = Math.atan2(moveEvent.clientY - center.y, moveEvent.clientX - center.x);
-          draft = normalizeSheetGeographicTransform({
-            ...start.sheet,
-            rotation: start.rotation + ((nextAngle - startAngle) * 180) / Math.PI,
-          });
+        if (action === "corner") {
+          const position = target.dataset.position ?? "";
+          const cornerByPosition: Record<string, keyof QuadPoints> = {
+            "top-left": "northwest",
+            "top-right": "northeast",
+            "bottom-right": "southeast",
+            "bottom-left": "southwest",
+          };
+          const corner = cornerByPosition[position];
+          const nextPoints = { ...start.points, [corner]: L.point(start.points[corner].x + dx, start.points[corner].y + dy) };
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "placed" });
+        } else if (action === "edge") {
+          const nextPoints = setEdge(start.points, target.dataset.position ?? "", L.point(start.centerPoint.x + dx, start.centerPoint.y + dy));
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, corners: pointsToCorners(map, nextPoints), warpType: "projective", placementStatus: "placed" });
+        } else if (action === "rotate") {
+          const startAngle = Math.atan2(start.y - start.pivotPoint.y, start.x - start.pivotPoint.x);
+          const nextAngle = Math.atan2(moveEvent.clientY - start.pivotPoint.y, moveEvent.clientX - start.pivotPoint.x);
+          const deltaDegrees = ((nextAngle - startAngle) * 180) / Math.PI;
+          const nextPoints = rotatePoints(start.points, start.pivotPoint, deltaDegrees);
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, rotation: start.rotation + deltaDegrees, corners: pointsToCorners(map, nextPoints) });
         } else if (action === "scale") {
-          const position = (event.target as HTMLElement).dataset.position ?? "";
-          const directionX = position.includes("left") ? -1 : position.includes("right") ? 1 : 0;
-          const directionY = position.includes("top") ? -1 : position.includes("bottom") ? 1 : 0;
-          const { width, height } = getSheetBasePixelSize(map, start.sheet);
-          const scaleX = directionX === 0 ? start.scaleX : start.scaleX + (dx * directionX) / Math.max(width, 80);
-          const scaleY = directionY === 0 ? start.scaleY : start.scaleY + (dy * directionY) / Math.max(height, 80);
-          draft = normalizeSheetGeographicTransform({
-            ...start.sheet,
-            scaleX,
-            scaleY,
-          });
+          const bounds = getTransformedQuadBounds(start.points);
+          const scaleX = Math.max(0.1, start.scaleX + dx / Math.max(bounds.width, 80));
+          const scaleY = Math.max(0.1, start.scaleY + dy / Math.max(bounds.height, 80));
+          const nextPoints = scalePoints(start.points, start.pivotPoint, scaleX / start.scaleX, scaleY / start.scaleY);
+          draft = normalizeSheetGeographicTransform({ ...start.sheet, scaleX, scaleY, corners: pointsToCorners(map, nextPoints) });
         } else {
-          const nextPoint = L.point(start.centerPoint.x + dx, start.centerPoint.y + dy);
-          const nextLatLng = map.layerPointToLatLng(nextPoint);
+          const nextPoints = translatePoints(start.points, dx, dy);
           draft = normalizeSheetGeographicTransform({
             ...start.sheet,
-            centerLatitude: nextLatLng.lat,
-            centerLongitude: nextLatLng.lng,
+            corners: pointsToCorners(map, nextPoints),
+            placementStatus: "placed",
           });
         }
 
@@ -380,35 +587,7 @@ function TransformedSheetLayer({
       return;
     }
 
-    const sheet = latestRef.current.layer;
-    const { centerPoint, width, height } = getSheetBasePixelSize(map, sheet);
-    const signedScaleX = sheet.scaleX * (sheet.isFlippedHorizontally ? -1 : 1);
-    const signedScaleY = sheet.scaleY * (sheet.isFlippedVertically ? -1 : 1);
-
-    element.style.left = `${centerPoint.x}px`;
-    element.style.top = `${centerPoint.y}px`;
-    element.style.width = `${width}px`;
-    element.style.height = `${height}px`;
-    element.style.opacity = String(sheet.opacity * latestRef.current.globalOpacity);
-    element.style.display = sheet.isVisible ? "block" : "none";
-    element.style.pointerEvents = latestRef.current.mode === "edit_historical_sheets" || latestRef.current.isSelected ? "auto" : "none";
-    element.style.zIndex = String(400 + sheet.layerOrder + (latestRef.current.isSelected ? 1000 : 0));
-    element.style.transform = `translate(-50%, -50%) rotate(${sheet.rotation}deg) skew(${sheet.skewX}deg, ${sheet.skewY}deg) scale(${signedScaleX}, ${signedScaleY})`;
-    element.classList.toggle("is-selected", latestRef.current.isSelected);
-    element.classList.toggle("is-locked", sheet.isLocked);
-    element.classList.toggle("is-hidden", !sheet.isVisible);
-    element.querySelectorAll<HTMLElement>(".map-studio-sheet-overlay__handle").forEach((handle) => {
-      handle.style.display = latestRef.current.isSelected && latestRef.current.mode === "edit_historical_sheets" && !sheet.isLocked ? "block" : "none";
-    });
-    const label = element.querySelector<HTMLElement>(".map-studio-sheet-overlay__label");
-    if (label) {
-      label.textContent = latestRef.current.showLabel ? `Sheet ${latestRef.current.layer.sheetNumber ?? "unknown"}` : "";
-      label.style.display = latestRef.current.showLabel ? "block" : "none";
-    }
-    const img = element.querySelector<HTMLImageElement>(".map-studio-sheet-overlay__image");
-    if (img && latestRef.current.layer.imageUrl) {
-      img.src = latestRef.current.layer.imageUrl;
-    }
+    map.fire("move");
   }, [layer, isSelected, mode, globalOpacity, showLabel, map]);
 
   return null;

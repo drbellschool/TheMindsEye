@@ -17,6 +17,9 @@ import {
   normalizeGeographicMapSettings,
   normalizeSheetGeographicTransform,
   normalizeSheetGeoreferenceStatus,
+  normalizeSheetPlacementStatus,
+  normalizeSheetWarpType,
+  normalizeProjectiveMatrix,
   type SheetGeographicTransform,
 } from "./historical-map-sheet-georeference.ts";
 import {
@@ -176,6 +179,12 @@ type SheetGeoreferenceRow = {
   scale_y: number | null;
   skew_x: number | null;
   skew_y: number | null;
+  pivot_x: number | null;
+  pivot_y: number | null;
+  warp_type: string | null;
+  projective_matrix: unknown;
+  transform_version: number | null;
+  placement_status: string | null;
   is_flipped_horizontally: boolean | null;
   is_flipped_vertically: boolean | null;
   opacity: number | null;
@@ -255,12 +264,35 @@ function mapTown(row: TownPackageRow): StudioTownPackage {
   };
 }
 
-function selectActiveTown(towns: StudioTownPackage[], townPackageId?: string | null): StudioTownPackage | null {
+export function selectActiveTownPackage(
+  towns: StudioTownPackage[],
+  townPackageId?: string | null,
+): { town: StudioTownPackage | null; warningMessage?: string } {
   if (towns.length === 0) {
-    return null;
+    return { town: null };
   }
 
-  return towns.find((town) => town.id === townPackageId || town.packageId === townPackageId) ?? towns[0];
+  if (!townPackageId) {
+    return { town: towns[0] };
+  }
+
+  const requested = towns.find((town) => town.id === townPackageId || town.packageId === townPackageId);
+
+  if (requested) {
+    return { town: requested };
+  }
+
+  const recovered = towns[0];
+  console.warn("[HistoricalMapStudio] Recovered missing requested town package", {
+    requestedTownPackageId: townPackageId,
+    recoveredTownPackageId: recovered.id,
+    recoveredPackageId: recovered.packageId,
+  });
+
+  return {
+    town: recovered,
+    warningMessage: `Recovered from unavailable town package "${townPackageId}" by loading ${recovered.name} ${recovered.year}.`,
+  };
 }
 
 function parseMapYear(value: string | number | null | undefined, fallback: number): number {
@@ -450,6 +482,12 @@ function mapSheetGeoreferences(rows: SheetGeoreferenceRow[], assets: StudioSheet
         scaleY: row.scale_y ?? 1,
         skewX: row.skew_x ?? 0,
         skewY: row.skew_y ?? 0,
+        pivotX: row.pivot_x ?? 0.5,
+        pivotY: row.pivot_y ?? 0.5,
+        warpType: normalizeSheetWarpType(row.warp_type),
+        projectiveMatrix: normalizeProjectiveMatrix(row.projective_matrix),
+        transformVersion: row.transform_version ?? 1,
+        placementStatus: normalizeSheetPlacementStatus(row.placement_status, row.is_visible ?? true),
         isFlippedHorizontally: row.is_flipped_horizontally ?? false,
         isFlippedVertically: row.is_flipped_vertically ?? false,
         opacity: row.opacity ?? 1,
@@ -585,7 +623,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   }
 
   const townPackages = ((townPackagesResult.data ?? []) as TownPackageRow[]).map(mapTown);
-  const activeTownPackage = selectActiveTown(townPackages, options.townPackageId);
+  const activeTownSelection = selectActiveTownPackage(townPackages, options.townPackageId);
+  const activeTownPackage = activeTownSelection.town;
 
   if (!activeTownPackage) {
     return createEmptyState({
@@ -662,9 +701,9 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
       }
 
       const sheetGeoreferencesResult = await supabase
-        .from("historical_map_sheet_georeferences")
+      .from("historical_map_sheet_georeferences")
         .select(
-          "sheet_georeference_id, sanborn_sheet_asset_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, longitude_span, latitude_span, rotation, scale_x, scale_y, skew_x, skew_y, is_flipped_horizontally, is_flipped_vertically, opacity, layer_order, is_visible, is_locked, georeference_status, review_status, evidence_classification, updated_at",
+          "sheet_georeference_id, sanborn_sheet_asset_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, longitude_span, latitude_span, rotation, scale_x, scale_y, skew_x, skew_y, pivot_x, pivot_y, warp_type, projective_matrix, transform_version, placement_status, is_flipped_horizontally, is_flipped_vertically, opacity, layer_order, is_visible, is_locked, georeference_status, review_status, evidence_classification, updated_at",
         )
         .eq("workspace_id", workspaceRow.id);
 
@@ -723,7 +762,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
 
   return {
     mode: workspaceWarning ? "read_only" : "public",
-    warningMessage: workspaceWarning,
+    warningMessage: workspaceWarning ?? activeTownSelection.warningMessage,
     dataSource: "supabase",
     townPackages,
     activeTownPackage,

@@ -42,18 +42,35 @@ export async function getRequestedTownPackage(
   supabase: NonNullable<ReturnType<typeof createAdminClient>>,
   townPackageId: string | null | undefined,
 ) {
+  const selectTown = () => supabase.from("town_packages").select("id, package_id, name, year").order("year", { ascending: false }).limit(1).maybeSingle();
+
   if (townPackageId) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(townPackageId);
-
-    return supabase
+    const requested = await supabase
       .from("town_packages")
       .select("id, package_id, name, year")
       .eq(isUuid ? "id" : "package_id", townPackageId)
       .limit(1)
       .maybeSingle();
+
+    if (requested.error || requested.data) {
+      return requested;
+    }
+
+    const recovered = await selectTown();
+
+    if (!recovered.error && recovered.data) {
+      console.warn("[HistoricalMapStudio] Recovered from stale town_package_id", {
+        requestedTownPackageId: townPackageId,
+        recoveredTownPackageId: recovered.data.id,
+        recoveredPackageId: recovered.data.package_id,
+      });
+    }
+
+    return recovered;
   }
 
-  return supabase.from("town_packages").select("id, package_id, name, year").order("year", { ascending: false }).limit(1).maybeSingle();
+  return selectTown();
 }
 
 export type StudioAssetLookupRow = {
