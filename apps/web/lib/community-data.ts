@@ -20,6 +20,7 @@ import {
   type ReviewStatusCounts,
   type StatusRow,
 } from "@/lib/community-status";
+import { normalizeSourceLinks, type CommunitySourceLinkInput } from "@/lib/community-source-links";
 import { communityDemo, type CommunityDemoData } from "@/lib/demo-data";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 
@@ -43,6 +44,7 @@ type TownPackageRow = {
 };
 
 type SourceRecordRow = {
+  id: string;
   source_id: string;
   title: string;
   archive_name: string | null;
@@ -50,6 +52,13 @@ type SourceRecordRow = {
   review_status: string | null;
   source_date: string | null;
   ocr_excerpt: string | null;
+};
+
+type SourceRecordLookupRow = StatusRow & {
+  id: string;
+  source_id: string;
+  title: string;
+  archive_name: string | null;
 };
 
 type MapLayerRow = {
@@ -62,6 +71,7 @@ type MapLayerRow = {
 };
 
 type BuildingRow = {
+  id: string;
   building_id: string;
   label: string;
   sheet_reference: string | null;
@@ -72,6 +82,7 @@ type BuildingRow = {
 };
 
 type PersonRow = {
+  id: string;
   person_id: string;
   display_name: string;
   occupation: string | null;
@@ -81,12 +92,26 @@ type PersonRow = {
 };
 
 type BusinessRow = {
+  id: string;
   business_id: string;
   display_name: string;
   business_type: string | null;
   review_status: string | null;
   certainty: string | null;
   notes: string | null;
+};
+
+type ClaimRelationshipRow = StatusRow & {
+  source_record_id: string | null;
+  building_id: string | null;
+  person_id: string | null;
+  business_id: string | null;
+};
+
+type ReviewEventSourceRow = ReviewEventStatusRow & {
+  source_record_id: string | null;
+  target_table: string | null;
+  target_id: string | null;
 };
 
 const supabaseFallbackWarning = "Using demo fallback because Supabase data could not be loaded.";
@@ -154,6 +179,29 @@ function buildReviewStateTags(counts: ReviewStatusCounts) {
   }));
 }
 
+function toSourceLinkInput(row: SourceRecordLookupRow | SourceRecordRow | null | undefined): CommunitySourceLinkInput {
+  return {
+    sourceId: row?.source_id,
+    title: row?.title,
+    archiveName: row?.archive_name,
+  };
+}
+
+function buildSourceRecordInputLookup(rows: SourceRecordLookupRow[]): Map<string, CommunitySourceLinkInput> {
+  return new Map(rows.filter((row) => Boolean(row.id)).map((row) => [row.id, toSourceLinkInput(row)]));
+}
+
+function sourceLinksForSourceRecordIds(sourceRecordInputsById: Map<string, CommunitySourceLinkInput>, sourceRecordIds: Array<string | null | undefined>) {
+  return normalizeSourceLinks(sourceRecordIds.map((sourceRecordId) => (sourceRecordId ? sourceRecordInputsById.get(sourceRecordId) : undefined) ?? { sourceId: null }));
+}
+
+function sourceLinksForClaims(sourceRecordInputsById: Map<string, CommunitySourceLinkInput>, claims: ClaimRelationshipRow[]) {
+  return sourceLinksForSourceRecordIds(
+    sourceRecordInputsById,
+    claims.map((claim) => claim.source_record_id),
+  );
+}
+
 export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult> => {
   if (!hasSupabaseEnv()) {
     return buildFallbackResult();
@@ -191,12 +239,12 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         .maybeSingle<TownPackageRow>(),
       supabase
         .from("source_records")
-        .select("source_id, title, archive_name, rights_note, review_status, source_date, ocr_excerpt")
+        .select("id, source_id, title, archive_name, rights_note, review_status, source_date, ocr_excerpt")
         .order("source_date", { ascending: true })
         .limit(1)
         .maybeSingle<SourceRecordRow>(),
-      supabase.from("source_records").select("review_status"),
-      supabase.from("claims").select("review_status"),
+      supabase.from("source_records").select("id, source_id, title, archive_name, review_status"),
+      supabase.from("claims").select("review_status, source_record_id, building_id, person_id, business_id"),
       supabase.from("map_layers").select("review_status"),
       supabase
         .from("map_layers")
@@ -206,26 +254,26 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       supabase.from("buildings").select("review_status"),
       supabase
         .from("buildings")
-        .select("building_id, label, sheet_reference, review_status, certainty, art_state, notes")
+        .select("id, building_id, label, sheet_reference, review_status, certainty, art_state, notes")
         .order("created_at", { ascending: true })
         .limit(24),
       supabase.from("people").select("review_status"),
       supabase
         .from("people")
-        .select("person_id, display_name, occupation, review_status, certainty, notes")
+        .select("id, person_id, display_name, occupation, review_status, certainty, notes")
         .order("created_at", { ascending: true })
         .limit(24),
       supabase.from("businesses").select("review_status"),
       supabase
         .from("businesses")
-        .select("business_id, display_name, business_type, review_status, certainty, notes")
+        .select("id, business_id, display_name, business_type, review_status, certainty, notes")
         .order("created_at", { ascending: true })
         .limit(24),
       supabase.from("asset_requests").select("*", { count: "exact", head: true }),
-      supabase.from("review_events").select("next_review_status"),
+      supabase.from("review_events").select("next_review_status, source_record_id, target_table, target_id"),
       supabase
         .from("review_events")
-        .select("summary, target_table, target_id, reviewer_identifier, reviewer_name, previous_review_status, next_review_status, occurred_at, review_note")
+        .select("summary, target_table, target_id, source_record_id, reviewer_identifier, reviewer_name, previous_review_status, next_review_status, occurred_at, review_note")
         .order("occurred_at", { ascending: false })
         .limit(recentReviewEventQueryLimit),
     ]);
@@ -255,8 +303,10 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const data = cloneDemoData();
     const townPackage = townPackageResult.data;
     const primarySource = primarySourceResult.data;
-    const sourceStatusRows = (sourceStatusRowsResult.data ?? []) as StatusRow[];
-    const claimStatusRows = (claimStatusRowsResult.data ?? []) as StatusRow[];
+    const sourceRecordRows = (sourceStatusRowsResult.data ?? []) as SourceRecordLookupRow[];
+    const sourceStatusRows = sourceRecordRows as StatusRow[];
+    const claimRows = (claimStatusRowsResult.data ?? []) as ClaimRelationshipRow[];
+    const claimStatusRows = claimRows as StatusRow[];
     const mapLayerStatusRows = (mapLayerStatusRowsResult.data ?? []) as StatusRow[];
     const mapLayerRows = (mapLayerRowsResult.data ?? []) as MapLayerRow[];
     const buildingStatusRows = (buildingStatusRowsResult.data ?? []) as StatusRow[];
@@ -265,7 +315,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const peopleRows = (peopleRowsResult.data ?? []) as PersonRow[];
     const businessStatusRows = (businessStatusRowsResult.data ?? []) as StatusRow[];
     const businessRows = (businessRowsResult.data ?? []) as BusinessRow[];
-    const reviewEventStatusRows = (reviewEventStatusRowsResult.data ?? []) as ReviewEventStatusRow[];
+    const reviewEventStatusRows = (reviewEventStatusRowsResult.data ?? []) as ReviewEventSourceRow[];
     const recentReviewEvents = (recentReviewEventsResult.data ?? []) as ReviewEventRow[];
 
     const statusSummaries = buildCommunityStatusSummaries({
@@ -314,6 +364,41 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
     const primaryBuilding = buildingRows[0];
     const primaryPerson = peopleRows[0];
     const primaryBusiness = businessRows[0];
+    const sourceRecordInputsById = buildSourceRecordInputLookup(sourceRecordRows);
+    const primarySourceLinks = normalizeSourceLinks([toSourceLinkInput(primarySource)]);
+    const mapSourceLinks = sourceLinksForSourceRecordIds(
+      sourceRecordInputsById,
+      reviewEventStatusRows.filter((event) => event.target_table === "map_layers").map((event) => event.source_record_id),
+    );
+    const primaryBuildingSourceLinks = primaryBuilding
+      ? sourceLinksForClaims(
+          sourceRecordInputsById,
+          claimRows.filter((claim) => claim.building_id === primaryBuilding.id),
+        )
+      : [];
+    const primaryPersonSourceLinks = primaryPerson
+      ? sourceLinksForClaims(
+          sourceRecordInputsById,
+          claimRows.filter((claim) => claim.person_id === primaryPerson.id),
+        )
+      : [];
+    const primaryBusinessSourceLinks = primaryBusiness
+      ? sourceLinksForClaims(
+          sourceRecordInputsById,
+          claimRows.filter((claim) => claim.business_id === primaryBusiness.id),
+        )
+      : [];
+    const identitySourceLinks = normalizeSourceLinks(
+      [...primaryPersonSourceLinks, ...primaryBusinessSourceLinks].map((link) => ({
+        sourceId: link.sourceId,
+        title: link.title,
+        archiveName: link.detail,
+      })),
+    );
+    const releaseGateSourceLinks = sourceLinksForSourceRecordIds(
+      sourceRecordInputsById,
+      reviewEventStatusRows.map((event) => event.source_record_id),
+    );
 
     data.town.name = townPackage?.name ?? "Community Review";
     data.town.slug = townPackage?.slug ?? "community-review";
@@ -437,6 +522,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: primarySource ? "Shown from the first available source record." : "No source date is available yet.",
       },
     ];
+    data.communityDashboard.evidenceInspector.sourceLinks = primarySourceLinks;
     data.communityDashboard.reviewTimeline = recentReviewTimeline;
     data.communityDashboard.reviewTimelineEmptyState = communityReviewTimelineEmptyState;
     data.communityDashboard.history = overallHistory.length > 0 ? overallHistory : [communityReviewTimelineEmptyState];
@@ -494,6 +580,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: "Primary source review state linked to the map surface.",
       },
     ];
+    data.mapAuditor.evidence.sourceLinks = mapSourceLinks;
     data.mapAuditor.history = mapHistory.length > 0 ? mapHistory : ["No map review events loaded from Supabase yet."];
 
     data.buildingAuditor.selectedBuilding.title = primaryBuilding?.label ?? "No buildings loaded from Supabase";
@@ -577,8 +664,10 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: "Notes from the primary building review record when available.",
       },
     ];
+    data.buildingAuditor.provenance.sourceLinks = primaryBuildingSourceLinks;
     data.buildingAuditor.reviewStates = buildReviewStateTags(buildingStatusCounts);
 
+    data.peopleAuditor.sourceLinks = identitySourceLinks;
     data.peopleAuditor.sourceIssues = [
       {
         label: "People",
@@ -620,6 +709,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: primaryPerson?.notes ?? "Current person review state from Supabase.",
       },
     ];
+    data.peopleAuditor.personReview.sourceLinks = primaryPersonSourceLinks;
     data.peopleAuditor.businessReview.title = primaryBusiness?.display_name ?? "No businesses loaded from Supabase";
     data.peopleAuditor.businessReview.subtitle = `${businessesCount} business records currently available from Supabase.`;
     data.peopleAuditor.businessReview.fields = [
@@ -644,6 +734,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: primaryBusiness?.notes ?? "Current business review state from Supabase.",
       },
     ];
+    data.peopleAuditor.businessReview.sourceLinks = primaryBusinessSourceLinks;
     data.peopleAuditor.legend = [
       {
         label: "People statuses",
@@ -693,6 +784,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: statusSummaries.sourceRecords.summary,
       },
     ];
+    data.sourceProvenanceInspector.source.sourceLinks = primarySourceLinks;
     data.sourceProvenanceInspector.ocr.quote = primarySource?.ocr_excerpt ?? "No OCR excerpt is available in Supabase yet.";
     data.sourceProvenanceInspector.rights.fields = [
       {
@@ -783,6 +875,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
         detail: "Unresolved review events still blocking release.",
       },
     ];
+    data.releaseGate.sourceLinks = releaseGateSourceLinks;
     data.releaseGate.history = overallHistory.length > 0 ? overallHistory : ["No release-gate review events loaded from Supabase yet."];
 
     return {

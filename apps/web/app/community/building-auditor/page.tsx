@@ -1,5 +1,6 @@
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 
 export const metadata = {
@@ -66,6 +67,7 @@ export default async function BuildingAuditorPage() {
               detail: item.detail,
             }))}
           />
+          <SourceLinkList links={buildingAuditor.provenance.sourceLinks} emptyLabel="No linked source" />
         </Panel>
 
         <Panel eyebrow="Review" title="Current state" subtitle="Verified, inferred, illustrative, or unknown." tone="dark">

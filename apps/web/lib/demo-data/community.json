@@ -339,6 +339,14 @@
           "value": "1885",
           "detail": "Centered inside the 20-year gate."
         }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
+        }
       ]
     },
     "reviewTimelineEmptyState": "No review events loaded from Supabase yet.",
@@ -538,6 +546,14 @@
           "value": "local_only",
           "detail": "Prep-only local system."
         }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
+        }
       ]
     },
     "history": [
@@ -638,6 +654,14 @@
           "value": "Needs art pass",
           "detail": "The next step is visual, not factual, approval."
         }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
+        }
       ]
     },
     "reviewStates": [
@@ -677,6 +701,14 @@
         "detail": "Business clue only."
       }
     ],
+    "sourceLinks": [
+      {
+        "sourceId": "source_texarkana_1885_sanborn_loc",
+        "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+        "detail": "Library of Congress",
+        "href": "/community/sources/source_texarkana_1885_sanborn_loc"
+      }
+    ],
     "personReview": {
       "title": "Person review",
       "subtitle": "People stay separate from businesses until humans confirm identity.",
@@ -700,6 +732,14 @@
           "label": "Merge check",
           "value": "pending",
           "detail": "Do not merge yet."
+        }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
         }
       ]
     },
@@ -726,6 +766,14 @@
           "label": "Price clue",
           "value": "unknown",
           "detail": "No verified pricing yet."
+        }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
         }
       ]
     },
@@ -781,6 +829,14 @@
           "label": "Page",
           "value": "Sheet 3",
           "detail": "Used in the map workspace."
+        }
+      ],
+      "sourceLinks": [
+        {
+          "sourceId": "source_texarkana_1885_sanborn_loc",
+          "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+          "detail": "Library of Congress",
+          "href": "/community/sources/source_texarkana_1885_sanborn_loc"
         }
       ]
     },
@@ -945,6 +1001,14 @@
         "label": "Rights notes",
         "value": "ready",
         "detail": "Access information is present."
+      }
+    ],
+    "sourceLinks": [
+      {
+        "sourceId": "source_texarkana_1885_sanborn_loc",
+        "title": "Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas, October 1885",
+        "detail": "Library of Congress",
+        "href": "/community/sources/source_texarkana_1885_sanborn_loc"
       }
     ],
     "actions": [

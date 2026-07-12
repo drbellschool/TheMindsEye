@@ -1057,6 +1057,55 @@ textarea {
   word-break: break-word;
 }
 
+.source-link-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.source-link-card {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(186, 147, 86, 0.24);
+  background:
+    linear-gradient(180deg, rgba(250, 239, 209, 0.98), rgba(236, 220, 182, 0.94)),
+    url("/textures/parchment.svg");
+  color: var(--muted-strong);
+}
+
+.panel--dark .source-link-card,
+.panel--blueprint .source-link-card,
+.panel--map .source-link-card {
+  border-color: rgba(226, 190, 126, 0.2);
+  background: rgba(12, 10, 8, 0.34);
+  color: #f6e7cb;
+}
+
+.source-link-card__label,
+.source-link-card__id {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(100, 83, 71, 0.72);
+}
+
+.panel--dark .source-link-card__label,
+.panel--dark .source-link-card__id,
+.panel--blueprint .source-link-card__label,
+.panel--blueprint .source-link-card__id,
+.panel--map .source-link-card__label,
+.panel--map .source-link-card__id {
+  color: rgba(245, 230, 202, 0.68);
+}
+
+.panel--dark .source-link-card .small-muted,
+.panel--blueprint .source-link-card .small-muted,
+.panel--map .source-link-card .small-muted {
+  color: rgba(245, 230, 202, 0.76);
+}
+
 .record-list__item {
   display: grid;
   gap: 12px;

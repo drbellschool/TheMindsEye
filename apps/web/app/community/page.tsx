@@ -4,6 +4,7 @@ import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
 import { ReviewTimeline } from "@/components/ReviewTimeline";
 import { RouteCard } from "@/components/RouteCard";
+import { SourceLinkList } from "@/components/SourceLinkList";
 import { StatusChip } from "@/components/StatusChip";
 import { reviewStatuses, toChipState } from "@/lib/community-status";
 import { loadCommunityData } from "@/lib/community-data";
@@ -262,6 +263,7 @@ export default async function CommunityDashboardPage() {
               detail: item.detail,
             }))}
           />
+          <SourceLinkList links={communityDashboard.evidenceInspector.sourceLinks} emptyLabel="Source unavailable" />
         </Panel>
 
         <Panel
