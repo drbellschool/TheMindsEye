@@ -6,6 +6,9 @@ import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
 import { loadSanbornIntakeData } from "@/lib/sanborn-intake-data";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata = {
   title: "Map Auditor | The Mind's Eye",
 };
