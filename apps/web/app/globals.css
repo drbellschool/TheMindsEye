@@ -2383,7 +2383,8 @@ body:has(.minimal-sanborn-gps) {
 
 .minimal-sanborn-gps__select,
 .minimal-sanborn-gps__year,
-.minimal-sanborn-gps__sheet {
+.minimal-sanborn-gps__sheet,
+.minimal-sanborn-gps__basemap {
   height: 30px;
   border: 1px solid rgba(226, 190, 126, 0.28);
   border-radius: 7px;
@@ -2403,6 +2404,10 @@ body:has(.minimal-sanborn-gps) {
 
 .minimal-sanborn-gps__sheet {
   width: 240px;
+}
+
+.minimal-sanborn-gps__basemap {
+  width: 150px;
 }
 
 .minimal-sanborn-gps__mode,
@@ -2457,7 +2462,51 @@ body:has(.minimal-sanborn-gps) {
 .minimal-sanborn-gps__map .map-studio-leaflet-map {
   height: 100%;
   min-height: 0;
-  background: #d9e7ef;
+  background: #ece7dc;
+  opacity: 1;
+}
+
+.minimal-sanborn-gps .leaflet-container {
+  background: #ece7dc;
+  opacity: 1;
+}
+
+.minimal-sanborn-gps .leaflet-pane {
+  opacity: 1;
+}
+
+.minimal-sanborn-gps .leaflet-tile-pane {
+  z-index: 200;
+  display: block;
+  visibility: visible;
+  opacity: 1 !important;
+}
+
+.minimal-sanborn-gps .leaflet-tile {
+  visibility: visible;
+  opacity: 1 !important;
+}
+
+.minimal-sanborn-gps .leaflet-overlay-pane {
+  z-index: 400;
+  pointer-events: none;
+}
+
+.minimal-sanborn-gps .leaflet-historical-sheet-pane {
+  z-index: 450;
+  background: transparent;
+  opacity: 1;
+}
+
+.minimal-sanborn-gps .leaflet-marker-pane {
+  z-index: 600;
+}
+
+.minimal-sanborn-gps .leaflet-control-container,
+.minimal-sanborn-gps .leaflet-control-attribution {
+  z-index: 800;
+  opacity: 1;
+  visibility: visible;
 }
 
 .minimal-sanborn-gps__notice {
@@ -2525,6 +2574,10 @@ body:has(.minimal-sanborn-gps) {
   bottom: 28px;
 }
 
+.minimal-sanborn-gps .map-studio-tile-status__counts {
+  color: rgba(246, 231, 203, 0.7);
+}
+
 .minimal-sanborn-gps .map-studio-tile-status.is-loaded {
   background: rgba(20, 67, 43, 0.88);
 }
@@ -2554,6 +2607,10 @@ body:has(.minimal-sanborn-gps) {
 
   .minimal-sanborn-gps__sheet {
     width: 210px;
+  }
+
+  .minimal-sanborn-gps__basemap {
+    width: 132px;
   }
 
   .minimal-sanborn-gps__quick-opacity .sanborn-button {

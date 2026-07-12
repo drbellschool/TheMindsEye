@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import {
+  basemaps as configuredBasemaps,
+  contentSecurityPolicyImageSources,
+  createTileDiagnostics,
+  defaultBasemapKey,
+  getBasemap,
+  getModernTileLayerOpacity,
+  isConfiguredImageSourceAllowed,
+  leafletPaneStack,
+  updateTileDiagnostics,
+} from "./historical-map-basemap.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -343,4 +355,86 @@ test("map edit mode and signed URL refresh helpers distinguish pan, edit, and ex
   assert.equal(shouldRefreshSignedUrl("2026-07-12T12:00:30Z", now), true);
   assert.equal(shouldRefreshSignedUrl("2026-07-12T12:05:00Z", now), false);
   assert.equal(shouldRefreshSignedUrl(null, now), true);
+});
+
+test("configures OpenStreetMap and a no-secret fallback street basemap", () => {
+  const osm = getBasemap(defaultBasemapKey);
+  const fallback = getBasemap("esri_world_street");
+
+  assert.equal(osm.url, "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assert.match(osm.attribution, /OpenStreetMap/);
+  assert.match(fallback.url, /server\.arcgisonline\.com/);
+  assert.match(fallback.attribution, /Esri/);
+  assert.deepEqual(configuredBasemaps.map((basemap) => basemap.key), ["osm", "esri_world_street"]);
+});
+
+test("modern tile diagnostics require real tile image success before loaded", () => {
+  const initial = createTileDiagnostics();
+  const loading = updateTileDiagnostics(initial, "loading");
+  const layerLoadedWithoutImages = updateTileDiagnostics(loading, "load");
+  const firstTileLoaded = updateTileDiagnostics(layerLoadedWithoutImages, "tileload");
+  const failedAfterSuccess = updateTileDiagnostics(firstTileLoaded, "tileerror");
+
+  assert.equal(loading.status, "loading");
+  assert.equal(layerLoadedWithoutImages.status, "loading");
+  assert.equal(firstTileLoaded.status, "loaded");
+  assert.equal(firstTileLoaded.successfulTiles, 1);
+  assert.equal(failedAfterSuccess.status, "loaded");
+  assert.equal(failedAfterSuccess.failedTiles, 1);
+});
+
+test("modern tile failure and retry diagnostics are accurate", () => {
+  const failed = updateTileDiagnostics(createTileDiagnostics(), "tileerror");
+  const retried = updateTileDiagnostics(failed, "retry");
+
+  assert.equal(failed.status, "error");
+  assert.equal(failed.successfulTiles, 0);
+  assert.equal(failed.failedTiles, 1);
+  assert.equal(retried.status, "loading");
+  assert.equal(retried.successfulTiles, 0);
+  assert.equal(retried.failedTiles, 0);
+  assert.equal(retried.retryToken, 1);
+});
+
+test("minimal GPS workflow cannot hide the modern tile layer", () => {
+  assert.equal(getModernTileLayerOpacity(), 1);
+});
+
+test("CSP permits OSM, fallback tiles, data/blob images, and Supabase signed images", () => {
+  const config = readFileSync("next.config.mjs", "utf8");
+
+  assert.match(config, /Content-Security-Policy/);
+  assert.match(config, /https:\/\/\*\.tile\.openstreetmap\.org/);
+  assert.match(config, /https:\/\/tile\.openstreetmap\.org/);
+  assert.match(config, /https:\/\/server\.arcgisonline\.com/);
+  assert.match(config, /https:\/\/\*\.supabase\.co/);
+  assert.match(config, /data:/);
+  assert.match(config, /blob:/);
+  assert.doesNotMatch(config, /img-src[^;]*\s\*/);
+  assert.equal(contentSecurityPolicyImageSources.includes("https://*.tile.openstreetmap.org"), true);
+  assert.equal(isConfiguredImageSourceAllowed("https://a.tile.openstreetmap.org/15/7823/13185.png"), true);
+  assert.equal(isConfiguredImageSourceAllowed("https://tile.openstreetmap.org/15/7823/13185.png"), true);
+  assert.equal(isConfiguredImageSourceAllowed("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/15/13185/7823"), true);
+  assert.equal(isConfiguredImageSourceAllowed("https://example.supabase.co/storage/v1/object/sign/sanborn-sheets/file.png"), true);
+  assert.equal(isConfiguredImageSourceAllowed("https://untrusted.example.test/tile.png"), false);
+});
+
+test("Leaflet panes keep visible tiles below transparent Sanborn overlays", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.equal(leafletPaneStack.tilePane < leafletPaneStack.historicalSheetPane, true);
+  assert.match(css, /\.minimal-sanborn-gps \.leaflet-tile-pane/);
+  assert.match(css, /z-index: 200/);
+  assert.match(css, /opacity: 1 !important/);
+  assert.match(css, /\.minimal-sanborn-gps \.leaflet-historical-sheet-pane/);
+  assert.match(css, /z-index: 450/);
+  assert.match(css, /\.minimal-sanborn-gps \.leaflet-control-attribution/);
+  assert.match(css, /\.minimal-sanborn-gps \.map-studio-sheet-overlay,\s*\.minimal-sanborn-gps \.map-studio-sheet-overlay__image\s*\{\s*background: transparent;/);
+});
+
+test("minimal map shell no longer uses the blue fallback as an opaque obstruction", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.doesNotMatch(css, /background: #d9e7ef/);
+  assert.match(css, /\.minimal-sanborn-gps__map \.map-studio-leaflet-map\s*\{[^}]*height: 100%;[^}]*background: #ece7dc;/s);
 });
