@@ -11,6 +11,7 @@ export type TileDiagnostics = {
   status: TileDiagnosticStatus;
   successfulTiles: number;
   failedTiles: number;
+  latestFailedTileHost: string | null;
   retryToken: number;
 };
 
@@ -61,16 +62,22 @@ export function createTileDiagnostics(): TileDiagnostics {
     status: "idle",
     successfulTiles: 0,
     failedTiles: 0,
+    latestFailedTileHost: null,
     retryToken: 0,
   };
 }
 
-export function updateTileDiagnostics(current: TileDiagnostics, event: "loading" | "tileload" | "tileerror" | "load" | "retry"): TileDiagnostics {
+export function updateTileDiagnostics(
+  current: TileDiagnostics,
+  event: "loading" | "tileload" | "tileerror" | "load" | "retry",
+  details?: { failedHost?: string | null },
+): TileDiagnostics {
   if (event === "retry") {
     return {
       status: "loading",
       successfulTiles: 0,
       failedTiles: 0,
+      latestFailedTileHost: null,
       retryToken: current.retryToken + 1,
     };
   }
@@ -97,6 +104,7 @@ export function updateTileDiagnostics(current: TileDiagnostics, event: "loading"
       ...current,
       status: current.successfulTiles > 0 ? "loaded" : "error",
       failedTiles,
+      latestFailedTileHost: details?.failedHost ?? current.latestFailedTileHost,
     };
   }
 
@@ -108,6 +116,20 @@ export function updateTileDiagnostics(current: TileDiagnostics, event: "loading"
 
 export function getModernTileLayerOpacity(): 1 {
   return 1;
+}
+
+export function shouldAutoFallbackBasemap(input: {
+  basemapKey: string;
+  status: TileDiagnosticStatus;
+  successfulTiles: number;
+  failedTiles: number;
+  elapsedMs: number;
+}): boolean {
+  if (input.basemapKey !== defaultBasemapKey || input.successfulTiles > 0) {
+    return false;
+  }
+
+  return input.failedTiles > 0 || input.status === "error" || input.elapsedMs >= 6_000;
 }
 
 export function isConfiguredImageSourceAllowed(value: string): boolean {
