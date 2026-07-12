@@ -35,6 +35,8 @@ import {
   deriveGeoreferenceStatus,
   getCompleteControlPoints,
   normalizeControlPoint,
+  translateControlPointGeography,
+  translateGeoCorners,
   type GeoBounds,
   type GeoCoordinate,
   type GeoCorners,
@@ -398,6 +400,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [mapCenter, setMapCenter] = useState<GeoCoordinate>(getDefaultTownCenter(initialData));
   const [modernMapZoom, setModernMapZoom] = useState(15);
   const [fitOverlayRequest, setFitOverlayRequest] = useState(0);
+  const [overlayMoveEnabled, setOverlayMoveEnabled] = useState(false);
   const present = history.present;
   const selectedAsset = sheets.find((sheet) => sheet.assetId === selectedAssetId) ?? null;
   const selectedPlacement = present.placements.find((placement) => placement.assetId === selectedAssetId) ?? null;
@@ -985,6 +988,22 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     });
   }
 
+  function translateOverlay(deltaLatitude: number, deltaLongitude: number) {
+    setGeoreferenceDraft((current) => {
+      const corners = translateGeoCorners(current.corners, deltaLatitude, deltaLongitude);
+      const controlPoints = translateControlPointGeography(current.controlPoints, deltaLatitude, deltaLongitude);
+
+      return {
+        ...current,
+        corners,
+        bounds: boundsFromCorners(corners),
+        controlPoints,
+        status: deriveGeoreferenceStatus({ corners, controlPoints }),
+      };
+    });
+    setSaveStatus("idle");
+  }
+
   function resetGeographicAlignment() {
     if (!window.confirm("Reset geographic bounds and control points for the current draft?")) {
       return;
@@ -1173,13 +1192,14 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               <label>Modern basemap<select value={georeferenceDraft.selectedBasemap} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, selectedBasemap: event.target.value })}>{basemaps.map((basemap) => <option key={basemap.key} value={basemap.key}>{basemap.label}</option>)}</select></label>
               <label>Overlay opacity<input max="1" min="0" step="0.05" type="range" value={georeferenceDraft.overlayOpacity} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, overlayOpacity: Number(event.target.value) })} /></label>
               <label><input checked={georeferenceDraft.overlayVisible} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, overlayVisible: event.target.checked })} type="checkbox" /> Historical overlay visible</label>
+              <label><input checked={overlayMoveEnabled} onChange={(event) => setOverlayMoveEnabled(event.target.checked)} type="checkbox" /> Move overlay by dragging map</label>
               <label><input checked={georeferenceDraft.showControlPoints} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, showControlPoints: event.target.checked })} type="checkbox" /> Show control points</label>
               <label><input checked={georeferenceDraft.showSheetBoundaries} onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, showSheetBoundaries: event.target.checked })} type="checkbox" /> Show sheet boundaries</label>
               <button className="sanborn-button" onClick={() => setHistoricalClickMode("adding_point")} type="button">Add control point</button>
               <button className="sanborn-button" onClick={clearDraftPoints} type="button">Clear draft points</button>
               <button className="sanborn-button" onClick={resetGeographicAlignment} type="button">Reset geographic alignment</button>
               <button className="sanborn-button" onClick={() => setFitOverlayRequest((current) => current + 1)} type="button">Fit overlay bounds</button>
-              <p className="small-muted">Rendering mode: rectangular preview. Four independent corners and control points are persisted for later warp/GDAL export.</p>
+              <p className="small-muted">Rendering mode: rectangular preview. Turn on overlay move to drag the historical image alignment instead of panning the modern map, then save georeference.</p>
             </div>
           ) : null}
           <div className="map-studio-sheet-list">
@@ -1311,6 +1331,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                     setModernMapZoom(zoom);
                   }}
                   onMarkerDrag={(controlPointId, latitude, longitude) => updateControlPoint(controlPointId, { latitude, longitude })}
+                  onOverlayTranslate={translateOverlay}
+                  overlayMoveEnabled={overlayMoveEnabled}
                   overlayOpacity={georeferenceDraft.overlayOpacity}
                   overlayVisible={georeferenceDraft.overlayVisible}
                   selectedControlPointId={georeferenceDraft.selectedControlPointId}
@@ -1338,6 +1360,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                   setModernMapZoom(zoom);
                 }}
                 onMarkerDrag={(controlPointId, latitude, longitude) => updateControlPoint(controlPointId, { latitude, longitude })}
+                onOverlayTranslate={translateOverlay}
+                overlayMoveEnabled={overlayMoveEnabled}
                 overlayOpacity={georeferenceDraft.overlayOpacity}
                 overlayVisible={georeferenceDraft.overlayVisible}
                 selectedControlPointId={georeferenceDraft.selectedControlPointId}

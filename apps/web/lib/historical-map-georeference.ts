@@ -103,6 +103,54 @@ export function isValidLongitude(value: number | null | undefined): value is num
   return Number.isFinite(value) && Number(value) >= -180 && Number(value) <= 180;
 }
 
+export function clampLatitude(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(-90, Math.min(90, Number(value)));
+}
+
+export function clampLongitude(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(-180, Math.min(180, Number(value)));
+}
+
+export function translateGeoCoordinate(coordinate: GeoCoordinate | null, deltaLatitude: number, deltaLongitude: number): GeoCoordinate | null {
+  if (!coordinate) {
+    return null;
+  }
+
+  return {
+    latitude: clampLatitude(coordinate.latitude + deltaLatitude),
+    longitude: clampLongitude(coordinate.longitude + deltaLongitude),
+  };
+}
+
+export function translateGeoCorners(corners: GeoCorners, deltaLatitude: number, deltaLongitude: number): GeoCorners {
+  return {
+    northwest: translateGeoCoordinate(corners.northwest, deltaLatitude, deltaLongitude),
+    northeast: translateGeoCoordinate(corners.northeast, deltaLatitude, deltaLongitude),
+    southeast: translateGeoCoordinate(corners.southeast, deltaLatitude, deltaLongitude),
+    southwest: translateGeoCoordinate(corners.southwest, deltaLatitude, deltaLongitude),
+  };
+}
+
+export function translateControlPointGeography(
+  points: HistoricalMapControlPoint[],
+  deltaLatitude: number,
+  deltaLongitude: number,
+): HistoricalMapControlPoint[] {
+  return points.map((point) => ({
+    ...point,
+    latitude: isValidLatitude(point.latitude) ? clampLatitude(point.latitude + deltaLatitude) : point.latitude,
+    longitude: isValidLongitude(point.longitude) ? clampLongitude(point.longitude + deltaLongitude) : point.longitude,
+  }));
+}
+
 export function isFiniteImageCoordinate(value: number | null | undefined): value is number {
   return Number.isFinite(value);
 }
