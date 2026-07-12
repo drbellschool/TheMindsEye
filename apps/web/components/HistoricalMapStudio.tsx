@@ -1968,6 +1968,16 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             </option>
           ))}
         </select>
+        <select
+          aria-label="Basemap"
+          className="minimal-sanborn-gps__basemap"
+          value={georeferenceDraft.selectedBasemap}
+          onChange={(event) => setGeoreferenceDraft({ ...georeferenceDraft, selectedBasemap: event.target.value })}
+        >
+          {basemaps.map((basemap) => (
+            <option key={basemap.key} value={basemap.key}>{basemap.label}</option>
+          ))}
+        </select>
         <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
           Add sheet to map
         </button>
@@ -2038,7 +2048,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         {selectedImageState?.state === "failed" ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to load. Retrying signed URL.</p> : null}
         {placementAnchorAssetId ? <p className="minimal-sanborn-gps__notice">Click the modern map to place the selected sheet.</p> : null}
         <HistoricalMapLeaflet
-          basemapKey="osm"
+          basemapKey={georeferenceDraft.selectedBasemap}
           bounds={sheetAssemblyBounds}
           center={[mapCenter.latitude, mapCenter.longitude]}
           controlPoints={[]}

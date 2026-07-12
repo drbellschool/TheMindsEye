@@ -5,6 +5,14 @@ import L from "leaflet";
 import { ImageOverlay, MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 
+import {
+  basemaps,
+  createTileDiagnostics,
+  getBasemap,
+  getModernTileLayerOpacity,
+  leafletPaneStack,
+  updateTileDiagnostics,
+} from "@/lib/historical-map-basemap";
 import { boundsFromCorners, getGeoCornerLabel, type GeoBounds, type GeoCorners, type HistoricalMapControlPoint } from "@/lib/historical-map-georeference";
 import {
   normalizeSheetGeographicTransform,
@@ -12,21 +20,7 @@ import {
   type SheetGeographicTransform,
 } from "@/lib/historical-map-sheet-georeference";
 
-type BasemapConfig = {
-  key: string;
-  label: string;
-  url: string;
-  attribution: string;
-};
-
-export const basemaps: BasemapConfig[] = [
-  {
-    key: "osm",
-    label: "OpenStreetMap",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-];
+export { basemaps };
 
 type HistoricalMapLeafletProps = {
   center: LatLngTuple;
@@ -184,6 +178,54 @@ function InvalidateMapSize({ request }: { request: number }) {
   useEffect(() => {
     map.invalidateSize({ animate: false });
     const timeout = window.setTimeout(() => map.invalidateSize({ animate: false }), 120);
+
+    return () => window.clearTimeout(timeout);
+  }, [map, request]);
+
+  return null;
+}
+
+function ConfigureLeafletPanes({ request }: { request: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const tilePane = map.getPane("tilePane");
+    const overlayPane = map.getPane("overlayPane");
+    const markerPane = map.getPane("markerPane");
+    const tooltipPane = map.getPane("tooltipPane");
+    const popupPane = map.getPane("popupPane");
+    const historicalPane = map.getPane("historical-sheet-pane") ?? map.createPane("historical-sheet-pane");
+
+    if (tilePane) {
+      tilePane.style.zIndex = String(leafletPaneStack.tilePane);
+      tilePane.style.opacity = "1";
+      tilePane.style.display = "block";
+      tilePane.style.visibility = "visible";
+    }
+
+    if (overlayPane) {
+      overlayPane.style.zIndex = String(leafletPaneStack.overlayPane);
+    }
+
+    if (markerPane) {
+      markerPane.style.zIndex = String(leafletPaneStack.markerPane);
+    }
+
+    if (tooltipPane) {
+      tooltipPane.style.zIndex = String(leafletPaneStack.tooltipPane);
+    }
+
+    if (popupPane) {
+      popupPane.style.zIndex = String(leafletPaneStack.popupPane);
+    }
+
+    historicalPane.style.zIndex = String(leafletPaneStack.historicalSheetPane);
+    historicalPane.style.background = "transparent";
+    historicalPane.style.pointerEvents = "auto";
+    historicalPane.style.opacity = "1";
+
+    map.invalidateSize({ animate: false });
+    const timeout = window.setTimeout(() => map.invalidateSize({ animate: false }), 150);
 
     return () => window.clearTimeout(timeout);
   }, [map, request]);
@@ -422,7 +464,9 @@ function TransformedSheetLayer({
 
   useEffect(() => {
     const pane = map.getPane("historical-sheet-pane") ?? map.createPane("historical-sheet-pane");
-    pane.style.zIndex = "450";
+    pane.style.zIndex = String(leafletPaneStack.historicalSheetPane);
+    pane.style.background = "transparent";
+    pane.style.opacity = "1";
     pane.style.pointerEvents = "auto";
     const element = L.DomUtil.create("div", "map-studio-sheet-overlay", pane);
     const image = L.DomUtil.create("img", "map-studio-sheet-overlay__image", element);
@@ -769,25 +813,44 @@ function TransformedSheetLayer({
 }
 
 export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
-  const basemap = basemaps.find((candidate) => candidate.key === props.basemapKey) ?? basemaps[0];
+  const basemap = getBasemap(props.basemapKey);
   const derivedBounds = props.bounds ?? boundsFromCorners(props.corners);
   const polygon = useMemo(() => getCornerPolygon(props.corners), [props.corners]);
   const sheetLayers = props.sheetLayers ?? [];
-  const [tileStatus, setTileStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [tileDiagnostics, setTileDiagnostics] = useState(createTileDiagnostics);
   const [tileRetry, setTileRetry] = useState(0);
   const showLegacyOverlayControls = sheetLayers.length === 0 && props.overlayVisible;
+  const tileStatus = tileDiagnostics.status;
+
+  useEffect(() => {
+    setTileDiagnostics(createTileDiagnostics());
+  }, [basemap.key, tileRetry]);
+
+  function recordTileEvent(event: "loading" | "tileload" | "tileerror" | "load", details?: unknown) {
+    if (event === "tileerror" && process.env.NODE_ENV !== "production") {
+      const tile = (details as { tile?: HTMLImageElement } | undefined)?.tile;
+      console.warn("Historical Map Studio basemap tile failed", {
+        basemap: basemap.key,
+        source: tile?.currentSrc || tile?.src || "unknown",
+      });
+    }
+
+    setTileDiagnostics((current) => updateTileDiagnostics(current, event));
+  }
 
   return (
     <MapContainer center={props.center} className="map-studio-leaflet-map" scrollWheelZoom zoom={props.zoom}>
+      <ConfigureLeafletPanes request={props.fitBoundsRequest + tileRetry} />
       <TileLayer
         attribution={basemap.attribution}
         eventHandlers={{
-          loading: () => setTileStatus("loading"),
-          load: () => setTileStatus("loaded"),
-          tileerror: () => setTileStatus("error"),
+          loading: () => recordTileEvent("loading"),
+          load: () => recordTileEvent("load"),
+          tileerror: (event) => recordTileEvent("tileerror", event),
+          tileload: () => recordTileEvent("tileload"),
         }}
         key={`${basemap.key}-${tileRetry}`}
-        opacity={props.modernLayerVisible === false ? 0 : 1}
+        opacity={getModernTileLayerOpacity()}
         url={basemap.url}
       />
       <SyncMapView center={props.center} zoom={props.zoom} />
@@ -863,13 +926,24 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
         : null}
 
       <div className={`map-studio-tile-status is-${tileStatus}`}>
-        {tileStatus === "idle" ? "Modern map loading..." : null}
-        {tileStatus === "loading" ? "Modern map loading..." : null}
+        {tileStatus === "idle" ? "Loading modern map" : null}
+        {tileStatus === "loading" ? "Loading modern map" : null}
         {tileStatus === "loaded" ? "Modern map loaded" : null}
+        <span className="map-studio-tile-status__counts">
+          Tiles {tileDiagnostics.successfulTiles} loaded / {tileDiagnostics.failedTiles} failed
+        </span>
         {tileStatus === "error" ? (
           <>
             <span>Modern map failed to load.</span>
-            <button type="button" onClick={() => setTileRetry((value) => value + 1)}>Retry</button>
+            <button
+              type="button"
+              onClick={() => {
+                setTileDiagnostics((current) => updateTileDiagnostics(current, "retry"));
+                setTileRetry((value) => value + 1);
+              }}
+            >
+              Retry
+            </button>
           </>
         ) : null}
       </div>
