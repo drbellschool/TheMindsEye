@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
-import { HistoricalMapLeaflet, basemaps, type HistoricalSheetMapLayer, type SheetImageLoadState } from "@/components/HistoricalMapLeaflet";
+import {
+  HistoricalMapLeaflet,
+  PlainLeafletMapTest,
+  basemaps,
+  type HistoricalSheetMapLayer,
+  type LeafletTileRuntimeDebug,
+  type SheetImageLoadState,
+} from "@/components/HistoricalMapLeaflet";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
 import {
@@ -617,6 +624,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [modernMapZoom, setModernMapZoom] = useState(initialData.geographicMap.zoom);
   const [sheetImageStates, setSheetImageStates] = useState<Record<string, SheetImageLoadState>>({});
   const [fitOverlayRequest, setFitOverlayRequest] = useState(0);
+  const [mapViewRefreshRequest, setMapViewRefreshRequest] = useState(0);
+  const [plainMapTestMode, setPlainMapTestMode] = useState(false);
   const [locationQuery, setLocationQuery] = useState(initialData.activeTownPackage?.locationQuery ?? initialData.activeTownPackage?.locationDisplayName ?? "");
   const [locationResult, setLocationResult] = useState<GeocodeSuccess | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "searching" | "found" | "saved" | "error">("idle");
@@ -627,6 +636,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     basemapKey: georeferenceDraft.selectedBasemap,
     tileLayerMounted: false,
   });
+  const [tileRuntimeDebug, setTileRuntimeDebug] = useState<LeafletTileRuntimeDebug | null>(null);
   const [mapContainerSize, setMapContainerSize] = useState({ width: 0, height: 0 });
   const [autoFallbackNotice, setAutoFallbackNotice] = useState("");
   const present = history.present;
@@ -690,22 +700,25 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   useEffect(() => {
     const startedAt = Date.now();
     const timeout = window.setTimeout(() => {
+      const visibleLoadedTiles = tileRuntimeDebug?.visibleLoadedTileCount ?? 0;
+
       if (
         shouldAutoFallbackBasemap({
           basemapKey: georeferenceDraft.selectedBasemap,
           status: modernTileDiagnostics.status,
-          successfulTiles: modernTileDiagnostics.successfulTiles,
+          successfulTiles: visibleLoadedTiles,
           failedTiles: modernTileDiagnostics.failedTiles,
           elapsedMs: Date.now() - startedAt,
         })
       ) {
         setGeoreferenceDraft((current) => ({ ...current, selectedBasemap: "esri_world_street" }));
         setAutoFallbackNotice("OpenStreetMap returned no visible tiles, so the studio switched to Alternate streets.");
+        setMapViewRefreshRequest((current) => current + 1);
       }
-    }, 6_000);
+    }, 5_000);
 
     return () => window.clearTimeout(timeout);
-  }, [georeferenceDraft.selectedBasemap, modernTileDiagnostics.failedTiles, modernTileDiagnostics.status, modernTileDiagnostics.successfulTiles]);
+  }, [georeferenceDraft.selectedBasemap, modernTileDiagnostics.failedTiles, modernTileDiagnostics.status, tileRuntimeDebug?.visibleLoadedTileCount]);
 
   useEffect(() => {
     const preferredAssetId = selectPreferredSheetAfterUpload(initialData.sheets, pendingUploadedAssetIdRef.current);
@@ -1598,6 +1611,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setLocationResult(payload);
     setMapCenter(view.center);
     setModernMapZoom(view.zoom);
+    setMapViewRefreshRequest((current) => current + 1);
     setResolvedLocationSource(saveToTownPackage ? "town_package" : "location_search");
     setLocationStatus(saveToTownPackage ? "saved" : "found");
     setLocationMessage(
@@ -1986,7 +2000,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     }, []);
   const sheetAssemblyBounds = useMemo(() => {
     const coordinates = historicalSheetLayers
-      .filter((layer) => layer.isVisible)
+      .filter((layer) => layer.isVisible && layer.placementStatus !== "unplaced")
       .flatMap((layer) => [layer.corners.northwest, layer.corners.northeast, layer.corners.southeast, layer.corners.southwest])
       .filter((coordinate): coordinate is GeoCoordinate => Boolean(coordinate));
 
@@ -2001,6 +2015,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       westLongitude: Math.min(...coordinates.map((coordinate) => coordinate.longitude)),
     });
   }, [historicalSheetLayers]);
+  const hasPlacedHistoricalSheets = historicalSheetLayers.some((layer) => layer.isVisible && layer.placementStatus !== "unplaced");
+  const mapSheetLayers = hasPlacedHistoricalSheets ? historicalSheetLayers : [];
   const visibleGeographicSheets = historicalSheetLayers.filter((layer) => layer.isVisible).length;
   const unplacedGeographicSheets = geoPresent.sheets.filter((sheet) => sheet.placementStatus === "unplaced").length;
   const workspaceComposite = useMemo(() => buildWorkspaceCompositeImage(sheets, present.placements), [sheets, present.placements]);
@@ -2062,11 +2078,14 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     ? `${latestUploadStatus.status === "uploading" ? "Uploading" : latestUploadStatus.status === "saved" ? "Uploaded" : "Upload failed"}: ${latestUploadStatus.filename}`
     : "";
   const selectedBasemap = basemaps.find((basemap) => basemap.key === georeferenceDraft.selectedBasemap) ?? basemaps[0];
+  const visibleLoadedTileCount = tileRuntimeDebug?.visibleLoadedTileCount ?? 0;
   const modernMapStatusText =
-    modernTileDiagnostics.successfulTiles > 0
-      ? `Modern map: ${selectedBasemap.label} ${modernTileDiagnostics.successfulTiles} tiles loaded`
+    visibleLoadedTileCount > 0
+      ? `Modern map: ${selectedBasemap.label} ${visibleLoadedTileCount} visible tiles`
       : modernTileDiagnostics.status === "error"
         ? `Modern map failed: ${selectedBasemap.label} ${modernTileDiagnostics.failedTiles} tiles failed`
+        : modernTileDiagnostics.successfulTiles > 0
+          ? `Modern map: ${modernTileDiagnostics.successfulTiles} tiles loaded but not visibly painted`
         : `Modern map: loading ${selectedBasemap.label}`;
   const locationMarker = locationResult ? { latitude: locationResult.latitude, longitude: locationResult.longitude } : null;
   const activeTownCenter =
@@ -2205,6 +2224,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         </button>
         <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={resetSelectedPlacementToTownCenter} type="button">Reset</button>
         <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={fitSelectedSheet} type="button">Fit sheet</button>
+        <button
+          className={`sanborn-button${plainMapTestMode ? " sanborn-button--primary" : ""}`}
+          onClick={() => setPlainMapTestMode((current) => !current)}
+          type="button"
+        >
+          {plainMapTestMode ? "Studio map" : "Plain map test"}
+        </button>
         <span className="minimal-sanborn-gps__map-status">{modernMapStatusText}</span>
         <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
       </header>
@@ -2219,53 +2245,64 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         {selectedAsset?.signedUrlError ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to get a signed URL: {selectedAsset.signedUrlError}</p> : null}
         {selectedImageState?.state === "failed" ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to load. Retrying signed URL.</p> : null}
         {placementAnchorAssetId ? <p className="minimal-sanborn-gps__notice">Click the modern map to place the selected sheet.</p> : null}
-        <HistoricalMapLeaflet
-          basemapKey={georeferenceDraft.selectedBasemap}
-          bounds={sheetAssemblyBounds}
-          center={[mapCenter.latitude, mapCenter.longitude]}
-          controlPoints={[]}
-          corners={selectedSheetGeoreference?.corners ?? createDefaultGeoCorners(mapCenter)}
-          fitBoundsRequest={fitOverlayRequest}
-          globalHistoricalOpacity={1}
-          imageUrl={null}
-          locationMarker={locationMarker}
-          modernLayerVisible
-          onCornerDrag={(corner, latitude, longitude) => {
-            if (!selectedSheetGeoreference) return;
-            const next = updateSheetGeographicCorner(selectedSheetGeoreference, corner, { latitude, longitude });
-            commitSheetGeoreference(selectedSheetGeoreference.assetId, { corners: next.corners });
-          }}
-          onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
-          onMapClick={(latitude, longitude) => {
-            if (placementAnchorAssetId) {
-              addSheetToMap(placementAnchorAssetId, { latitude, longitude });
-            }
-          }}
-          onMapViewChange={(center, zoom) => {
-            setMapCenter({ latitude: center[0], longitude: center[1] });
-            setModernMapZoom(zoom);
-          }}
-          onMarkerDrag={() => undefined}
-          onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
-          onSelectSheet={(assetId) => {
-            setSelectedAssetId(assetId);
-            setGeoEditMode("edit_historical_sheets");
-            commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
-          }}
-          onSheetImageStateChange={(state) => setSheetImageStates((current) => ({ ...current, [state.assetId]: state }))}
-          onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
-          onTileDiagnosticsChange={handleTileDiagnosticsChange}
-          overlayOpacity={0.5}
-          overlayVisible={false}
-          selectedControlPointId=""
-          selectedSheetAssetId={selectedAssetId}
-          sheetEditMode={geoEditMode}
-          sheetLayers={historicalSheetLayers}
-          showControlPoints={false}
-          showSheetBoundaries
-          showSheetLabels
-          zoom={modernMapZoom}
-        />
+        {plainMapTestMode ? (
+          <PlainLeafletMapTest
+            basemapKey={defaultBasemapKey}
+            onTileDiagnosticsChange={handleTileDiagnosticsChange}
+            onTileRuntimeDebugChange={setTileRuntimeDebug}
+          />
+        ) : (
+          <HistoricalMapLeaflet
+            basemapKey={georeferenceDraft.selectedBasemap}
+            bounds={hasPlacedHistoricalSheets ? sheetAssemblyBounds : null}
+            center={[mapCenter.latitude, mapCenter.longitude]}
+            controlPoints={[]}
+            corners={selectedSheetGeoreference?.corners ?? createDefaultGeoCorners(mapCenter)}
+            fitBoundsRequest={fitOverlayRequest}
+            globalHistoricalOpacity={1}
+            imageUrl={null}
+            locationMarker={hasPlacedHistoricalSheets ? locationMarker : null}
+            modernLayerVisible
+            onCornerDrag={(corner, latitude, longitude) => {
+              if (!selectedSheetGeoreference) return;
+              const next = updateSheetGeographicCorner(selectedSheetGeoreference, corner, { latitude, longitude });
+              commitSheetGeoreference(selectedSheetGeoreference.assetId, { corners: next.corners });
+            }}
+            onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
+            onMapClick={(latitude, longitude) => {
+              if (placementAnchorAssetId) {
+                addSheetToMap(placementAnchorAssetId, { latitude, longitude });
+              }
+            }}
+            onMapViewChange={(center, zoom) => {
+              setMapCenter({ latitude: center[0], longitude: center[1] });
+              setModernMapZoom(zoom);
+            }}
+            onMarkerDrag={() => undefined}
+            onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
+            onSelectSheet={(assetId) => {
+              setSelectedAssetId(assetId);
+              setGeoEditMode("edit_historical_sheets");
+              commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
+            }}
+            onSheetImageStateChange={(state) => setSheetImageStates((current) => ({ ...current, [state.assetId]: state }))}
+            onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
+            onTileDiagnosticsChange={handleTileDiagnosticsChange}
+            onTileRuntimeDebugChange={setTileRuntimeDebug}
+            overlayOpacity={0.5}
+            overlayVisible={false}
+            plainTileOnly={!hasPlacedHistoricalSheets}
+            selectedControlPointId=""
+            selectedSheetAssetId={selectedAssetId}
+            sheetEditMode={geoEditMode}
+            sheetLayers={mapSheetLayers}
+            showControlPoints={false}
+            showSheetBoundaries
+            showSheetLabels
+            viewRefreshRequest={mapViewRefreshRequest}
+            zoom={modernMapZoom}
+          />
+        )}
         <details
           className="minimal-sanborn-gps__details"
           onToggle={(event) => setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
@@ -2308,8 +2345,30 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             <dd>{modernTileDiagnostics.failedTiles}</dd>
             <dt>Latest failed host</dt>
             <dd>{modernTileDiagnostics.latestFailedTileHost ?? "none"}</dd>
+            <dt>.leaflet-tile count</dt>
+            <dd>{tileRuntimeDebug?.tileCount ?? 0}</dd>
+            <dt>Complete tile images</dt>
+            <dd>{tileRuntimeDebug?.completeTileCount ?? 0}</dd>
+            <dt>Visible loaded tiles</dt>
+            <dd>{tileRuntimeDebug?.visibleLoadedTileCount ?? 0}</dd>
+            <dt>Loaded natural sizes</dt>
+            <dd>{tileRuntimeDebug && tileRuntimeDebug.loadedTileNaturalSizes.length > 0 ? tileRuntimeDebug.loadedTileNaturalSizes.map((size) => `${size.naturalWidth}x${size.naturalHeight}`).join(", ") : "none"}</dd>
+            <dt>First tile host</dt>
+            <dd>{tileRuntimeDebug?.firstTile?.srcHost ?? "none"}</dd>
+            <dt>First tile style</dt>
+            <dd>
+              {tileRuntimeDebug?.firstTile
+                ? `display=${tileRuntimeDebug.firstTile.display}; visibility=${tileRuntimeDebug.firstTile.visibility}; opacity=${tileRuntimeDebug.firstTile.opacity}; z=${tileRuntimeDebug.firstTile.zIndex}; transform=${tileRuntimeDebug.firstTile.transform}; pane=${tileRuntimeDebug.firstTile.parentPane}`
+                : "none"}
+            </dd>
+            <dt>Tile pane rect</dt>
+            <dd>{tileRuntimeDebug?.tilePaneRect ? `${tileRuntimeDebug.tilePaneRect.width} x ${tileRuntimeDebug.tilePaneRect.height} @ ${tileRuntimeDebug.tilePaneRect.left},${tileRuntimeDebug.tilePaneRect.top}` : "none"}</dd>
+            <dt>Tile pane children</dt>
+            <dd>{tileRuntimeDebug?.tilePaneChildCount ?? 0}</dd>
             <dt>Map container</dt>
-            <dd>{mapContainerSize.width} x {mapContainerSize.height}</dd>
+            <dd>{tileRuntimeDebug?.mapContainerRect ? `${tileRuntimeDebug.mapContainerRect.width} x ${tileRuntimeDebug.mapContainerRect.height} @ ${tileRuntimeDebug.mapContainerRect.left},${tileRuntimeDebug.mapContainerRect.top}` : `${mapContainerSize.width} x ${mapContainerSize.height}`}</dd>
+            <dt>Plain map test</dt>
+            <dd>{plainMapTestMode ? "enabled" : "disabled"}</dd>
             <dt>Town package ID</dt>
             <dd>{initialData.activeTownPackage?.id ?? "none"}</dd>
             <dt>Town package center</dt>

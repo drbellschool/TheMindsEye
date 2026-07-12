@@ -531,6 +531,58 @@ test("modern map auto-fallback only triggers when OpenStreetMap has no loaded ti
   assert.equal(shouldAutoFallbackBasemap({ basemapKey: "esri_world_street", status: "error", successfulTiles: 0, failedTiles: 2, elapsedMs: 6_100 }), false);
 });
 
+test("runtime tile debug inspects actual Leaflet tile paint state", () => {
+  const component = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.equal(component.includes('document.querySelectorAll<HTMLImageElement>(".leaflet-tile")'), true);
+  assert.match(component, /tile\.complete/);
+  assert.match(component, /tile\.naturalWidth > 0/);
+  assert.match(component, /window\.getComputedStyle\(firstTile\)/);
+  assert.match(component, /getBoundingClientRect\(\)/);
+  assert.equal(component.includes('closest(".leaflet-pane")'), true);
+  assert.match(component, /tilePaneChildCount/);
+  assert.match(component, /visibleLoadedTileCount/);
+  assert.match(component, /Leaflet tile paint debug/);
+});
+
+test("geocode view refresh forces Leaflet view, size invalidation, and tile redraw", () => {
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(leafletComponent, /function ForceLeafletTileRedraw/);
+  assert.match(leafletComponent, /map\.setView\(center, zoom, \{ animate: false \}\)/);
+  assert.match(leafletComponent, /map\.invalidateSize\(\{ animate: false \}\)/);
+  assert.match(leafletComponent, /layer\.redraw\(\)/);
+  assert.match(leafletComponent, /\[100, 500\]/);
+  assert.match(studioComponent, /setMapViewRefreshRequest\(\(current\) => current \+ 1\)/);
+  assert.match(studioComponent, /viewRefreshRequest=\{mapViewRefreshRequest\}/);
+});
+
+test("plain map test renders a fixed Texarkana OpenStreetMap TileLayer without studio overlays", () => {
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(leafletComponent, /export function PlainLeafletMapTest/);
+  assert.match(leafletComponent, /const center: LatLngTuple = \[33\.425, -94\.047\]/);
+  assert.match(leafletComponent, /zoom=\{14\}/);
+  assert.match(leafletComponent, /key=\{`plain-\$\{basemap\.key\}-\$\{tileRetry\}`\}/);
+  assert.match(studioComponent, /plainMapTestMode \? \(/);
+  assert.match(studioComponent, /<PlainLeafletMapTest/);
+});
+
+test("no placed sheets use a plain TileLayer path instead of custom Sanborn overlays", () => {
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(studioComponent, /const hasPlacedHistoricalSheets = historicalSheetLayers\.some/);
+  assert.match(studioComponent, /const mapSheetLayers = hasPlacedHistoricalSheets \? historicalSheetLayers : \[\]/);
+  assert.match(studioComponent, /plainTileOnly=\{!hasPlacedHistoricalSheets\}/);
+  assert.match(studioComponent, /sheetLayers=\{mapSheetLayers\}/);
+  assert.match(leafletComponent, /const sheetLayers = props\.plainTileOnly \? \[\] : props\.sheetLayers \?\? \[\]/);
+  assert.match(leafletComponent, /props\.plainTileOnly \? null : <ConfigureLeafletPanes/);
+  assert.match(leafletComponent, /<FitBounds bounds=\{derivedBounds\}/);
+});
+
 test("minimal GPS workflow cannot hide the modern tile layer", () => {
   assert.equal(getModernTileLayerOpacity(), 1);
 });
@@ -572,4 +624,13 @@ test("minimal map shell no longer uses the blue fallback as an opaque obstructio
 
   assert.doesNotMatch(css, /background: #d9e7ef/);
   assert.match(css, /\.minimal-sanborn-gps__map \.map-studio-leaflet-map\s*\{[^}]*height: 100%;[^}]*background: #ece7dc;/s);
+});
+
+test("emergency tile paint diagnostics are visible and compact", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(css, /\.map-studio-runtime-debug,/);
+  assert.match(css, /\.map-studio-plain-tile-counts/);
+  assert.match(css, /z-index: 790/);
+  assert.match(css, /max-height: 260px/);
 });
