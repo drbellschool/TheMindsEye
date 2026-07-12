@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { hasMapStudioOwnerSession } from "./map-studio-auth.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
 export type JsonError = NextResponse<{ ok: false; message: string } & Record<string, unknown>>;
@@ -10,13 +9,6 @@ export function jsonError(status: number, message: string, details?: Record<stri
 }
 
 export async function requireMapStudioWriteAccess() {
-  if (!(await hasMapStudioOwnerSession())) {
-    return {
-      ok: false as const,
-      response: jsonError(401, "Historical Map Studio owner session is required."),
-    };
-  }
-
   if (!hasSupabaseAdminEnv()) {
     return {
       ok: false as const,
