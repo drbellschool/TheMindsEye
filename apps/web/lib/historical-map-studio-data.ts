@@ -28,7 +28,6 @@ import {
   type StudioTownPackage,
   type StudioWorkspace,
 } from "./historical-map-studio.ts";
-import { hasMapStudioOwnerPassword } from "./map-studio-auth.ts";
 import { sanbornSheetBucket } from "./sanborn-intake.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
@@ -98,11 +97,15 @@ type PlacementRow = {
   y: number | null;
   scale_x: number | null;
   scale_y: number | null;
+  skew_x: number | null;
+  skew_y: number | null;
   rotation: number | null;
   opacity: number | null;
   layer_order: number | null;
   is_visible: boolean | null;
   is_locked: boolean | null;
+  is_flipped_horizontally: boolean | null;
+  is_flipped_vertically: boolean | null;
 };
 
 type GeoreferenceRow = {
@@ -154,7 +157,6 @@ type ControlPointRow = {
 };
 
 export type LoadHistoricalMapStudioOptions = {
-  isOwner: boolean;
   townPackageId?: string | null;
   mapYear?: string | number | null;
 };
@@ -340,11 +342,15 @@ function mapPlacements(rows: PlacementRow[], assets: StudioSheetAsset[]): Studio
         y: row.y ?? 0,
         scaleX: row.scale_x ?? 1,
         scaleY: row.scale_y ?? 1,
+        skewX: row.skew_x ?? 0,
+        skewY: row.skew_y ?? 0,
         rotation: row.rotation ?? 0,
         opacity: row.opacity ?? 1,
         layerOrder: row.layer_order ?? 0,
         isVisible: row.is_visible ?? true,
         isLocked: row.is_locked ?? false,
+        isFlippedHorizontally: row.is_flipped_horizontally ?? false,
+        isFlippedVertically: row.is_flipped_vertically ?? false,
         isPersisted: true,
       });
     })
@@ -437,23 +443,9 @@ function getExpectedSheetCount(rows: MapLayerRow[]): number {
 }
 
 export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalMapStudioOptions): Promise<HistoricalMapStudioState> => {
-  if (!hasMapStudioOwnerPassword()) {
-    return createEmptyState({
-      mode: "setup_required",
-      warningMessage: "MAP_STUDIO_OWNER_PASSWORD is not configured. Historical Map Studio writes are disabled.",
-    });
-  }
-
-  if (!options.isOwner) {
-    return createEmptyState({
-      mode: "login_required",
-      warningMessage: "Sign in as the owner to use Historical Map Studio.",
-    });
-  }
-
   if (!hasSupabaseAdminEnv()) {
     return createEmptyState({
-      mode: "setup_required",
+      mode: "read_only",
       warningMessage: "Supabase admin configuration is missing. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
     });
   }
@@ -462,7 +454,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
 
   if (!supabase) {
     return createEmptyState({
-      mode: "setup_required",
+      mode: "read_only",
       warningMessage: "Supabase admin client could not be initialized.",
     });
   }
@@ -544,7 +536,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     if (workspaceRow) {
       const placementsResult = await supabase
         .from("historical_map_sheet_placements")
-        .select("sanborn_sheet_asset_id, x, y, scale_x, scale_y, rotation, opacity, layer_order, is_visible, is_locked")
+        .select("sanborn_sheet_asset_id, x, y, scale_x, scale_y, skew_x, skew_y, rotation, opacity, layer_order, is_visible, is_locked, is_flipped_horizontally, is_flipped_vertically")
         .eq("workspace_id", workspaceRow.id);
 
       if (placementsResult.error) {
@@ -592,7 +584,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const sourceOptions = mapSourceOptions(sourceRows);
 
   return {
-    mode: workspaceWarning ? "read_only" : "owner",
+    mode: workspaceWarning ? "read_only" : "public",
     warningMessage: workspaceWarning,
     dataSource: "supabase",
     townPackages,

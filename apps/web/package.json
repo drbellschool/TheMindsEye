@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts ./lib/historical-map-studio.test.ts ./lib/historical-map-georeference.test.ts ./lib/map-studio-auth.test.ts"
+    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts ./lib/historical-map-studio.test.ts ./lib/historical-map-georeference.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

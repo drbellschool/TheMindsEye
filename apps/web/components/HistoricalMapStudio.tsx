@@ -1,21 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 import { HistoricalMapLeaflet, basemaps } from "@/components/HistoricalMapLeaflet";
 import {
+  canAutosaveStudioMode,
+  canDragStudioPlacement,
   buildInitialHistory,
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
   getWorkspaceStatus,
+  maxStudioScale,
+  minStudioScale,
+  normalizeRotation,
   pushStudioHistory,
   redoStudioHistory,
   reorderPlacement,
+  shouldAttachStudioTransformer,
   shouldIgnoreStudioShortcut,
+  shouldClearStudioSelection,
+  shouldPanStudioStage,
   studioAutosaveDelayMs,
+  studioTransformerAnchors,
   undoStudioHistory,
   updatePlacement,
   type HistoricalMapStudioState,
@@ -160,7 +169,7 @@ function getPlacementBounds(assets: StudioSheetAsset[], placements: StudioPlacem
     return null;
   }
 
-  const boxes = visiblePlacements
+  const corners = visiblePlacements
     .map((placement) => {
       const asset = assetById.get(placement.assetId);
 
@@ -168,42 +177,66 @@ function getPlacementBounds(assets: StudioSheetAsset[], placements: StudioPlacem
         return null;
       }
 
-      return {
-        x1: placement.x,
-        y1: placement.y,
-        x2: placement.x + asset.width * placement.scaleX,
-        y2: placement.y + asset.height * placement.scaleY,
-      };
+      return getTransformedCorners(placement, asset.width, asset.height);
     })
-    .filter((box): box is { x1: number; y1: number; x2: number; y2: number } => Boolean(box));
+    .filter((transformedCorners): transformedCorners is Array<{ x: number; y: number }> => Boolean(transformedCorners))
+    .flat();
 
-  if (boxes.length === 0) {
+  if (corners.length === 0) {
     return null;
   }
 
   return {
-    x1: Math.min(...boxes.map((box) => box.x1)),
-    y1: Math.min(...boxes.map((box) => box.y1)),
-    x2: Math.max(...boxes.map((box) => box.x2)),
-    y2: Math.max(...boxes.map((box) => box.y2)),
+    x1: Math.min(...corners.map((corner) => corner.x)),
+    y1: Math.min(...corners.map((corner) => corner.y)),
+    x2: Math.max(...corners.map((corner) => corner.x)),
+    y2: Math.max(...corners.map((corner) => corner.y)),
   };
 }
 
-function getRotatedCorners(placement: StudioPlacement, width: number, height: number) {
+function getTransformedCorners(placement: StudioPlacement, width: number, height: number) {
   const radians = (placement.rotation * Math.PI) / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
+  const skewXRadians = (placement.skewX * Math.PI) / 180;
+  const skewYRadians = (placement.skewY * Math.PI) / 180;
+  const skewXTangent = Math.tan(skewXRadians);
+  const skewYTangent = Math.tan(skewYRadians);
+  const signedScaleX = placement.scaleX * (placement.isFlippedHorizontally ? -1 : 1);
+  const signedScaleY = placement.scaleY * (placement.isFlippedVertically ? -1 : 1);
+  const offsetX = placement.isFlippedHorizontally ? width : 0;
+  const offsetY = placement.isFlippedVertically ? height : 0;
   const corners = [
     { x: 0, y: 0 },
-    { x: width * placement.scaleX, y: 0 },
-    { x: width * placement.scaleX, y: height * placement.scaleY },
-    { x: 0, y: height * placement.scaleY },
+    { x: width, y: 0 },
+    { x: width, y: height },
+    { x: 0, y: height },
   ];
 
-  return corners.map((corner) => ({
-    x: placement.x + corner.x * cos - corner.y * sin,
-    y: placement.y + corner.x * sin + corner.y * cos,
-  }));
+  return corners.map((corner) => {
+    const scaledX = (corner.x - offsetX) * signedScaleX;
+    const scaledY = (corner.y - offsetY) * signedScaleY;
+    const skewedX = scaledX + skewXTangent * scaledY;
+    const skewedY = skewYTangent * scaledX + scaledY;
+
+    return {
+      x: placement.x + skewedX * cos - skewedY * sin,
+      y: placement.y + skewedX * sin + skewedY * cos,
+    };
+  });
+}
+
+function getPlacementCenter(placement: StudioPlacement, asset: StudioSheetAsset) {
+  const corners = getTransformedCorners(placement, asset.width, asset.height);
+  const minX = Math.min(...corners.map((corner) => corner.x));
+  const maxX = Math.max(...corners.map((corner) => corner.x));
+  const minY = Math.min(...corners.map((corner) => corner.y));
+  const maxY = Math.max(...corners.map((corner) => corner.y));
+
+  return {
+    x: minX + (maxX - minX) / 2,
+    y: minY + (maxY - minY) / 2,
+  };
 }
 
 function escapeSvgAttribute(value: string): string {
@@ -221,7 +254,7 @@ function buildWorkspaceCompositeImage(assets: StudioSheetAsset[], placements: St
     return null;
   }
 
-  const corners = visiblePlacements.flatMap(({ placement, asset }) => getRotatedCorners(placement, asset.width, asset.height));
+  const corners = visiblePlacements.flatMap(({ placement, asset }) => getTransformedCorners(placement, asset.width, asset.height));
   const minX = Math.min(...corners.map((corner) => corner.x));
   const minY = Math.min(...corners.map((corner) => corner.y));
   const maxX = Math.max(...corners.map((corner) => corner.x));
@@ -232,7 +265,11 @@ function buildWorkspaceCompositeImage(assets: StudioSheetAsset[], placements: St
     .sort((a, b) => a.placement.layerOrder - b.placement.layerOrder)
     .map(({ placement, asset }) => {
       const href = escapeSvgAttribute(asset.signedUrl!);
-      const transform = `translate(${placement.x} ${placement.y}) rotate(${placement.rotation}) scale(${placement.scaleX} ${placement.scaleY})`;
+      const signedScaleX = placement.scaleX * (placement.isFlippedHorizontally ? -1 : 1);
+      const signedScaleY = placement.scaleY * (placement.isFlippedVertically ? -1 : 1);
+      const offsetX = placement.isFlippedHorizontally ? asset.width : 0;
+      const offsetY = placement.isFlippedVertically ? asset.height : 0;
+      const transform = `translate(${placement.x} ${placement.y}) rotate(${placement.rotation}) skewX(${placement.skewX}) skewY(${placement.skewY}) scale(${signedScaleX} ${signedScaleY}) translate(${-offsetX} ${-offsetY})`;
 
       return `<image href="${href}" width="${asset.width}" height="${asset.height}" opacity="${placement.opacity}" transform="${transform}" preserveAspectRatio="none" />`;
     })
@@ -285,11 +322,20 @@ function useLoadedImage(src: string | null, onError: () => void) {
   return { image, failed };
 }
 
+const minimumRenderedSheetSize = 28;
+
+function setKonvaCursor(event: KonvaEventObject<globalThis.MouseEvent | PointerEvent | DragEvent>, cursor: string) {
+  const container = event.target.getStage()?.container();
+  if (container) {
+    container.style.cursor = cursor;
+  }
+}
+
 function StudioSheetNode({
   asset,
   placement,
   isSelected,
-  isTransformable,
+  isDraggable,
   onSelect,
   onCommit,
   onNode,
@@ -298,13 +344,55 @@ function StudioSheetNode({
   asset: StudioSheetAsset;
   placement: StudioPlacement;
   isSelected: boolean;
-  isTransformable: boolean;
+  isDraggable: boolean;
   onSelect: () => void;
   onCommit: (patch: Partial<StudioPlacement>) => void;
   onNode: (node: any | null) => void;
   onRefreshSignedUrl: () => void;
 }) {
   const imageResult = useLoadedImage(asset.signedUrl, onRefreshSignedUrl);
+  const signedScaleX = placement.scaleX * (placement.isFlippedHorizontally ? -1 : 1);
+  const signedScaleY = placement.scaleY * (placement.isFlippedVertically ? -1 : 1);
+  const offsetX = placement.isFlippedHorizontally ? asset.width : 0;
+  const offsetY = placement.isFlippedVertically ? asset.height : 0;
+  const cursor = placement.isLocked ? "not-allowed" : "grab";
+
+  function selectBeforePointerAction(event: KonvaEventObject<globalThis.MouseEvent | PointerEvent>) {
+    event.cancelBubble = true;
+    onSelect();
+  }
+
+  function handleDragStart(event: KonvaEventObject<DragEvent>) {
+    event.cancelBubble = true;
+    onSelect();
+    const container = event.target.getStage()?.container();
+    if (container) {
+      container.style.cursor = "grabbing";
+    }
+  }
+
+  function handleDragEnd(event: KonvaEventObject<DragEvent>) {
+    event.cancelBubble = true;
+    setKonvaCursor(event, cursor);
+    onCommit({ x: event.target.x(), y: event.target.y() });
+  }
+
+  function handleTransformEnd(event: KonvaEventObject<Event>) {
+    event.cancelBubble = true;
+    const node = event.target;
+    const nextScaleX = Math.max(minStudioScale, Math.min(maxStudioScale, Math.abs(node.scaleX())));
+    const nextScaleY = Math.max(minStudioScale, Math.min(maxStudioScale, Math.abs(node.scaleY())));
+
+    onCommit({
+      x: node.x(),
+      y: node.y(),
+      scaleX: nextScaleX,
+      scaleY: nextScaleY,
+      skewX: node.skewX(),
+      skewY: node.skewY(),
+      rotation: node.rotation(),
+    });
+  }
 
   if (!placement.isVisible) {
     return null;
@@ -317,19 +405,31 @@ function StudioSheetNode({
           ref={onNode}
           x={placement.x}
           y={placement.y}
-          width={Math.max(asset.width * placement.scaleX, 220)}
-          height={Math.max(asset.height * placement.scaleY, 150)}
+          width={Math.max(asset.width, 220)}
+          height={Math.max(asset.height, 150)}
+          scaleX={signedScaleX}
+          scaleY={signedScaleY}
+          offsetX={offsetX}
+          offsetY={offsetY}
+          skewX={placement.skewX}
+          skewY={placement.skewY}
           rotation={placement.rotation}
           opacity={placement.opacity}
           fill="rgba(55, 38, 28, 0.82)"
           stroke={isSelected ? "#e2be7e" : "rgba(226,190,126,0.32)"}
           dash={[10, 8]}
-          draggable={isTransformable}
+          draggable={isDraggable}
+          listening
           onClick={onSelect}
+          onDragEnd={handleDragEnd}
+          onDragStart={handleDragStart}
+          onMouseEnter={(event) => setKonvaCursor(event, cursor)}
+          onMouseLeave={(event) => setKonvaCursor(event, "default")}
+          onPointerDown={selectBeforePointerAction}
           onTap={onSelect}
-          onDragEnd={(event) => onCommit({ x: event.target.x(), y: event.target.y() })}
+          onTransformEnd={handleTransformEnd}
         />
-        <Text x={placement.x + 18} y={placement.y + 18} text="Image unavailable" fill="#f6e7cb" fontSize={18} />
+        <Text x={placement.x + 18} y={placement.y + 18} text="Image unavailable" fill="#f6e7cb" fontSize={18} listening={false} />
       </>
     );
   }
@@ -342,27 +442,26 @@ function StudioSheetNode({
       y={placement.y}
       width={asset.width}
       height={asset.height}
-      scaleX={placement.scaleX}
-      scaleY={placement.scaleY}
+      scaleX={signedScaleX}
+      scaleY={signedScaleY}
+      offsetX={offsetX}
+      offsetY={offsetY}
+      skewX={placement.skewX}
+      skewY={placement.skewY}
       rotation={placement.rotation}
       opacity={placement.opacity}
       stroke={isSelected ? "#e2be7e" : "transparent"}
       strokeWidth={isSelected ? 8 : 0}
-      draggable={isTransformable}
+      draggable={isDraggable}
       listening
       onClick={onSelect}
+      onDragEnd={handleDragEnd}
+      onDragStart={handleDragStart}
+      onMouseEnter={(event) => setKonvaCursor(event, cursor)}
+      onMouseLeave={(event) => setKonvaCursor(event, "default")}
+      onPointerDown={selectBeforePointerAction}
       onTap={onSelect}
-      onDragEnd={(event) => onCommit({ x: event.target.x(), y: event.target.y() })}
-      onTransformEnd={(event) => {
-        const node = event.target;
-        onCommit({
-          x: node.x(),
-          y: node.y(),
-          scaleX: node.scaleX(),
-          scaleY: node.scaleY(),
-          rotation: node.rotation(),
-        });
-      }}
+      onTransformEnd={handleTransformEnd}
     />
   );
 }
@@ -388,6 +487,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [isSpacePanning, setIsSpacePanning] = useState(false);
+  const [isStagePanning, setIsStagePanning] = useState(false);
+  const [uniformScale, setUniformScale] = useState(false);
   const [canvasCoordinates, setCanvasCoordinates] = useState({ x: 0, y: 0 });
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>(createMetadataDraft(initialData.sheets[0] ?? null));
@@ -454,10 +555,17 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   useEffect(() => {
     const transformer = transformerRef.current;
     const node = selectedAssetId ? sheetNodeRefs.current.get(selectedAssetId) : null;
-    const locked = selectedPlacement?.isLocked;
+    const shouldAttach =
+      transformer &&
+      shouldAttachStudioTransformer({
+        isSelected: Boolean(selectedAssetId),
+        isLocked: selectedPlacement?.isLocked ?? false,
+        nodeMounted: Boolean(node),
+      });
 
-    if (transformer && node && !locked) {
+    if (shouldAttach) {
       transformer.nodes([node]);
+      transformer.moveToTop();
       transformer.getLayer()?.batchDraw();
     } else if (transformer) {
       transformer.nodes([]);
@@ -466,7 +574,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   }, [selectedAssetId, selectedPlacement, history.present.placements]);
 
   useEffect(() => {
-    if (!isDirty || initialData.mode !== "owner") {
+    if (!isDirty || !canAutosaveStudioMode(initialData.mode)) {
       return;
     }
 
@@ -585,7 +693,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   }
 
   async function saveLayout(kind: "manual" | "autosave" = "manual") {
-    if (saveInFlightRef.current || !initialData.workspace || !initialData.activeTownPackage || initialData.mode !== "owner") {
+    if (saveInFlightRef.current || !initialData.workspace || !initialData.activeTownPackage || !canAutosaveStudioMode(initialData.mode)) {
       return;
     }
 
@@ -683,11 +791,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       return;
     }
 
+    const center = getPlacementCenter(selectedPlacement, selectedAsset);
+
     commitViewport(
       {
         scale: present.viewport.scale,
-        x: stageSize.width / 2 - (selectedPlacement.x + (selectedAsset.width * selectedPlacement.scaleX) / 2) * present.viewport.scale,
-        y: stageSize.height / 2 - (selectedPlacement.y + (selectedAsset.height * selectedPlacement.scaleY) / 2) * present.viewport.scale,
+        x: stageSize.width / 2 - center.x * present.viewport.scale,
+        y: stageSize.height / 2 - center.y * present.viewport.scale,
       },
       true,
     );
@@ -698,7 +808,51 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       return;
     }
 
-    commitPlacement(selectedPlacement.assetId, { scaleX: 1, scaleY: 1, rotation: 0, opacity: 1 });
+    commitPlacement(selectedPlacement.assetId, {
+      scaleX: 1,
+      scaleY: 1,
+      skewX: 0,
+      skewY: 0,
+      rotation: 0,
+      opacity: 1,
+      isFlippedHorizontally: false,
+      isFlippedVertically: false,
+    });
+  }
+
+  function rotateSelectedSheet(deltaDegrees: number) {
+    if (!selectedPlacement || selectedPlacement.isLocked) {
+      return;
+    }
+
+    commitPlacement(selectedPlacement.assetId, { rotation: normalizeRotation(selectedPlacement.rotation + deltaDegrees) });
+  }
+
+  function flipSelectedSheet(axis: "horizontal" | "vertical") {
+    if (!selectedPlacement || selectedPlacement.isLocked) {
+      return;
+    }
+
+    commitPlacement(
+      selectedPlacement.assetId,
+      axis === "horizontal"
+        ? { isFlippedHorizontally: !selectedPlacement.isFlippedHorizontally }
+        : { isFlippedVertically: !selectedPlacement.isFlippedVertically },
+    );
+  }
+
+  function updateSelectedScale(axis: "x" | "y", value: number) {
+    if (!selectedPlacement || selectedPlacement.isLocked) {
+      return;
+    }
+
+    const patch = uniformScale
+      ? { scaleX: value, scaleY: value }
+      : axis === "x"
+        ? { scaleX: value }
+        : { scaleY: value };
+
+    commitPlacement(selectedPlacement.assetId, patch);
   }
 
   function setLayerOrder(action: "forward" | "backward" | "front" | "back") {
@@ -715,11 +869,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     const asset = sheets.find((candidate) => candidate.assetId === assetId);
 
     if (placement && asset) {
+      const center = getPlacementCenter(placement, asset);
+
       commitViewport(
         {
           scale: present.viewport.scale,
-          x: stageSize.width / 2 - (placement.x + (asset.width * placement.scaleX) / 2) * present.viewport.scale,
-          y: stageSize.height / 2 - (placement.y + (asset.height * placement.scaleY) / 2) * present.viewport.scale,
+          x: stageSize.width / 2 - center.x * present.viewport.scale,
+          y: stageSize.height / 2 - center.y * present.viewport.scale,
         },
         false,
       );
@@ -854,17 +1010,12 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     }
   }
 
-  async function logout() {
-    await fetch("/api/community/historical-map-studio/session", { method: "DELETE" });
-    router.refresh();
-  }
-
   function setGeoreferenceTarget(targetType: "sheet" | "workspace") {
     const targetAssetId = targetType === "sheet" ? selectedAsset?.assetId ?? sheets[0]?.assetId ?? null : null;
     setGeoreferenceDraft(createGeoreferenceDraft(initialData, targetAssetId));
   }
 
-  function addHistoricalControlPoint(event: MouseEvent<HTMLImageElement>) {
+  function addHistoricalControlPoint(event: ReactMouseEvent<HTMLImageElement>) {
     const workspaceComposite = buildWorkspaceCompositeImage(sheets, present.placements);
     const reference =
       georeferenceDraft.targetType === "workspace"
@@ -1130,7 +1281,6 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           <button className="sanborn-button" onClick={fitAllSheets} type="button">Fit all sheets</button>
           <button className="sanborn-button" onClick={resetView} type="button">Reset view</button>
           <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">Upload sheets</button>
-          <button className="sanborn-button" onClick={() => void logout()} type="button">Logout</button>
           <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden multiple onChange={(event) => void uploadSheets(event.target.files)} ref={uploadInputRef} type="file" />
         </div>
         <div className="map-studio-mode-switch" aria-label="Historical Map Studio modes">
@@ -1208,16 +1358,53 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         <main className={`map-studio-canvas-wrap mode-${studioMode}`} ref={containerRef}>
           {studioMode === "stitching" ? (
             <Stage
-              draggable={isSpacePanning}
+              draggable={isStagePanning}
               height={stageSize.height}
               onDragEnd={(event) => {
-                if (isSpacePanning) {
+                if (isStagePanning) {
                   commitViewport({ ...present.viewport, x: event.target.x(), y: event.target.y() }, false);
                 }
+                setIsStagePanning(false);
+                const stage = event.target.getStage();
+                stage?.draggable(false);
+                const container = stage?.container();
+                if (container) container.style.cursor = "default";
               }}
               onMouseMove={() => {
                 const pointer = stageRef.current?.getPointerPosition();
                 if (pointer) setCanvasCoordinates({ x: Math.round((pointer.x - present.viewport.x) / present.viewport.scale), y: Math.round((pointer.y - present.viewport.y) / present.viewport.scale) });
+              }}
+              onPointerDown={(event) => {
+                const stage = event.target.getStage();
+                const targetIsStage = event.target === stage;
+                const pointerButton = event.evt.button;
+
+                if (shouldPanStudioStage({ isSpacePanning, pointerButton, targetIsStage })) {
+                  event.evt.preventDefault();
+                  setIsStagePanning(true);
+                  stage?.draggable(true);
+                  const container = stage?.container();
+                  if (container) container.style.cursor = "grabbing";
+                  return;
+                }
+
+                if (shouldClearStudioSelection({ targetIsStage, isStagePanning: false, pointerButton })) {
+                  setSelectedAssetId("");
+                }
+              }}
+              onPointerLeave={(event) => {
+                if (isStagePanning) {
+                  setIsStagePanning(false);
+                  event.target.getStage()?.draggable(false);
+                }
+              }}
+              onPointerUp={(event) => {
+                if (isStagePanning) {
+                  setIsStagePanning(false);
+                  event.target.getStage()?.draggable(false);
+                  const container = event.target.getStage()?.container();
+                  if (container) container.style.cursor = "default";
+                }
               }}
               onWheel={handleWheel}
               ref={stageRef}
@@ -1227,14 +1414,16 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               x={present.viewport.x}
               y={present.viewport.y}
             >
-              <Layer>
-                <Rect x={-5000} y={-5000} width={10000} height={10000} fill="#15100d" />
+              <Layer listening={false}>
+                <Rect x={-5000} y={-5000} width={10000} height={10000} fill="#15100d" listening={false} />
                 {showGrid
                   ? Array.from({ length: 81 }, (_, index) => index * 100 - 4000).flatMap((position) => [
-                      <Line key={`v-${position}`} points={[position, -4000, position, 4000]} stroke="rgba(226,190,126,0.08)" strokeWidth={1 / present.viewport.scale} />,
-                      <Line key={`h-${position}`} points={[-4000, position, 4000, position]} stroke="rgba(226,190,126,0.08)" strokeWidth={1 / present.viewport.scale} />,
+                      <Line key={`v-${position}`} points={[position, -4000, position, 4000]} stroke="rgba(226,190,126,0.08)" strokeWidth={1 / present.viewport.scale} listening={false} />,
+                      <Line key={`h-${position}`} points={[-4000, position, 4000, position]} stroke="rgba(226,190,126,0.08)" strokeWidth={1 / present.viewport.scale} listening={false} />,
                     ])
                   : null}
+              </Layer>
+              <Layer>
                 {sortedPlacements.map((placement) => {
                   const asset = sheets.find((sheet) => sheet.assetId === placement.assetId);
                   if (!asset) return null;
@@ -1242,7 +1431,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                     <StudioSheetNode
                       asset={asset}
                       isSelected={selectedAssetId === asset.assetId}
-                      isTransformable={selectedAssetId === asset.assetId && !placement.isLocked}
+                      isDraggable={canDragStudioPlacement(placement)}
                       key={asset.assetId}
                       onCommit={(patch) => commitPlacement(asset.assetId, patch)}
                       onNode={(node) => {
@@ -1255,7 +1444,32 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
                     />
                   );
                 })}
-                <Transformer ref={transformerRef} rotateEnabled enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]} />
+              </Layer>
+              <Layer>
+                <Transformer
+                  ref={transformerRef}
+                  borderStroke="#e2be7e"
+                  borderStrokeWidth={Math.max(1, 2 / present.viewport.scale)}
+                  anchorFill="#f6e7cb"
+                  anchorSize={Math.max(7, 12 / present.viewport.scale)}
+                  anchorStroke="#1a120d"
+                  anchorStrokeWidth={Math.max(1, 1.5 / present.viewport.scale)}
+                  boundBoxFunc={(oldBox, newBox) => {
+                    const renderedWidth = Math.abs(newBox.width) * present.viewport.scale;
+                    const renderedHeight = Math.abs(newBox.height) * present.viewport.scale;
+
+                    if (renderedWidth < minimumRenderedSheetSize || renderedHeight < minimumRenderedSheetSize) {
+                      return oldBox;
+                    }
+
+                    return newBox;
+                  }}
+                  enabledAnchors={[...studioTransformerAnchors]}
+                  flipEnabled={false}
+                  keepRatio={false}
+                  rotateAnchorOffset={Math.max(24, 44 / present.viewport.scale)}
+                  rotateEnabled
+                />
               </Layer>
             </Stage>
           ) : studioMode === "georeferencing" ? (
@@ -1372,16 +1586,30 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               <button className="sanborn-button sanborn-button--primary" onClick={() => void updateMetadata()} type="button">Update metadata</button>
 
               <div className="map-studio-inspector__grid">
-                <label>X position<input type="number" value={Math.round(selectedPlacement.x)} onChange={(event) => commitPlacement(selectedPlacement.assetId, { x: Number(event.target.value) })} /></label>
-                <label>Y position<input type="number" value={Math.round(selectedPlacement.y)} onChange={(event) => commitPlacement(selectedPlacement.assetId, { y: Number(event.target.value) })} /></label>
-                <label>Scale X<input step="0.01" type="number" value={selectedPlacement.scaleX} onChange={(event) => commitPlacement(selectedPlacement.assetId, { scaleX: Number(event.target.value) })} /></label>
-                <label>Scale Y<input step="0.01" type="number" value={selectedPlacement.scaleY} onChange={(event) => commitPlacement(selectedPlacement.assetId, { scaleY: Number(event.target.value) })} /></label>
-                <label>Uniform scale<input type="checkbox" checked={Math.abs(selectedPlacement.scaleX - selectedPlacement.scaleY) < 0.001} onChange={(event) => event.target.checked ? commitPlacement(selectedPlacement.assetId, { scaleY: selectedPlacement.scaleX }) : undefined} /></label>
-                <label>Rotation<input step="1" type="number" value={selectedPlacement.rotation} onChange={(event) => commitPlacement(selectedPlacement.assetId, { rotation: Number(event.target.value) })} /></label>
-                <label>Opacity<input max="1" min="0.1" step="0.05" type="range" value={selectedPlacement.opacity} onChange={(event) => commitPlacement(selectedPlacement.assetId, { opacity: Number(event.target.value) })} /></label>
+                <label>X<input disabled={selectedPlacement.isLocked} type="number" value={Number(selectedPlacement.x.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { x: Number(event.target.value) })} /></label>
+                <label>Y<input disabled={selectedPlacement.isLocked} type="number" value={Number(selectedPlacement.y.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { y: Number(event.target.value) })} /></label>
+                <label>Scale X<input disabled={selectedPlacement.isLocked} max={maxStudioScale} min={minStudioScale} step="0.01" type="number" value={Number(selectedPlacement.scaleX.toFixed(3))} onChange={(event) => updateSelectedScale("x", Number(event.target.value))} /></label>
+                <label>Scale Y<input disabled={selectedPlacement.isLocked} max={maxStudioScale} min={minStudioScale} step="0.01" type="number" value={Number(selectedPlacement.scaleY.toFixed(3))} onChange={(event) => updateSelectedScale("y", Number(event.target.value))} /></label>
+                <label>Uniform scale<input type="checkbox" checked={uniformScale} onChange={(event) => {
+                  setUniformScale(event.target.checked);
+                  if (event.target.checked) commitPlacement(selectedPlacement.assetId, { scaleY: selectedPlacement.scaleX });
+                }} /></label>
+                <label>Rotation<input disabled={selectedPlacement.isLocked} step="1" type="number" value={Number(selectedPlacement.rotation.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { rotation: Number(event.target.value) })} /></label>
+                <label>Skew X<input disabled={selectedPlacement.isLocked} max="45" min="-45" step="0.5" type="number" value={Number(selectedPlacement.skewX.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { skewX: Number(event.target.value) })} /></label>
+                <label>Skew Y<input disabled={selectedPlacement.isLocked} max="45" min="-45" step="0.5" type="number" value={Number(selectedPlacement.skewY.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { skewY: Number(event.target.value) })} /></label>
+                <label>Opacity<input disabled={selectedPlacement.isLocked} max="1" min="0.1" step="0.05" type="number" value={Number(selectedPlacement.opacity.toFixed(2))} onChange={(event) => commitPlacement(selectedPlacement.assetId, { opacity: Number(event.target.value) })} /></label>
                 <label>Layer order<input type="number" value={selectedPlacement.layerOrder} onChange={(event) => commitPlacement(selectedPlacement.assetId, { layerOrder: Number(event.target.value) })} /></label>
                 <label>Visible<input type="checkbox" checked={selectedPlacement.isVisible} onChange={(event) => commitPlacement(selectedPlacement.assetId, { isVisible: event.target.checked })} /></label>
                 <label>Locked<input type="checkbox" checked={selectedPlacement.isLocked} onChange={(event) => commitPlacement(selectedPlacement.assetId, { isLocked: event.target.checked })} /></label>
+              </div>
+
+              <div className="map-studio-layer-actions">
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => rotateSelectedSheet(-1)} type="button">Rotate left 1</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => rotateSelectedSheet(1)} type="button">Rotate right 1</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => rotateSelectedSheet(-90)} type="button">Rotate left 90</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => rotateSelectedSheet(90)} type="button">Rotate right 90</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => flipSelectedSheet("horizontal")} type="button">Flip horizontal</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={() => flipSelectedSheet("vertical")} type="button">Flip vertical</button>
               </div>
 
               <div className="map-studio-layer-actions">
@@ -1393,7 +1621,9 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
 
               <div className="map-studio-layer-actions">
                 <button className="sanborn-button" onClick={centerSelectedSheet} type="button">Center selected sheet</button>
-                <button className="sanborn-button" onClick={resetSelectedTransform} type="button">Reset selected transform</button>
+                <button className="sanborn-button" disabled={selectedPlacement.isLocked} onClick={resetSelectedTransform} type="button">Reset transform</button>
+                <button className="sanborn-button" onClick={() => commitPlacement(selectedPlacement.assetId, { isLocked: !selectedPlacement.isLocked })} type="button">Lock/unlock</button>
+                <button className="sanborn-button" onClick={() => commitPlacement(selectedPlacement.assetId, { isVisible: !selectedPlacement.isVisible })} type="button">Show/hide</button>
                 <button className="sanborn-button" onClick={() => replaceInputRef.current?.click()} type="button">Replace image</button>
                 <button className="sanborn-button" onClick={() => void deleteSelectedSheet()} type="button">Delete sheet</button>
                 <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden onChange={(event) => void replaceSelectedImage(event)} ref={replaceInputRef} type="file" />

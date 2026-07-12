@@ -5,12 +5,24 @@ export const studioAutosaveDelayMs = 13_000;
 export const studioSignedUrlTtlSeconds = 300;
 export const minStudioScale = 0.05;
 export const maxStudioScale = 8;
+export const minStudioSkew = -45;
+export const maxStudioSkew = 45;
 export const minStudioOpacity = 0.1;
 export const maxStudioOpacity = 1;
 export const maxStudioHistoryEntries = 60;
+export const studioTransformerAnchors = [
+  "top-left",
+  "top-center",
+  "top-right",
+  "middle-left",
+  "middle-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+] as const;
 
 export type StudioSaveStatus = "idle" | "saving" | "saved" | "error";
-export type StudioMode = "setup_required" | "login_required" | "read_only" | "owner";
+export type StudioMode = "read_only" | "public";
 
 export type StudioTownPackage = {
   id: string;
@@ -65,11 +77,15 @@ export type StudioPlacement = {
   y: number;
   scaleX: number;
   scaleY: number;
+  skewX: number;
+  skewY: number;
   rotation: number;
   opacity: number;
   layerOrder: number;
   isVisible: boolean;
   isLocked: boolean;
+  isFlippedHorizontally: boolean;
+  isFlippedVertically: boolean;
   isPersisted: boolean;
 };
 
@@ -162,6 +178,10 @@ export function normalizeRotation(value: number): number {
   return Number(normalized.toFixed(3));
 }
 
+export function normalizeSkew(value: number): number {
+  return Number(clampNumber(Number(value), minStudioSkew, maxStudioSkew).toFixed(3));
+}
+
 export function normalizePlacement(input: Partial<StudioPlacement> & { assetId: string; layerOrder?: number }): StudioPlacement {
   return {
     assetId: input.assetId,
@@ -169,11 +189,15 @@ export function normalizePlacement(input: Partial<StudioPlacement> & { assetId: 
     y: Number.isFinite(input.y) ? Number(input.y) : 0,
     scaleX: clampNumber(Number(input.scaleX ?? 1), minStudioScale, maxStudioScale),
     scaleY: clampNumber(Number(input.scaleY ?? 1), minStudioScale, maxStudioScale),
+    skewX: normalizeSkew(Number(input.skewX ?? 0)),
+    skewY: normalizeSkew(Number(input.skewY ?? 0)),
     rotation: normalizeRotation(Number(input.rotation ?? 0)),
     opacity: clampNumber(Number(input.opacity ?? 1), minStudioOpacity, maxStudioOpacity),
     layerOrder: Number.isInteger(input.layerOrder) ? Number(input.layerOrder) : 0,
     isVisible: input.isVisible ?? true,
     isLocked: input.isLocked ?? false,
+    isFlippedHorizontally: input.isFlippedHorizontally ?? false,
+    isFlippedVertically: input.isFlippedVertically ?? false,
     isPersisted: input.isPersisted ?? false,
   };
 }
@@ -337,6 +361,30 @@ export function reorderPlacement(placements: StudioPlacement[], assetId: string,
 
 export function updatePlacement(placements: StudioPlacement[], assetId: string, patch: Partial<StudioPlacement>): StudioPlacement[] {
   return placements.map((placement) => (placement.assetId === assetId ? normalizePlacement({ ...placement, ...patch, assetId }) : placement));
+}
+
+export function canDragStudioPlacement(placement: Pick<StudioPlacement, "isVisible" | "isLocked">): boolean {
+  return placement.isVisible && !placement.isLocked;
+}
+
+export function shouldPanStudioStage(input: { isSpacePanning: boolean; pointerButton: number; targetIsStage: boolean }): boolean {
+  return input.targetIsStage && (input.isSpacePanning || input.pointerButton === 1);
+}
+
+export function shouldClearStudioSelection(input: { targetIsStage: boolean; isStagePanning: boolean; pointerButton: number }): boolean {
+  return input.targetIsStage && !input.isStagePanning && input.pointerButton === 0;
+}
+
+export function shouldAttachStudioTransformer(input: { isSelected: boolean; isLocked: boolean; nodeMounted: boolean }): boolean {
+  return input.isSelected && !input.isLocked && input.nodeMounted;
+}
+
+export function canAutosaveStudioMode(mode: StudioMode): boolean {
+  return mode !== "read_only";
+}
+
+export function applyInspectorTransformPatch(placement: StudioPlacement, patch: Partial<StudioPlacement>): StudioPlacement {
+  return normalizePlacement({ ...placement, ...patch, assetId: placement.assetId });
 }
 
 export function buildInitialHistory(present: StudioPresentState): StudioHistoryState {
