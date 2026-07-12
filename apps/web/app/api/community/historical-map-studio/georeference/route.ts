@@ -102,6 +102,9 @@ function mapControlPoints(points: GeoreferenceSaveBody["controlPoints"]): Histor
       latitude: point.latitude,
       longitude: point.longitude,
       confidence: point.confidence || "draft",
+      targetAssetId: point.targetAssetId ?? null,
+      residualError: point.residualError,
+      isComplete: point.isComplete,
       notes: point.notes,
       createdAt: point.createdAt,
       updatedAt: point.updatedAt,
@@ -256,6 +259,7 @@ export async function PUT(request: NextRequest) {
     const insertPointsResult = await supabase.from("historical_map_control_points").insert(
       controlPoints.map((point) => ({
         georeference_id: saveResult.data!.id,
+        sanborn_sheet_asset_id: sheetRow?.id ?? null,
         control_point_id: point.controlPointId,
         label: point.label,
         image_x: point.imageX,
@@ -263,6 +267,8 @@ export async function PUT(request: NextRequest) {
         latitude: point.latitude,
         longitude: point.longitude,
         confidence: point.confidence,
+        residual_error: point.residualError,
+        is_complete: point.isComplete,
         notes: point.notes,
       })),
     );

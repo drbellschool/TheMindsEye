@@ -38,6 +38,7 @@ Run these SQL files in order from the Supabase SQL Editor:
 3. `supabase/migrations/0003_historical_map_studio.sql`
 4. `supabase/migrations/0004_historical_map_georeferencing.sql`
 5. `supabase/migrations/0005_historical_map_sheet_placement_transforms.sql`
+6. `supabase/migrations/0006_historical_map_sheet_georeferences.sql`
 
 The migrations create:
 
@@ -47,6 +48,7 @@ The migrations create:
 - `historical_map_workspaces` and `historical_map_sheet_placements` for saved Konva layout state.
 - `historical_map_georeferences` and `historical_map_control_points` for GPS bounds, four-corner coordinates, control-point pairs, transform metadata, and overlay preferences.
 - Skew and flip placement fields used by the stitching canvas transform controls.
+- `historical_map_sheet_georeferences` for authoritative per-sheet geographic transforms rendered over the modern Leaflet basemap.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -97,7 +99,8 @@ The studio supports:
 - Metadata edits for source URL, archive, rights, notes, evidence classification, and review status.
 - Image replacement and deletion through server routes that keep Supabase service-role credentials server-only.
 - GPS georeferencing mode with historical image points matched to modern latitude/longitude markers.
-- Modern Leaflet overlay mode using saved geographic bounds and control points.
+- Authoritative sheet-level geographic placement in Georeferencing mode.
+- Modern Leaflet overlay mode using saved independent Sanborn sheet transforms.
 
 Layouts are persisted as transform data, not screenshots. The original uploaded image remains unchanged.
 
@@ -113,12 +116,13 @@ Keep the required OpenStreetMap attribution visible. If a future tile provider i
 
 ## Georeferencing Accuracy
 
-The first georeferencing model stores two levels of alignment:
+The georeferencing model stores three related levels of alignment:
 
-- Geographic bounding box and four corner coordinates for a usable Leaflet image overlay.
+- Local stitching placement for rough sheet organization before geographic alignment.
+- Sheet-level geographic placement with four corners, center coordinates, geographic spans, rotation, non-uniform scale, skew, flips, opacity, layer order, visibility, and lock state.
 - Control-point pairs and affine transform metadata when at least three complete point pairs exist.
 
-The current renderer is a rectangular preview for the historical image overlay. Independent corner coordinates and control points are persisted so a later warp renderer or GDAL service can use the same data for `gdal_translate` and `gdalwarp`.
+Georeferencing mode is the authoritative final arrangement. Modern Overlay renders the saved independent sheet-level geographic layers over Leaflet, not a flattened composite image. The browser renderer supports real affine transforms; full perspective warping and GDAL export remain deferred. Independent corner coordinates and control points are persisted so a later warp renderer or GDAL service can use the same data for `gdal_translate` and `gdalwarp`.
 
 Do not label this output as survey-grade. It is a visual historical alignment workspace for review and later export work.
 
@@ -144,8 +148,11 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 7. Edit metadata and confirm only allowed classifications are saved.
 8. Replace an incorrect image and confirm placement is preserved.
 9. Delete an incorrect sheet and confirm placement, metadata, and storage object cleanup.
-10. Switch to Georeferencing mode, add paired historical/GPS control points, calculate alignment, and save.
-11. Switch to Modern Overlay mode, adjust opacity, fit overlay bounds, reload, and confirm the saved alignment restores.
+10. Switch to Georeferencing mode and use `Copy stitching layout into georeferencing` to initialize independent sheet layers over the modern basemap.
+11. In `Edit historical sheets` mode, drag, rotate, scale, skew, flip, hide, lock, reorder, and adjust opacity for individual geographic sheet layers.
+12. Save, reload, and confirm every sheet-level geographic transform restores.
+13. Add paired historical/GPS control points, calculate alignment, and save.
+14. Switch to Modern Overlay mode, adjust opacity, fit the historical assembly, reload, and confirm the saved independent layers restore.
 
 ## Local Validation
 

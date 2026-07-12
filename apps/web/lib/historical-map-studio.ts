@@ -1,5 +1,6 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 import type { HistoricalMapGeoreference } from "./historical-map-georeference.ts";
+import type { GeographicMapSettings, SheetGeographicTransform } from "./historical-map-sheet-georeference.ts";
 
 export const studioAutosaveDelayMs = 13_000;
 export const studioSignedUrlTtlSeconds = 300;
@@ -123,6 +124,8 @@ export type HistoricalMapStudioState = {
   workspace: StudioWorkspace | null;
   sheets: StudioSheetAsset[];
   placements: StudioPlacement[];
+  sheetGeoreferences: SheetGeographicTransform[];
+  geographicMap: GeographicMapSettings;
   georeferences: HistoricalMapGeoreference[];
   selectedBasemap: string;
   overlayOpacity: number;
