@@ -6,25 +6,52 @@
 
 This app is demo-data only for the current milestone. It does not connect to Supabase, write to a database, or implement teacher/student/gameplay features.
 
-## Run Locally
+## Local Dev Command
 
-From `apps/web`:
+From the repository root:
 
 ```bash
+cd apps/web
 npm install
 npm run dev
 ```
 
-## Build Check
+## Local Build Check
 
-From `apps/web`:
+From the repository root:
 
 ```bash
+cd apps/web
 npm install
 npm run build
 ```
 
-## Routes
+## Vercel Deployment Instructions
+
+Use these exact Vercel project settings:
+
+- Import GitHub repo: `drbellschool/TheMindsEye`
+- Root Directory: `apps/web`
+- Framework Preset: `Next.js`
+- Install Command: `npm install`
+- Build Command: `npm run build`
+- Output Directory: leave blank and use the Next.js default
+
+## Deployment Checklist
+
+- Confirm the Vercel project imports `drbellschool/TheMindsEye`.
+- Confirm the Root Directory is `apps/web`.
+- Confirm the Framework Preset is `Next.js`.
+- Confirm the Install Command is `npm install`.
+- Confirm the Build Command is `npm run build`.
+- Confirm the Output Directory is blank and left at the Next.js default.
+- Confirm the local dev command is `npm run dev`.
+- Confirm the local build check is `npm run build`.
+- Run `cd apps/web`.
+- Run `npm install`.
+- Run `npm run build`.
+
+## Public Review Route Checklist
 
 - `/community`
 - `/community/map-auditor`
@@ -36,7 +63,3 @@ npm run build
 ## Data Rule
 
 All pages read from the demo JSON source in `apps/web/lib/demo-data/` for this milestone.
-
-## Deployment
-
-The app is structured to deploy as a public Vercel preview once the repository is connected to Vercel.
