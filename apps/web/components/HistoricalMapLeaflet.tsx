@@ -53,7 +53,10 @@ type HistoricalMapLeafletProps = {
   onRefreshSheetSignedUrl?: (assetId: string) => void;
   onSheetImageStateChange?: (state: SheetImageLoadState) => void;
   onTileDiagnosticsChange?: (diagnostics: TileDiagnostics & { basemapKey: string; tileLayerMounted: boolean }) => void;
+  onTileRuntimeDebugChange?: (debug: LeafletTileRuntimeDebug) => void;
   locationMarker?: GeoCoordinate | null;
+  plainTileOnly?: boolean;
+  viewRefreshRequest?: number;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -73,6 +76,144 @@ export type SheetImageLoadState = {
   transformValid: boolean;
   message: string;
 };
+
+type RuntimeRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
+type FirstTileRuntimeStyle = {
+  display: string;
+  visibility: string;
+  opacity: string;
+  zIndex: string;
+  transform: string;
+  parentPane: string;
+  srcHost: string;
+};
+
+export type LeafletTileRuntimeDebug = {
+  tileCount: number;
+  completeTileCount: number;
+  loadedTileNaturalSizes: Array<{ naturalWidth: number; naturalHeight: number }>;
+  firstTile: FirstTileRuntimeStyle | null;
+  tilePaneRect: RuntimeRect | null;
+  mapContainerRect: RuntimeRect | null;
+  tilePaneChildCount: number;
+  successfulTileloadCount: number;
+  failedTileCount: number;
+  selectedBasemap: string;
+  center: { latitude: number; longitude: number };
+  zoom: number;
+  visibleLoadedTileCount: number;
+};
+
+function rectSummary(rect: DOMRect): RuntimeRect {
+  return {
+    left: Math.round(rect.left),
+    top: Math.round(rect.top),
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+}
+
+function rectsIntersect(a: RuntimeRect | null, b: RuntimeRect | null): boolean {
+  if (!a || !b || a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) {
+    return false;
+  }
+
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function getElementHost(element: HTMLImageElement | null): string {
+  const source = element?.currentSrc || element?.src;
+
+  if (!source) {
+    return "none";
+  }
+
+  try {
+    return new URL(source).hostname;
+  } catch {
+    return "invalid";
+  }
+}
+
+function createEmptyTileRuntimeDebug(selectedBasemap: string): LeafletTileRuntimeDebug {
+  return {
+    tileCount: 0,
+    completeTileCount: 0,
+    loadedTileNaturalSizes: [],
+    firstTile: null,
+    tilePaneRect: null,
+    mapContainerRect: null,
+    tilePaneChildCount: 0,
+    successfulTileloadCount: 0,
+    failedTileCount: 0,
+    selectedBasemap,
+    center: { latitude: 0, longitude: 0 },
+    zoom: 0,
+    visibleLoadedTileCount: 0,
+  };
+}
+
+function collectLeafletTileRuntimeDebug(map: L.Map, selectedBasemap: string, diagnostics: TileDiagnostics): LeafletTileRuntimeDebug {
+  const tiles = Array.from(document.querySelectorAll<HTMLImageElement>(".leaflet-tile"));
+  const completeTiles = tiles.filter((tile) => tile.complete);
+  const loadedTiles = completeTiles.filter((tile) => tile.naturalWidth > 0 && tile.naturalHeight > 0);
+  const firstTile = tiles[0] ?? null;
+  const firstTileStyle = firstTile ? window.getComputedStyle(firstTile) : null;
+  const firstTilePane = firstTile?.closest(".leaflet-pane");
+  const tilePane = map.getPane("tilePane") ?? map.getContainer().querySelector<HTMLElement>(".leaflet-tile-pane");
+  const mapContainer = map.getContainer();
+  const tilePaneRect = tilePane ? rectSummary(tilePane.getBoundingClientRect()) : null;
+  const mapContainerRect = rectSummary(mapContainer.getBoundingClientRect());
+  const visibleLoadedTileCount = loadedTiles.filter((tile) => {
+    const style = window.getComputedStyle(tile);
+    const tileRect = rectSummary(tile.getBoundingClientRect());
+    const opacity = Number.parseFloat(style.opacity || "1");
+
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      (!Number.isFinite(opacity) || opacity > 0) &&
+      rectsIntersect(tileRect, mapContainerRect)
+    );
+  }).length;
+  const center = map.getCenter();
+
+  return {
+    tileCount: tiles.length,
+    completeTileCount: completeTiles.length,
+    loadedTileNaturalSizes: loadedTiles.map((tile) => ({ naturalWidth: tile.naturalWidth, naturalHeight: tile.naturalHeight })),
+    firstTile: firstTile && firstTileStyle
+      ? {
+          display: firstTileStyle.display,
+          visibility: firstTileStyle.visibility,
+          opacity: firstTileStyle.opacity,
+          zIndex: firstTileStyle.zIndex,
+          transform: firstTileStyle.transform,
+          parentPane: firstTilePane?.className || "none",
+          srcHost: getElementHost(firstTile),
+        }
+      : null,
+    tilePaneRect,
+    mapContainerRect,
+    tilePaneChildCount: tilePane?.childElementCount ?? 0,
+    successfulTileloadCount: diagnostics.successfulTiles,
+    failedTileCount: diagnostics.failedTiles,
+    selectedBasemap,
+    center: { latitude: center.lat, longitude: center.lng },
+    zoom: map.getZoom(),
+    visibleLoadedTileCount,
+  };
+}
 
 function getTileHost(details?: unknown): string | null {
   const tile = (details as { tile?: HTMLImageElement } | undefined)?.tile;
@@ -201,6 +342,200 @@ function InvalidateMapSize({ request }: { request: number }) {
   }, [map, request]);
 
   return null;
+}
+
+function ForceLeafletTileRedraw({
+  center,
+  request,
+  zoom,
+}: {
+  center: LatLngTuple;
+  request: number;
+  zoom: number;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setView(center, zoom, { animate: false });
+    map.invalidateSize({ animate: false });
+    map.eachLayer((layer) => {
+      if (layer instanceof L.TileLayer) {
+        layer.redraw();
+      }
+    });
+
+    const timeouts = [100, 500].map((delay) =>
+      window.setTimeout(() => {
+        map.setView(center, zoom, { animate: false });
+        map.invalidateSize({ animate: false });
+        map.eachLayer((layer) => {
+          if (layer instanceof L.TileLayer) {
+            layer.redraw();
+          }
+        });
+      }, delay),
+    );
+
+    return () => {
+      timeouts.forEach((timeout) => window.clearTimeout(timeout));
+    };
+  }, [center, map, request, zoom]);
+
+  return null;
+}
+
+function LeafletTileRuntimeDebugPanel({
+  basicOnly = false,
+  diagnostics,
+  onChange,
+  selectedBasemap,
+}: {
+  basicOnly?: boolean;
+  diagnostics: TileDiagnostics;
+  onChange?: (debug: LeafletTileRuntimeDebug) => void;
+  selectedBasemap: string;
+}) {
+  const map = useMap();
+  const [debug, setDebug] = useState<LeafletTileRuntimeDebug>(() => createEmptyTileRuntimeDebug(selectedBasemap));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function refresh() {
+      if (cancelled) {
+        return;
+      }
+
+      const next = collectLeafletTileRuntimeDebug(map, selectedBasemap, diagnostics);
+      setDebug(next);
+      onChange?.(next);
+    }
+
+    refresh();
+    const interval = window.setInterval(refresh, 750);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [diagnostics, map, onChange, selectedBasemap]);
+
+  if (basicOnly) {
+    return (
+      <div className="map-studio-plain-tile-counts">
+        Plain map tiles: {debug.successfulTileloadCount} loaded / {debug.failedTileCount} failed / {debug.visibleLoadedTileCount} visible
+      </div>
+    );
+  }
+
+  return (
+    <details className="map-studio-runtime-debug" open>
+      <summary>Leaflet tile paint debug</summary>
+      <dl>
+        <dt>.leaflet-tile count</dt>
+        <dd>{debug.tileCount}</dd>
+        <dt>Complete tiles</dt>
+        <dd>{debug.completeTileCount}</dd>
+        <dt>Loaded natural sizes</dt>
+        <dd>{debug.loadedTileNaturalSizes.length > 0 ? debug.loadedTileNaturalSizes.map((size) => `${size.naturalWidth}x${size.naturalHeight}`).join(", ") : "none"}</dd>
+        <dt>First tile host</dt>
+        <dd>{debug.firstTile?.srcHost ?? "none"}</dd>
+        <dt>First tile style</dt>
+        <dd>
+          {debug.firstTile
+            ? `display=${debug.firstTile.display}; visibility=${debug.firstTile.visibility}; opacity=${debug.firstTile.opacity}; z=${debug.firstTile.zIndex}; transform=${debug.firstTile.transform}; pane=${debug.firstTile.parentPane}`
+            : "none"}
+        </dd>
+        <dt>Tile pane rect</dt>
+        <dd>{debug.tilePaneRect ? `${debug.tilePaneRect.width}x${debug.tilePaneRect.height} @ ${debug.tilePaneRect.left},${debug.tilePaneRect.top}` : "none"}</dd>
+        <dt>Map rect</dt>
+        <dd>{debug.mapContainerRect ? `${debug.mapContainerRect.width}x${debug.mapContainerRect.height} @ ${debug.mapContainerRect.left},${debug.mapContainerRect.top}` : "none"}</dd>
+        <dt>Tile pane children</dt>
+        <dd>{debug.tilePaneChildCount}</dd>
+        <dt>tileload / tileerror</dt>
+        <dd>{debug.successfulTileloadCount} / {debug.failedTileCount}</dd>
+        <dt>Visible loaded tiles</dt>
+        <dd>{debug.visibleLoadedTileCount}</dd>
+        <dt>Basemap</dt>
+        <dd>{debug.selectedBasemap}</dd>
+        <dt>Center / zoom</dt>
+        <dd>{debug.center.latitude.toFixed(6)}, {debug.center.longitude.toFixed(6)} / {debug.zoom}</dd>
+      </dl>
+    </details>
+  );
+}
+
+type PlainLeafletMapTestProps = {
+  basemapKey?: string;
+  onTileDiagnosticsChange?: (diagnostics: TileDiagnostics & { basemapKey: string; tileLayerMounted: boolean }) => void;
+  onTileRuntimeDebugChange?: (debug: LeafletTileRuntimeDebug) => void;
+};
+
+export function PlainLeafletMapTest({
+  basemapKey = "osm",
+  onTileDiagnosticsChange,
+  onTileRuntimeDebugChange,
+}: PlainLeafletMapTestProps) {
+  const basemap = getBasemap(basemapKey);
+  const center: LatLngTuple = [33.425, -94.047];
+  const [tileDiagnostics, setTileDiagnostics] = useState(createTileDiagnostics);
+  const [tileRetry, setTileRetry] = useState(0);
+
+  useEffect(() => {
+    setTileDiagnostics(createTileDiagnostics());
+  }, [basemap.key, tileRetry]);
+
+  useEffect(() => {
+    onTileDiagnosticsChange?.({
+      ...tileDiagnostics,
+      basemapKey: basemap.key,
+      tileLayerMounted: true,
+    });
+  }, [basemap.key, onTileDiagnosticsChange, tileDiagnostics]);
+
+  function recordTileEvent(event: "loading" | "tileload" | "tileerror" | "load", details?: unknown) {
+    const failedHost = event === "tileerror" ? getTileHost(details) : null;
+
+    setTileDiagnostics((current) => updateTileDiagnostics(current, event, { failedHost }));
+  }
+
+  return (
+    <MapContainer center={center} className="map-studio-leaflet-map" scrollWheelZoom zoom={14}>
+      <TileLayer
+        attribution={basemap.attribution}
+        eventHandlers={{
+          loading: () => recordTileEvent("loading"),
+          load: () => recordTileEvent("load"),
+          tileerror: (event) => recordTileEvent("tileerror", event),
+          tileload: () => recordTileEvent("tileload"),
+        }}
+        key={`plain-${basemap.key}-${tileRetry}`}
+        opacity={1}
+        url={basemap.url}
+      />
+      <ForceLeafletTileRedraw center={center} request={tileRetry} zoom={14} />
+      <LeafletTileRuntimeDebugPanel
+        basicOnly
+        diagnostics={tileDiagnostics}
+        onChange={onTileRuntimeDebugChange}
+        selectedBasemap={basemap.key}
+      />
+      {tileDiagnostics.status === "error" ? (
+        <div className="map-studio-tile-status is-error">
+          <span>Plain map failed to load.</span>
+          <button
+            type="button"
+            onClick={() => {
+              setTileDiagnostics((current) => updateTileDiagnostics(current, "retry"));
+              setTileRetry((value) => value + 1);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+    </MapContainer>
+  );
 }
 
 function ConfigureLeafletPanes({ request }: { request: number }) {
@@ -832,12 +1167,12 @@ function TransformedSheetLayer({
 
 export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   const basemap = getBasemap(props.basemapKey);
-  const derivedBounds = props.bounds ?? boundsFromCorners(props.corners);
+  const derivedBounds = props.plainTileOnly ? null : props.bounds ?? boundsFromCorners(props.corners);
   const polygon = useMemo(() => getCornerPolygon(props.corners), [props.corners]);
-  const sheetLayers = props.sheetLayers ?? [];
+  const sheetLayers = props.plainTileOnly ? [] : props.sheetLayers ?? [];
   const [tileDiagnostics, setTileDiagnostics] = useState(createTileDiagnostics);
   const [tileRetry, setTileRetry] = useState(0);
-  const showLegacyOverlayControls = sheetLayers.length === 0 && props.overlayVisible;
+  const showLegacyOverlayControls = !props.plainTileOnly && sheetLayers.length === 0 && props.overlayVisible;
   const tileStatus = tileDiagnostics.status;
 
   useEffect(() => {
@@ -868,7 +1203,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
 
   return (
     <MapContainer center={props.center} className="map-studio-leaflet-map" scrollWheelZoom zoom={props.zoom}>
-      <ConfigureLeafletPanes request={props.fitBoundsRequest + tileRetry} />
+      {props.plainTileOnly ? null : <ConfigureLeafletPanes request={props.fitBoundsRequest + tileRetry} />}
       <TileLayer
         attribution={basemap.attribution}
         eventHandlers={{
@@ -883,7 +1218,8 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       />
       <SyncMapView center={props.center} zoom={props.zoom} />
       <InvalidateMapSize request={props.fitBoundsRequest} />
-      <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />
+      <ForceLeafletTileRedraw center={props.center} request={props.viewRefreshRequest ?? 0} zoom={props.zoom} />
+      {props.plainTileOnly ? null : <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />}
       <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
       <FitBounds bounds={derivedBounds} request={props.fitBoundsRequest} />
 
@@ -953,9 +1289,15 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             ))
         : null}
 
-      {props.locationMarker ? (
+      {!props.plainTileOnly && props.locationMarker ? (
         <Marker icon={markerIcon("is-location", "LOC")} position={[props.locationMarker.latitude, props.locationMarker.longitude]} />
       ) : null}
+
+      <LeafletTileRuntimeDebugPanel
+        diagnostics={tileDiagnostics}
+        onChange={props.onTileRuntimeDebugChange}
+        selectedBasemap={basemap.key}
+      />
 
       <div className={`map-studio-tile-status is-${tileStatus}`}>
         {tileStatus === "idle" ? "Loading modern map" : null}

@@ -2668,6 +2668,53 @@ body:has(.minimal-sanborn-gps) {
   background: rgba(92, 28, 20, 0.92);
 }
 
+.map-studio-runtime-debug,
+.map-studio-plain-tile-counts {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 790;
+  max-width: min(520px, calc(100% - 24px));
+  border: 1px solid rgba(246, 231, 203, 0.34);
+  border-radius: 10px;
+  background: rgba(12, 10, 8, 0.9);
+  color: #f6e7cb;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+.map-studio-runtime-debug summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.map-studio-runtime-debug dl {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 4px 8px;
+  max-height: 260px;
+  overflow: auto;
+  border-top: 1px solid rgba(246, 231, 203, 0.16);
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.map-studio-runtime-debug dt {
+  color: rgba(246, 231, 203, 0.66);
+}
+
+.map-studio-runtime-debug dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.map-studio-plain-tile-counts {
+  padding: 7px 10px;
+}
+
 .minimal-sanborn-gps .map-studio-sheet-overlay,
 .minimal-sanborn-gps .map-studio-sheet-overlay__image {
   background: transparent;
