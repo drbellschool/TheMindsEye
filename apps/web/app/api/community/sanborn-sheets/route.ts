@@ -18,80 +18,35 @@ import { createAdminClient, hasSupabaseAdminEnv } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-type TownPackageRow = {
-  id: string;
-  package_id: string;
-};
-
-type SourceRecordRow = {
-  id: string;
-  source_url: string | null;
-  archive_name: string | null;
-  rights_note: string | null;
-};
-
-type MapLayerRow = {
-  id: string;
-};
-
-type SanbornDuplicateRow = {
-  asset_id: string;
-  original_filename: string;
-  sheet_number: number | null;
-};
+type TownPackageRow = { id: string; package_id: string };
+type SourceRecordRow = { id: string; source_url: string | null; archive_name: string | null; rights_note: string | null };
+type MapLayerRow = { id: string };
+type SanbornDuplicateRow = { asset_id: string; original_filename: string; sheet_number: number | null };
 
 function jsonError(status: number, message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    {
-      ok: false,
-      message,
-      ...details,
-    },
-    { status },
-  );
+  return NextResponse.json({ ok: false, message, ...details }, { status });
 }
 
 function getMaxUploadBytes(): number {
   const configured = Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10);
-
   return Number.isFinite(configured) && configured > 0 ? configured : sanbornDefaultMaxUploadBytes;
 }
 
 function readFormString(formData: FormData, key: string): string | null {
   const value = formData.get(key);
-
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function normalizeOptionalText(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  return value.slice(0, 2000);
-}
-
-function isAuthorized(request: NextRequest): boolean {
-  const expectedToken = process.env.SANBORN_INTAKE_TOKEN;
-  const suppliedToken = request.headers.get("x-sanborn-intake-token");
-
-  return Boolean(expectedToken && suppliedToken && expectedToken === suppliedToken);
+  return value ? value.slice(0, 2000) : null;
 }
 
 async function getActiveTownPackage(supabase: NonNullable<ReturnType<typeof createAdminClient>>) {
-  return supabase
-    .from("town_packages")
-    .select("id, package_id")
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle<TownPackageRow>();
+  return supabase.from("town_packages").select("id, package_id").order("year", { ascending: false }).limit(1).maybeSingle<TownPackageRow>();
 }
 
 async function getSourceRecord(supabase: NonNullable<ReturnType<typeof createAdminClient>>, townPackageId: string, sourceRecordId: string | null) {
-  if (!sourceRecordId) {
-    return { data: null, error: null };
-  }
-
+  if (!sourceRecordId) return { data: null, error: null };
   return supabase
     .from("source_records")
     .select("id, source_url, archive_name, rights_note")
@@ -101,13 +56,7 @@ async function getSourceRecord(supabase: NonNullable<ReturnType<typeof createAdm
 }
 
 async function getMapLayerForSheet(supabase: NonNullable<ReturnType<typeof createAdminClient>>, townPackageId: string, sheetNumber: number) {
-  return supabase
-    .from("map_layers")
-    .select("id")
-    .eq("town_package_id", townPackageId)
-    .eq("sheet_number", sheetNumber)
-    .limit(1)
-    .maybeSingle<MapLayerRow>();
+  return supabase.from("map_layers").select("id").eq("town_package_id", townPackageId).eq("sheet_number", sheetNumber).limit(1).maybeSingle<MapLayerRow>();
 }
 
 export async function POST(request: NextRequest) {
@@ -115,72 +64,41 @@ export async function POST(request: NextRequest) {
     return jsonError(503, "Sanborn uploads are disabled because the server-only Supabase service-role configuration is missing.");
   }
 
-  if (!process.env.SANBORN_INTAKE_TOKEN || !isAuthorized(request)) {
-    return jsonError(401, "Sanborn uploads require the temporary server-side intake token.");
-  }
-
   const supabase = createAdminClient();
-
-  if (!supabase) {
-    return jsonError(503, "Sanborn uploads are disabled because the Supabase admin client could not be initialized.");
-  }
+  if (!supabase) return jsonError(503, "Sanborn uploads are disabled because the Supabase admin client could not be initialized.");
 
   const bucketResult = await supabase.storage.getBucket(sanbornSheetBucket);
-
   if (bucketResult.error || !bucketResult.data) {
     return jsonError(503, `Sanborn uploads are disabled because the ${sanbornSheetBucket} Storage bucket is unavailable.`);
   }
 
   const formData = await request.formData();
   const fileEntry = formData.get("file");
-
-  if (!(fileEntry instanceof File)) {
-    return jsonError(400, "Attach one Sanborn image file before saving.");
-  }
+  if (!(fileEntry instanceof File)) return jsonError(400, "Attach one Sanborn image file before saving.");
 
   const arrayBuffer = await fileEntry.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
   const detectedMimeType = detectSanbornMimeType(bytes);
-
-  if (!detectedMimeType) {
-    return jsonError(400, "The uploaded file contents are not a supported PNG, JPEG, or WebP image.");
-  }
-
+  if (!detectedMimeType) return jsonError(400, "The uploaded file contents are not a supported PNG, JPEG, or WebP image.");
   if (fileEntry.type && fileEntry.type !== detectedMimeType) {
     return jsonError(400, "The browser-reported MIME type does not match the uploaded image contents.");
   }
 
-  const validation = validateSanbornFileInput({
-    filename: fileEntry.name,
-    mimeType: detectedMimeType,
-    byteSize: fileEntry.size,
-    maxBytes: getMaxUploadBytes(),
-  });
-
-  if (!validation.ok) {
-    return jsonError(400, validation.reason);
-  }
+  const validation = validateSanbornFileInput({ filename: fileEntry.name, mimeType: detectedMimeType, byteSize: fileEntry.size, maxBytes: getMaxUploadBytes() });
+  if (!validation.ok) return jsonError(400, validation.reason);
 
   const dimensions = readSanbornImageDimensions(bytes, detectedMimeType);
-
-  if (!dimensions) {
-    return jsonError(400, "The uploaded image dimensions could not be read safely.");
-  }
+  if (!dimensions) return jsonError(400, "The uploaded image dimensions could not be read safely.");
 
   const sheetNumber = normalizeSanbornSheetNumber(readFormString(formData, "sheetNumber"));
-
-  if (!sheetNumber) {
-    return jsonError(400, "Assign a positive sheet number before saving.");
-  }
+  if (!sheetNumber) return jsonError(400, "Assign a positive sheet number before saving.");
 
   const townPackageResult = await getActiveTownPackage(supabase);
-
-  if (townPackageResult.error || !townPackageResult.data) {
-    return jsonError(503, "No active town package is available for Sanborn intake.");
-  }
+  if (townPackageResult.error || !townPackageResult.data) return jsonError(503, "No active town package is available for Sanborn intake.");
 
   const townPackage = townPackageResult.data;
   const checksum = createHash("sha256").update(Buffer.from(arrayBuffer)).digest("hex");
+
   const duplicateChecksumResult = await supabase
     .from("sanborn_sheet_assets")
     .select("asset_id, original_filename, sheet_number")
@@ -188,17 +106,8 @@ export async function POST(request: NextRequest) {
     .eq("sha256_checksum", checksum)
     .limit(1)
     .maybeSingle<SanbornDuplicateRow>();
-
-  if (duplicateChecksumResult.error) {
-    return jsonError(503, "Sanborn metadata could not be checked for duplicate checksums.");
-  }
-
-  if (duplicateChecksumResult.data) {
-    return jsonError(409, "This Sanborn image already exists in the intake workspace.", {
-      code: "duplicate_checksum",
-      duplicate: duplicateChecksumResult.data,
-    });
-  }
+  if (duplicateChecksumResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate checksums.");
+  if (duplicateChecksumResult.data) return jsonError(409, "This Sanborn image already exists in the intake workspace.", { code: "duplicate_checksum", duplicate: duplicateChecksumResult.data });
 
   const duplicateSheetResult = await supabase
     .from("sanborn_sheet_assets")
@@ -207,54 +116,27 @@ export async function POST(request: NextRequest) {
     .eq("sheet_number", sheetNumber)
     .limit(1)
     .maybeSingle<SanbornDuplicateRow>();
-
-  if (duplicateSheetResult.error) {
-    return jsonError(503, "Sanborn metadata could not be checked for duplicate sheet numbers.");
-  }
-
-  if (duplicateSheetResult.data) {
-    return jsonError(409, "A Sanborn image is already stored for this sheet number.", {
-      code: "duplicate_sheet_number",
-      duplicate: duplicateSheetResult.data,
-    });
-  }
+  if (duplicateSheetResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate sheet numbers.");
+  if (duplicateSheetResult.data) return jsonError(409, "A Sanborn image is already stored for this sheet number.", { code: "duplicate_sheet_number", duplicate: duplicateSheetResult.data });
 
   const sourceRecordId = readFormString(formData, "sourceRecordId");
   const sourceRecordResult = await getSourceRecord(supabase, townPackage.id, sourceRecordId);
-
-  if (sourceRecordResult.error) {
-    return jsonError(503, "The selected source record could not be verified.");
-  }
-
-  if (sourceRecordId && !sourceRecordResult.data) {
-    return jsonError(400, "The selected source record is not available for the active town package.");
-  }
+  if (sourceRecordResult.error) return jsonError(503, "The selected source record could not be verified.");
+  if (sourceRecordId && !sourceRecordResult.data) return jsonError(400, "The selected source record is not available for the active town package.");
 
   const mapLayerResult = await getMapLayerForSheet(supabase, townPackage.id, sheetNumber);
-
-  if (mapLayerResult.error) {
-    return jsonError(503, "The matching map layer could not be checked.");
-  }
+  if (mapLayerResult.error) return jsonError(503, "The matching map layer could not be checked.");
 
   const assetId = randomUUID();
-  const storagePath = buildSanbornStoragePath({
-    townPackageId: townPackage.package_id,
-    assetId,
-    originalFilename: fileEntry.name,
-  });
+  const storagePath = buildSanbornStoragePath({ townPackageId: townPackage.package_id, assetId, originalFilename: fileEntry.name });
   const sourceRecord = sourceRecordResult.data;
   const sourceUrl = normalizeOptionalText(readFormString(formData, "sourceUrl")) ?? sourceRecord?.source_url ?? null;
   const archiveName = normalizeOptionalText(readFormString(formData, "archiveName")) ?? sourceRecord?.archive_name ?? null;
   const rightsNote = normalizeOptionalText(readFormString(formData, "rightsNote")) ?? sourceRecord?.rights_note ?? null;
   const intakeNotes = normalizeOptionalText(readFormString(formData, "intakeNotes"));
-  const uploadResult = await supabase.storage.from(sanbornSheetBucket).upload(storagePath, Buffer.from(arrayBuffer), {
-    contentType: detectedMimeType,
-    upsert: false,
-  });
 
-  if (uploadResult.error) {
-    return jsonError(502, "The Sanborn image could not be uploaded to Supabase Storage.");
-  }
+  const uploadResult = await supabase.storage.from(sanbornSheetBucket).upload(storagePath, Buffer.from(arrayBuffer), { contentType: detectedMimeType, upsert: false });
+  if (uploadResult.error) return jsonError(502, "The Sanborn image could not be uploaded to Supabase Storage.");
 
   const insertResult = await supabase
     .from("sanborn_sheet_assets")
@@ -280,14 +162,11 @@ export async function POST(request: NextRequest) {
       intake_notes: intakeNotes,
       uploaded_at: new Date().toISOString(),
     })
-    .select(
-      "asset_id, sheet_number, original_filename, byte_size, width, height, sha256_checksum, source_record_id, source_url, archive_name, rights_note, evidence_classification, review_status, intake_notes, uploaded_at",
-    )
+    .select("asset_id, uploaded_at")
     .single();
 
   if (insertResult.error) {
     await supabase.storage.from(sanbornSheetBucket).remove([storagePath]);
-
     return jsonError(502, "The Sanborn image uploaded, but metadata could not be saved. The uncommitted upload was removed.");
   }
 
