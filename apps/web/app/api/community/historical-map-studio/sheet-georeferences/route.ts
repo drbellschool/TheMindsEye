@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { isOperationalMapCenter } from "@/lib/historical-map-georeference";
 import {
   normalizeGeoEditMode,
   normalizeGeographicMapSettings,
@@ -205,14 +206,16 @@ export async function GET(request: NextRequest) {
     return jsonError(503, "Saved sheet geographic placements could not be loaded.");
   }
 
+  const workspaceCenter =
+    typeof workspace.geographic_center_latitude === "number" && typeof workspace.geographic_center_longitude === "number"
+      ? { latitude: workspace.geographic_center_latitude, longitude: workspace.geographic_center_longitude }
+      : null;
+
   return NextResponse.json({
     ok: true,
     workspaceId: workspace.workspace_id,
     savedAt: workspace.updated_at ?? new Date().toISOString(),
-    mapCenter:
-      typeof workspace.geographic_center_latitude === "number" && typeof workspace.geographic_center_longitude === "number"
-        ? { latitude: workspace.geographic_center_latitude, longitude: workspace.geographic_center_longitude }
-        : null,
+    mapCenter: isOperationalMapCenter(workspaceCenter) ? workspaceCenter : null,
     mapZoom: workspace.geographic_zoom,
     sheets: saved.sheets,
   });

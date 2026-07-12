@@ -5,6 +5,7 @@ import {
   buildInitialSheetGeographicHistory,
   createSheetGeoreferencesFromStitching,
   deriveSheetGeoCorners,
+  hasOperationalSheetPlacement,
   isAccidentalZeroSheetPlacement,
   mergeSavedAndDefaultSheetGeoreferences,
   moveSheetGeographicAssembly,
@@ -241,12 +242,33 @@ test("resets invalid legacy zero-zero placement to town center", () => {
     placementStatus: "placed",
   });
 
-  assert.equal(isAccidentalZeroSheetPlacement(legacy), false);
+  assert.equal(isAccidentalZeroSheetPlacement(legacy), true);
+  assert.equal(hasOperationalSheetPlacement(legacy), false);
   const repaired = resetSheetGeographicPlacementToCenter(legacy, { latitude: 33.425, longitude: -94.047 });
   assert.equal(repaired.centerLatitude, 33.425);
   assert.equal(repaired.centerLongitude, -94.047);
   assert.equal(repaired.placementStatus, "draft");
   assert.equal(isAccidentalZeroSheetPlacement(repaired), false);
+  assert.equal(hasOperationalSheetPlacement(repaired), true);
+});
+
+test("near-zero legacy sheet corners are blocked from map bounds and rendering", () => {
+  const legacy = normalizeSheetGeographicTransform({
+    assetId: "asset-1",
+    centerLatitude: 0.002738,
+    centerLongitude: 0.002895,
+    corners: {
+      northwest: { latitude: 0.003, longitude: 0.002 },
+      northeast: { latitude: 0.003, longitude: 0.004 },
+      southeast: { latitude: 0.001, longitude: 0.004 },
+      southwest: { latitude: 0.001, longitude: 0.002 },
+    },
+    isVisible: true,
+    placementStatus: "placed",
+  });
+
+  assert.equal(isAccidentalZeroSheetPlacement(legacy), true);
+  assert.equal(hasOperationalSheetPlacement(legacy), false);
 });
 
 test("normalizes map edit mode, movement scope, center, zoom, and global opacity", () => {
@@ -265,6 +287,7 @@ test("normalizes map edit mode, movement scope, center, zoom, and global opacity
   assert.equal(settings.globalHistoricalOpacity, 0.05);
   assert.equal(normalizeGeoEditMode("unknown"), "pan_modern_map");
   assert.equal(normalizeMovementScope("bad"), "selected_sheet");
+  assert.equal(normalizeGeographicMapSettings({ center: { latitude: 0.002738, longitude: 0.002895 } }).center, null);
 });
 
 test("manual GPS alignment save selects one visible placed sheet and allows zero control points", () => {
