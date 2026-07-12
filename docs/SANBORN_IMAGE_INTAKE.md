@@ -63,7 +63,9 @@ committing the image binaries.
 
 ## Boundary
 
-This workflow does not stitch, georeference, or extract building-level claims
-from the Sanborn sheets. Any future location or claim derived from these images
-must stay labeled as `source_based_inference` until reviewed against the source.
-Fictional gameplay must remain separate from historical claims.
+This local metadata workflow does not stitch, georeference, or extract
+building-level claims from the Sanborn sheets. Browser-based stitching and
+visual georeferencing live in `/community/historical-map-studio` and persist
+their own Supabase records. Any future location or claim derived from these
+images must stay labeled as `source_based_inference` until reviewed against the
+source. Fictional gameplay must remain separate from historical claims.

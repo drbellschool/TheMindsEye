@@ -439,7 +439,7 @@ export const loadCommunityData = cache(async (): Promise<CommunityDataLoadResult
       switch (routeCard.href) {
         case "/community":
           return { ...routeCard, statValue: `${progressPercent}%`, state: releaseState };
-        case "/community/map-auditor":
+        case "/community/historical-map-studio":
           return { ...routeCard, statValue: String(sheetsCount), state: statusSummaries.mapLayers.state };
         case "/community/building-auditor":
           return { ...routeCard, statValue: String(buildingsCount), state: statusSummaries.buildings.state };

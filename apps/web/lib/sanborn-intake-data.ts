@@ -154,10 +154,6 @@ export const loadSanbornIntakeData = cache(async (): Promise<SanbornIntakeState>
     readinessProblems.push("SUPABASE_SERVICE_ROLE_KEY is missing from this deployment.");
   }
 
-  if (!process.env.SANBORN_INTAKE_TOKEN) {
-    readinessProblems.push("SANBORN_INTAKE_TOKEN is missing from this deployment.");
-  }
-
   if (!hasSupabaseAdminEnv()) {
     return buildDemoReadOnlyState(getReadOnlyWarning(readinessProblems));
   }

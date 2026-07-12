@@ -142,8 +142,8 @@
       "label": "Community"
     },
     {
-      "href": "/community/map-auditor",
-      "label": "Map Auditor"
+      "href": "/community/historical-map-studio",
+      "label": "Historical Map Studio"
     },
     {
       "href": "/community/building-auditor",
@@ -173,10 +173,10 @@
       "state": "reviewing"
     },
     {
-      "href": "/community/map-auditor",
-      "label": "Map Auditor",
-      "title": "Stitching workspace",
-      "text": "Sheet alignment, control points, and layer order.",
+      "href": "/community/historical-map-studio",
+      "label": "Historical Map Studio",
+      "title": "Map alignment workspace",
+      "text": "Sanborn upload, sheet layout, georeferencing, and modern overlay.",
       "statLabel": "Sheets",
       "statValue": "6",
       "state": "reviewing"

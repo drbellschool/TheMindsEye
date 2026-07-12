@@ -48,7 +48,7 @@ export default async function CommunityDashboardPage() {
   const { communityDashboard, routeCards, summary, town, statusSummaries } = communityData;
   const routeCardsByHref = new Map(routeCards.map((route) => [route.href, route]));
   const primaryRouteCards = [
-    routeCardsByHref.get("/community/map-auditor"),
+    routeCardsByHref.get("/community/historical-map-studio"),
     routeCardsByHref.get("/community/building-auditor"),
     routeCardsByHref.get("/community/people-auditor"),
   ].filter((route): route is NonNullable<typeof route> => Boolean(route));
