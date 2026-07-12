@@ -12,6 +12,7 @@ import {
 } from "./sanborn-intake.ts";
 import { normalizeReviewStatus } from "./community-status.ts";
 import { communityDemo } from "./demo-data/index.ts";
+import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
 type QueryError = {
   message: string;
@@ -56,14 +57,6 @@ type SanbornSheetAssetRow = {
   intake_notes: string | null;
   uploaded_at: string | null;
 };
-
-async function loadSupabaseServerHelpers() {
-  return import("./supabase/server.ts");
-}
-
-async function loadSupabaseAdminHelpers() {
-  return import("./supabase/admin.ts");
-}
 
 function getConfiguredMaxUploadBytes(): number {
   const configured = Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10);
@@ -151,20 +144,32 @@ function hasError(result: { error: QueryError | null }): boolean {
 
 export const loadSanbornIntakeData = cache(async (): Promise<SanbornIntakeState> => {
   const maxUploadBytes = getConfiguredMaxUploadBytes();
-  const { createClient, hasSupabaseEnv } = await loadSupabaseServerHelpers();
+  const readinessProblems: string[] = [];
 
-  if (!hasSupabaseEnv()) {
-    return buildDemoReadOnlyState(getReadOnlyWarning(["Add Supabase public environment variables before using real uploads."]));
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    readinessProblems.push("NEXT_PUBLIC_SUPABASE_URL is missing from this deployment.");
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    readinessProblems.push("SUPABASE_SERVICE_ROLE_KEY is missing from this deployment.");
+  }
+
+  if (!process.env.SANBORN_INTAKE_TOKEN) {
+    readinessProblems.push("SANBORN_INTAKE_TOKEN is missing from this deployment.");
+  }
+
+  if (!hasSupabaseAdminEnv()) {
+    return buildDemoReadOnlyState(getReadOnlyWarning(readinessProblems));
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (!supabase) {
-      return buildDemoReadOnlyState(getReadOnlyWarning(["Supabase could not be initialized for read access."]));
+      return buildDemoReadOnlyState(getReadOnlyWarning(["The server-side Supabase admin client could not be initialized."]));
     }
 
-    const [townPackageResult, sourceRecordsResult, mapLayersResult, sanbornAssetsResult] = await Promise.all([
+    const [townPackageResult, sourceRecordsResult, mapLayersResult, sanbornAssetsResult, bucketResult] = await Promise.all([
       supabase
         .from("town_packages")
         .select("id, package_id, name, state_region, year")
@@ -180,47 +185,42 @@ export const loadSanbornIntakeData = cache(async (): Promise<SanbornIntakeState>
         )
         .order("sheet_number", { ascending: true })
         .order("uploaded_at", { ascending: false }),
+      supabase.storage.getBucket(sanbornSheetBucket),
     ]);
 
-    if (hasError(townPackageResult) || hasError(sourceRecordsResult) || hasError(mapLayersResult) || hasError(sanbornAssetsResult)) {
-      return buildDemoReadOnlyState(getReadOnlyWarning(["Run the Sanborn migration and confirm the metadata table is available."]));
+    if (hasError(townPackageResult)) {
+      readinessProblems.push(`town_packages query failed: ${townPackageResult.error?.message ?? "unknown error"}`);
+    }
+    if (hasError(sourceRecordsResult)) {
+      readinessProblems.push(`source_records query failed: ${sourceRecordsResult.error?.message ?? "unknown error"}`);
+    }
+    if (hasError(mapLayersResult)) {
+      readinessProblems.push(`map_layers query failed: ${mapLayersResult.error?.message ?? "unknown error"}`);
+    }
+    if (hasError(sanbornAssetsResult)) {
+      readinessProblems.push(`sanborn_sheet_assets query failed: ${sanbornAssetsResult.error?.message ?? "unknown error"}`);
+    }
+    if (bucketResult.error || !bucketResult.data) {
+      readinessProblems.push(`Storage bucket ${sanbornSheetBucket} is unavailable: ${bucketResult.error?.message ?? "not found"}`);
+    }
+
+    if (readinessProblems.length > 0) {
+      return buildDemoReadOnlyState(getReadOnlyWarning(readinessProblems));
     }
 
     const townPackage = townPackageResult.data;
 
     if (!townPackage) {
-      return buildDemoReadOnlyState(getReadOnlyWarning(["No town package row is available yet."]));
+      return buildDemoReadOnlyState(getReadOnlyWarning(["No town package row is available. Run the seed or create the Texarkana town package."]));
     }
 
     const sourceRecords = (sourceRecordsResult.data ?? []) as SourceRecordRow[];
     const mapLayers = (mapLayersResult.data ?? []) as MapLayerRow[];
     const sanbornAssets = mapSanbornAssets((sanbornAssetsResult.data ?? []) as SanbornSheetAssetRow[], sourceRecords);
-    const sourceOptions = mapSourceOptions(sourceRecords);
-    const expectedSheetCount = getExpectedSheetCount(mapLayers);
-    const { createAdminClient, hasSupabaseAdminEnv } = await loadSupabaseAdminHelpers();
-    const readOnlyReasons: string[] = [];
-    let bucketIsReady = false;
-
-    if (!hasSupabaseAdminEnv()) {
-      readOnlyReasons.push("Add the server-only Supabase service-role key before enabling Storage uploads.");
-    } else {
-      const adminClient = createAdminClient();
-      const bucketResult = adminClient ? await adminClient.storage.getBucket(sanbornSheetBucket) : { data: null, error: { message: "Supabase admin client unavailable" } };
-
-      bucketIsReady = Boolean(bucketResult.data && !bucketResult.error);
-
-      if (!bucketIsReady) {
-        readOnlyReasons.push(`Create the private Supabase Storage bucket named ${sanbornSheetBucket}.`);
-      }
-    }
-
-    if (!process.env.SANBORN_INTAKE_TOKEN) {
-      readOnlyReasons.push("Add SANBORN_INTAKE_TOKEN as a server-only deployment variable before enabling writes.");
-    }
 
     return buildSanbornIntakeState({
-      mode: readOnlyReasons.length === 0 && bucketIsReady ? "write_enabled" : "read_only",
-      warningMessage: readOnlyReasons.length > 0 ? getReadOnlyWarning(readOnlyReasons) : undefined,
+      mode: "write_enabled",
+      warningMessage: undefined,
       bucketName: sanbornSheetBucket,
       maxUploadBytes,
       townPackage: {
@@ -231,11 +231,12 @@ export const loadSanbornIntakeData = cache(async (): Promise<SanbornIntakeState>
         year: townPackage.year,
       },
       activeMapYear: townPackage.year,
-      expectedSheetCount,
+      expectedSheetCount: getExpectedSheetCount(mapLayers),
       existingAssets: sanbornAssets,
-      sourceOptions,
+      sourceOptions: mapSourceOptions(sourceRecords),
     });
-  } catch {
-    return buildDemoReadOnlyState(getReadOnlyWarning(["The intake read model failed safely before rendering."]));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown server error";
+    return buildDemoReadOnlyState(getReadOnlyWarning([`Live readiness check failed: ${message}`]));
   }
 });
