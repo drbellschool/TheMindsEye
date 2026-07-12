@@ -17,6 +17,8 @@ import {
   normalizeGeoBounds,
   normalizeGeoreferenceStatus,
   normalizeGeoreferenceTargetType,
+  translateControlPointGeography,
+  translateGeoCorners,
   type GeoCorners,
   type HistoricalMapControlPoint,
 } from "./historical-map-georeference.ts";
@@ -161,4 +163,25 @@ test("deletes control points by ID without mutating others", () => {
   const points = [point({ controlPointId: "cp-1" }), point({ controlPointId: "cp-2" })];
 
   assert.deepEqual(deleteControlPoint(points, "cp-1").map((item) => item.controlPointId), ["cp-2"]);
+});
+
+test("translates overlay corners and paired GPS points without leaving geographic bounds", () => {
+  const corners = createDefaultGeoCorners({ latitude: 33.4251, longitude: -94.0477 });
+  const translatedCorners = translateGeoCorners(corners, 0.01, -0.02);
+  const translatedPoints = translateControlPointGeography(
+    [
+      point({ controlPointId: "cp-1", latitude: 33.42, longitude: -94.04 }),
+      point({ controlPointId: "cp-2", latitude: null, longitude: null }),
+    ],
+    0.01,
+    -0.02,
+  );
+
+  assert.equal(translatedCorners.northwest?.latitude, corners.northwest!.latitude + 0.01);
+  assert.equal(translatedCorners.northwest?.longitude, corners.northwest!.longitude - 0.02);
+  assert.equal(translatedPoints[0].latitude, 33.43);
+  assert.equal(translatedPoints[0].longitude, -94.06);
+  assert.equal(translatedPoints[1].latitude, null);
+  assert.equal(translateGeoCorners(corners, 1000, -1000).northwest?.latitude, 90);
+  assert.equal(translateGeoCorners(corners, 1000, -1000).northwest?.longitude, -180);
 });

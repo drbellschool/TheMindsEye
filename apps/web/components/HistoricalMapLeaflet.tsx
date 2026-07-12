@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { ImageOverlay, MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
@@ -34,12 +34,14 @@ type HistoricalMapLeafletProps = {
   selectedControlPointId: string;
   overlayVisible: boolean;
   overlayOpacity: number;
+  overlayMoveEnabled: boolean;
   showControlPoints: boolean;
   showSheetBoundaries: boolean;
   fitBoundsRequest: number;
   onMapClick: (latitude: number, longitude: number) => void;
   onMarkerDrag: (controlPointId: string, latitude: number, longitude: number) => void;
   onCornerDrag: (corner: keyof GeoCorners, latitude: number, longitude: number) => void;
+  onOverlayTranslate: (deltaLatitude: number, deltaLongitude: number) => void;
   onCursorMove: (latitude: number, longitude: number) => void;
   onMapViewChange: (center: LatLngTuple, zoom: number) => void;
 };
@@ -67,12 +69,18 @@ function getCornerPolygon(corners: GeoCorners): LatLngExpression[] {
 }
 
 function MapEvents({
+  overlayMoveEnabled,
   onMapClick,
   onCursorMove,
   onMapViewChange,
-}: Pick<HistoricalMapLeafletProps, "onMapClick" | "onCursorMove" | "onMapViewChange">) {
+}: Pick<HistoricalMapLeafletProps, "overlayMoveEnabled" | "onMapClick" | "onCursorMove" | "onMapViewChange">) {
   const map = useMapEvents({
     click(event) {
+      if (overlayMoveEnabled) {
+        L.DomEvent.stop(event.originalEvent);
+        return;
+      }
+
       onMapClick(event.latlng.lat, event.latlng.lng);
     },
     mousemove(event) {
@@ -87,6 +95,75 @@ function MapEvents({
       onMapViewChange([center.lat, center.lng], map.getZoom());
     },
   });
+
+  return null;
+}
+
+function OverlayDragController({
+  enabled,
+  onOverlayTranslate,
+}: {
+  enabled: boolean;
+  onOverlayTranslate: HistoricalMapLeafletProps["onOverlayTranslate"];
+}) {
+  const lastLatLngRef = useRef<L.LatLng | null>(null);
+  const map = useMapEvents({
+    mousedown(event) {
+      if (!enabled) {
+        return;
+      }
+
+      L.DomEvent.stop(event.originalEvent);
+      lastLatLngRef.current = event.latlng;
+      map.getContainer().style.cursor = "grabbing";
+    },
+    mousemove(event) {
+      if (!enabled || !lastLatLngRef.current) {
+        return;
+      }
+
+      L.DomEvent.stop(event.originalEvent);
+      const previous = lastLatLngRef.current;
+      const deltaLatitude = event.latlng.lat - previous.lat;
+      const deltaLongitude = event.latlng.lng - previous.lng;
+
+      if (Number.isFinite(deltaLatitude) && Number.isFinite(deltaLongitude) && (deltaLatitude !== 0 || deltaLongitude !== 0)) {
+        onOverlayTranslate(deltaLatitude, deltaLongitude);
+      }
+
+      lastLatLngRef.current = event.latlng;
+    },
+    mouseup(event) {
+      if (!enabled) {
+        return;
+      }
+
+      L.DomEvent.stop(event.originalEvent);
+      lastLatLngRef.current = null;
+      map.getContainer().style.cursor = "grab";
+    },
+    mouseout() {
+      if (enabled) {
+        lastLatLngRef.current = null;
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (enabled) {
+      map.dragging.disable();
+      map.getContainer().style.cursor = "grab";
+    } else {
+      map.dragging.enable();
+      map.getContainer().style.cursor = "";
+      lastLatLngRef.current = null;
+    }
+
+    return () => {
+      map.dragging.enable();
+      map.getContainer().style.cursor = "";
+    };
+  }, [enabled, map]);
 
   return null;
 }
@@ -111,7 +188,8 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   return (
     <MapContainer center={props.center} className="map-studio-leaflet-map" scrollWheelZoom zoom={props.zoom}>
       <TileLayer attribution={basemap.attribution} url={basemap.url} />
-      <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
+      <MapEvents overlayMoveEnabled={props.overlayMoveEnabled} onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
+      <OverlayDragController enabled={props.overlayMoveEnabled} onOverlayTranslate={props.onOverlayTranslate} />
       <FitBounds bounds={derivedBounds} request={props.fitBoundsRequest} />
 
       {props.overlayVisible && props.imageUrl && derivedBounds ? (
@@ -129,7 +207,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
 
         return (
           <Marker
-            draggable
+            draggable={!props.overlayMoveEnabled}
             eventHandlers={{
               dragend(event) {
                 const latlng = event.target.getLatLng();
@@ -148,7 +226,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             .filter((point) => typeof point.latitude === "number" && typeof point.longitude === "number")
             .map((point) => (
               <Marker
-                draggable
+                draggable={!props.overlayMoveEnabled}
                 eventHandlers={{
                   dragend(event) {
                     const latlng = event.target.getLatLng();
