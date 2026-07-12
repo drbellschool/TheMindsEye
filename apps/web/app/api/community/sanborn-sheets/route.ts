@@ -14,7 +14,7 @@ import {
   sanitizeSanbornFilename,
   validateSanbornFileInput,
 } from "@/lib/sanborn-intake";
-import { createAdminClient, hasSupabaseAdminEnv } from "@/lib/supabase/admin";
+import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
 export const runtime = "nodejs";
 
@@ -22,10 +22,6 @@ type TownPackageRow = { id: string; package_id: string };
 type SourceRecordRow = { id: string; source_url: string | null; archive_name: string | null; rights_note: string | null };
 type MapLayerRow = { id: string };
 type SanbornDuplicateRow = { asset_id: string; original_filename: string; sheet_number: number | null };
-
-function jsonError(status: number, message: string, details?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, message, ...details }, { status });
-}
 
 function getMaxUploadBytes(): number {
   const configured = Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10);
@@ -41,31 +37,24 @@ function normalizeOptionalText(value: string | null): string | null {
   return value ? value.slice(0, 2000) : null;
 }
 
-async function getActiveTownPackage(supabase: NonNullable<ReturnType<typeof createAdminClient>>) {
-  return supabase.from("town_packages").select("id, package_id").order("year", { ascending: false }).limit(1).maybeSingle<TownPackageRow>();
-}
-
-async function getSourceRecord(supabase: NonNullable<ReturnType<typeof createAdminClient>>, townPackageId: string, sourceRecordId: string | null) {
+async function getSourceRecord(supabase: any, townPackageId: string, sourceRecordId: string | null) {
   if (!sourceRecordId) return { data: null, error: null };
   return supabase
     .from("source_records")
     .select("id, source_url, archive_name, rights_note")
     .eq("id", sourceRecordId)
     .eq("town_package_id", townPackageId)
-    .maybeSingle<SourceRecordRow>();
+    .maybeSingle();
 }
 
-async function getMapLayerForSheet(supabase: NonNullable<ReturnType<typeof createAdminClient>>, townPackageId: string, sheetNumber: number) {
-  return supabase.from("map_layers").select("id").eq("town_package_id", townPackageId).eq("sheet_number", sheetNumber).limit(1).maybeSingle<MapLayerRow>();
+async function getMapLayerForSheet(supabase: any, townPackageId: string, sheetNumber: number) {
+  return supabase.from("map_layers").select("id").eq("town_package_id", townPackageId).eq("sheet_number", sheetNumber).limit(1).maybeSingle();
 }
 
 export async function POST(request: NextRequest) {
-  if (!hasSupabaseAdminEnv()) {
-    return jsonError(503, "Sanborn uploads are disabled because the server-only Supabase service-role configuration is missing.");
-  }
-
-  const supabase = createAdminClient();
-  if (!supabase) return jsonError(503, "Sanborn uploads are disabled because the Supabase admin client could not be initialized.");
+  const access = await requireMapStudioWriteAccess();
+  if (!access.ok) return access.response;
+  const { supabase } = access;
 
   const bucketResult = await supabase.storage.getBucket(sanbornSheetBucket);
   if (bucketResult.error || !bucketResult.data) {
@@ -93,10 +82,11 @@ export async function POST(request: NextRequest) {
   const sheetNumber = normalizeSanbornSheetNumber(readFormString(formData, "sheetNumber"));
   if (!sheetNumber) return jsonError(400, "Assign a positive sheet number before saving.");
 
-  const townPackageResult = await getActiveTownPackage(supabase);
+  const requestedTownPackageId = readFormString(formData, "townPackageId");
+  const townPackageResult = await getRequestedTownPackage(supabase, requestedTownPackageId);
   if (townPackageResult.error || !townPackageResult.data) return jsonError(503, "No active town package is available for Sanborn intake.");
 
-  const townPackage = townPackageResult.data;
+  const townPackage = townPackageResult.data as TownPackageRow;
   const checksum = createHash("sha256").update(Buffer.from(arrayBuffer)).digest("hex");
 
   const duplicateChecksumResult = await supabase
@@ -105,7 +95,7 @@ export async function POST(request: NextRequest) {
     .eq("town_package_id", townPackage.id)
     .eq("sha256_checksum", checksum)
     .limit(1)
-    .maybeSingle<SanbornDuplicateRow>();
+    .maybeSingle();
   if (duplicateChecksumResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate checksums.");
   if (duplicateChecksumResult.data) return jsonError(409, "This Sanborn image already exists in the intake workspace.", { code: "duplicate_checksum", duplicate: duplicateChecksumResult.data });
 
@@ -115,7 +105,7 @@ export async function POST(request: NextRequest) {
     .eq("town_package_id", townPackage.id)
     .eq("sheet_number", sheetNumber)
     .limit(1)
-    .maybeSingle<SanbornDuplicateRow>();
+    .maybeSingle();
   if (duplicateSheetResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate sheet numbers.");
   if (duplicateSheetResult.data) return jsonError(409, "A Sanborn image is already stored for this sheet number.", { code: "duplicate_sheet_number", duplicate: duplicateSheetResult.data });
 

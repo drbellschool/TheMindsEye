@@ -1391,6 +1391,343 @@ textarea {
   margin: 0;
 }
 
+.map-studio-login,
+.historical-map-studio {
+  display: grid;
+  gap: 18px;
+}
+
+.map-studio-login__form {
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+}
+
+.map-studio-login__form label,
+.map-studio-sidebar label,
+.map-studio-georef-controls label,
+.map-studio-inspector label,
+.map-studio-statusbar label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(245, 230, 202, 0.68);
+}
+
+.map-studio-login__form input,
+.map-studio-sidebar input,
+.map-studio-sidebar select,
+.map-studio-georef-controls input,
+.map-studio-georef-controls select,
+.map-studio-inspector input,
+.map-studio-inspector select,
+.map-studio-inspector textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  background: rgba(12, 10, 8, 0.54);
+  color: #f6e7cb;
+  padding: 0.68rem 0.75rem;
+}
+
+.map-studio-inspector textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.map-studio-topbar {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(226, 190, 126, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(30, 24, 20, 0.96), rgba(16, 13, 11, 0.98)),
+    url("/textures/dark-panel.svg");
+  color: #f6e7cb;
+}
+
+.map-studio-topbar h2 {
+  margin: 0;
+  font-family: var(--font-display), "Georgia", serif;
+  font-size: clamp(1.6rem, 2.5vw, 2.5rem);
+  letter-spacing: 0.04em;
+}
+
+.map-studio-topbar__metrics,
+.map-studio-actions,
+.map-studio-mode-switch,
+.map-studio-layer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.map-studio-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(620px, 1fr) 330px;
+  gap: 16px;
+  align-items: stretch;
+  min-height: 76vh;
+}
+
+.map-studio-sidebar,
+.map-studio-inspector,
+.map-studio-canvas-wrap,
+.map-studio-statusbar {
+  border-radius: 24px;
+  border: 1px solid rgba(226, 190, 126, 0.2);
+  background:
+    linear-gradient(180deg, rgba(31, 25, 21, 0.94), rgba(16, 13, 11, 0.98)),
+    url("/textures/dark-panel.svg");
+  color: #f6e7cb;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.map-studio-sidebar,
+.map-studio-inspector {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding: 16px;
+  max-height: 76vh;
+  overflow: auto;
+}
+
+.map-studio-sidebar__summary,
+.map-studio-upload-status,
+.map-studio-georef-controls,
+.map-studio-readonly,
+.map-studio-georef-inspector,
+.map-studio-control-point-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 190, 126, 0.16);
+  background: rgba(12, 10, 8, 0.32);
+}
+
+.map-studio-sidebar__summary span,
+.map-studio-readonly p,
+.map-studio-upload-status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.map-studio-sheet-list {
+  display: grid;
+  gap: 10px;
+}
+
+.map-studio-sheet-row {
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  color: #f6e7cb;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 190, 126, 0.16);
+  background: rgba(12, 10, 8, 0.34);
+  padding: 10px;
+}
+
+.map-studio-sheet-row.is-selected {
+  border-color: rgba(226, 190, 126, 0.72);
+  background: rgba(186, 147, 86, 0.18);
+}
+
+.map-studio-sheet-row img,
+.map-studio-thumb-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(226, 190, 126, 0.14);
+}
+
+.map-studio-thumb-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  color: rgba(245, 230, 202, 0.62);
+}
+
+.map-studio-sheet-row strong,
+.map-studio-sheet-row small {
+  display: block;
+}
+
+.map-studio-sheet-row small {
+  margin-top: 3px;
+  color: rgba(245, 230, 202, 0.72);
+  overflow-wrap: anywhere;
+}
+
+.map-studio-canvas-wrap {
+  min-height: 76vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(226, 190, 126, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(15, 18, 20, 0.96), rgba(10, 9, 8, 0.98));
+}
+
+.map-studio-canvas-wrap canvas {
+  display: block;
+}
+
+.map-studio-georef-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: 100%;
+  min-height: 76vh;
+}
+
+.map-studio-historical-point-pane,
+.map-studio-modern-map-pane,
+.map-studio-overlay-mode {
+  min-height: 76vh;
+  position: relative;
+}
+
+.map-studio-historical-point-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.map-studio-georef-pane__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(12, 10, 8, 0.42);
+}
+
+.map-studio-historical-image-frame {
+  position: relative;
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  background:
+    linear-gradient(45deg, rgba(226, 190, 126, 0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(226, 190, 126, 0.06) 25%, transparent 25%),
+    rgba(12, 10, 8, 0.44);
+  background-size: 34px 34px;
+}
+
+.map-studio-historical-image-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.map-studio-image-point {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid #101010;
+  background: #e2be7e;
+  color: #1d1612;
+  font-size: 0.68rem;
+  font-weight: 800;
+  box-shadow: 0 0 0 3px rgba(226, 190, 126, 0.24);
+}
+
+.map-studio-image-point.is-selected {
+  background: #6d9f67;
+  box-shadow: 0 0 0 4px rgba(109, 159, 103, 0.34);
+}
+
+.map-studio-leaflet-map {
+  width: 100%;
+  height: 100%;
+  min-height: 76vh;
+  background: #10100e;
+  color: #1d1612;
+}
+
+.map-studio-leaflet-marker {
+  display: grid;
+  place-items: center;
+}
+
+.map-studio-leaflet-marker span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid #101010;
+  background: #e2be7e;
+  color: #1d1612;
+  font-size: 0.64rem;
+  font-weight: 800;
+  box-shadow: 0 0 0 3px rgba(226, 190, 126, 0.24);
+}
+
+.map-studio-leaflet-marker.is-selected span {
+  background: #6d9f67;
+  box-shadow: 0 0 0 4px rgba(109, 159, 103, 0.34);
+}
+
+.map-studio-leaflet-marker.is-corner span {
+  background: #c95d4a;
+  color: #fff5e6;
+}
+
+.map-studio-inspector h3,
+.map-studio-inspector h4 {
+  margin: 0;
+  font-family: var(--font-display), "Georgia", serif;
+  letter-spacing: 0.03em;
+}
+
+.map-studio-inspector__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.map-studio-control-point-editor {
+  margin-top: 12px;
+}
+
+.map-studio-statusbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  color: rgba(245, 230, 202, 0.82);
+}
+
+.map-studio-statusbar span,
+.map-studio-statusbar label {
+  border-radius: 999px;
+  border: 1px solid rgba(226, 190, 126, 0.14);
+  background: rgba(12, 10, 8, 0.34);
+  padding: 0.45rem 0.65rem;
+}
+
 @media (max-width: 1200px) {
   .content-grid--dashboard,
   .content-grid--three,
@@ -1404,7 +1741,10 @@ textarea {
   .sanborn-intake__summary,
   .sanborn-result-grid,
   .sanborn-file-card,
-  .sanborn-token-row {
+  .sanborn-token-row,
+  .map-studio-layout,
+  .map-studio-georef-split,
+  .map-studio-inspector__grid {
     grid-template-columns: 1fr;
   }
 
@@ -1418,6 +1758,19 @@ textarea {
 
   .sanborn-file-card__metadata {
     grid-template-columns: 1fr;
+  }
+
+  .map-studio-sidebar,
+  .map-studio-inspector {
+    max-height: none;
+  }
+
+  .map-studio-canvas-wrap,
+  .map-studio-historical-point-pane,
+  .map-studio-modern-map-pane,
+  .map-studio-overlay-mode,
+  .map-studio-leaflet-map {
+    min-height: 62vh;
   }
 }
 

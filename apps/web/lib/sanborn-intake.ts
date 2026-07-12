@@ -137,6 +137,15 @@ export function buildSanbornStoragePath(input: SanbornStoragePathInput): string 
   return `${townSegment}/sanborn-sheets/${assetSegment}/${filename}`;
 }
 
+export function buildSanbornReplacementStoragePath(input: SanbornStoragePathInput & { replacementId: string }): string {
+  const townSegment = sanitizeStoragePathSegment(input.townPackageId, "unknown-town");
+  const assetSegment = sanitizeStoragePathSegment(input.assetId, "unknown-asset");
+  const replacementSegment = sanitizeStoragePathSegment(input.replacementId, "replacement");
+  const filename = sanitizeSanbornFilename(input.originalFilename);
+
+  return `${townSegment}/sanborn-sheets/${assetSegment}/replacements/${replacementSegment}-${filename}`;
+}
+
 export function validateSanbornFileInput(input: SanbornFileValidationInput): SanbornFileValidationResult {
   const maxBytes = input.maxBytes ?? sanbornDefaultMaxUploadBytes;
   const extension = getSanbornFileExtension(input.filename);

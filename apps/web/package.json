@@ -6,14 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts"
+    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts ./lib/historical-map-studio.test.ts ./lib/historical-map-georeference.test.ts ./lib/map-studio-auth.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.2",
+    "@types/leaflet": "^1.9.21",
+    "konva": "^10.3.0",
+    "leaflet": "^1.9.4",
     "next": "^15.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-konva": "^19.2.5",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
