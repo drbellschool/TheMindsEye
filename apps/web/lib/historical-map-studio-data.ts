@@ -12,6 +12,14 @@ import {
   type HistoricalMapGeoreference,
 } from "./historical-map-georeference.ts";
 import {
+  mergeSavedAndDefaultSheetGeoreferences,
+  normalizeGeoEditMode,
+  normalizeGeographicMapSettings,
+  normalizeSheetGeographicTransform,
+  normalizeSheetGeoreferenceStatus,
+  type SheetGeographicTransform,
+} from "./historical-map-sheet-georeference.ts";
+import {
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
   isControlledSanbornStoragePath,
@@ -88,6 +96,12 @@ type WorkspaceRow = {
   viewport_x: number | null;
   viewport_y: number | null;
   viewport_scale: number | null;
+  selected_basemap: string | null;
+  geographic_center_latitude: number | null;
+  geographic_center_longitude: number | null;
+  geographic_zoom: number | null;
+  geographic_edit_mode: string | null;
+  global_historical_opacity: number | null;
   updated_at: string | null;
 };
 
@@ -142,8 +156,41 @@ type GeoreferenceRow = {
   updated_at: string | null;
 };
 
+type SheetGeoreferenceRow = {
+  sheet_georeference_id: string;
+  sanborn_sheet_asset_id: string;
+  northwest_latitude: number;
+  northwest_longitude: number;
+  northeast_latitude: number;
+  northeast_longitude: number;
+  southeast_latitude: number;
+  southeast_longitude: number;
+  southwest_latitude: number;
+  southwest_longitude: number;
+  center_latitude: number;
+  center_longitude: number;
+  longitude_span: number;
+  latitude_span: number;
+  rotation: number | null;
+  scale_x: number | null;
+  scale_y: number | null;
+  skew_x: number | null;
+  skew_y: number | null;
+  is_flipped_horizontally: boolean | null;
+  is_flipped_vertically: boolean | null;
+  opacity: number | null;
+  layer_order: number | null;
+  is_visible: boolean | null;
+  is_locked: boolean | null;
+  georeference_status: string | null;
+  review_status: string | null;
+  evidence_classification: string | null;
+  updated_at: string | null;
+};
+
 type ControlPointRow = {
   georeference_id: string;
+  sanborn_sheet_asset_id: string | null;
   control_point_id: string;
   label: string;
   image_x: number | null;
@@ -151,6 +198,8 @@ type ControlPointRow = {
   latitude: number | null;
   longitude: number | null;
   confidence: string | null;
+  residual_error: number | null;
+  is_complete: boolean | null;
   notes: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -186,6 +235,8 @@ function createEmptyState(input: {
     workspace: null,
     sheets: [],
     placements: [],
+    sheetGeoreferences: [],
+    geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
     selectedBasemap: "osm",
     overlayOpacity: 0.65,
@@ -325,6 +376,19 @@ function mapWorkspace(row: WorkspaceRow | null, town: StudioTownPackage, mapYear
   };
 }
 
+function mapGeographicSettings(row: WorkspaceRow | null, fallbackCenter: { latitude: number; longitude: number } | null) {
+  return normalizeGeographicMapSettings({
+    center:
+      typeof row?.geographic_center_latitude === "number" && typeof row.geographic_center_longitude === "number"
+        ? { latitude: row.geographic_center_latitude, longitude: row.geographic_center_longitude }
+        : fallbackCenter,
+    zoom: row?.geographic_zoom ?? undefined,
+    editMode: normalizeGeoEditMode(row?.geographic_edit_mode),
+    movementScope: "selected_sheet",
+    globalHistoricalOpacity: row?.global_historical_opacity ?? 1,
+  });
+}
+
 function mapPlacements(rows: PlacementRow[], assets: StudioSheetAsset[]): StudioPlacement[] {
   const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
 
@@ -357,6 +421,51 @@ function mapPlacements(rows: PlacementRow[], assets: StudioSheetAsset[]): Studio
     .filter((placement): placement is StudioPlacement => Boolean(placement));
 }
 
+function mapSheetGeoreferences(rows: SheetGeoreferenceRow[], assets: StudioSheetAsset[]): SheetGeographicTransform[] {
+  const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
+
+  return rows
+    .map((row) => {
+      const asset = assetByRowId.get(row.sanborn_sheet_asset_id);
+
+      if (!asset) {
+        return null;
+      }
+
+      return normalizeSheetGeographicTransform({
+        sheetGeoreferenceId: row.sheet_georeference_id,
+        assetId: asset.assetId,
+        centerLatitude: row.center_latitude,
+        centerLongitude: row.center_longitude,
+        longitudeSpan: row.longitude_span,
+        latitudeSpan: row.latitude_span,
+        corners: {
+          northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
+          northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
+          southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
+          southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
+        },
+        rotation: row.rotation ?? 0,
+        scaleX: row.scale_x ?? 1,
+        scaleY: row.scale_y ?? 1,
+        skewX: row.skew_x ?? 0,
+        skewY: row.skew_y ?? 0,
+        isFlippedHorizontally: row.is_flipped_horizontally ?? false,
+        isFlippedVertically: row.is_flipped_vertically ?? false,
+        opacity: row.opacity ?? 1,
+        layerOrder: row.layer_order ?? 0,
+        isVisible: row.is_visible ?? true,
+        isLocked: row.is_locked ?? false,
+        georeferenceStatus: normalizeSheetGeoreferenceStatus(row.georeference_status),
+        reviewStatus: normalizeReviewClassification(row.review_status),
+        evidenceClassification: normalizeReviewClassification(row.evidence_classification),
+        updatedAt: row.updated_at,
+        isPersisted: true,
+      });
+    })
+    .filter((placement): placement is SheetGeographicTransform => Boolean(placement));
+}
+
 function getCornerCoordinate(latitude: number | null, longitude: number | null) {
   return typeof latitude === "number" && typeof longitude === "number" ? { latitude, longitude } : null;
 }
@@ -370,12 +479,15 @@ function mapGeoreferences(rows: GeoreferenceRow[], controlPointRows: ControlPoin
     existing.push(
       normalizeControlPoint({
         controlPointId: row.control_point_id,
+        targetAssetId: row.sanborn_sheet_asset_id ? assetByRowId.get(row.sanborn_sheet_asset_id)?.assetId ?? null : null,
         label: row.label,
         imageX: row.image_x,
         imageY: row.image_y,
         latitude: row.latitude,
         longitude: row.longitude,
         confidence: row.confidence ?? "draft",
+        residualError: row.residual_error,
+        isComplete: row.is_complete ?? undefined,
         notes: row.notes,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -404,6 +516,7 @@ function mapGeoreferences(rows: GeoreferenceRow[], controlPointRows: ControlPoin
       southwest: getCornerCoordinate(row.southwest_latitude, row.southwest_longitude),
     };
     const targetAsset = row.sanborn_sheet_asset_id ? assetByRowId.get(row.sanborn_sheet_asset_id) : null;
+    const controlPoints = pointsByGeoreferenceId.get(row.id) ?? [];
 
     return {
       georeferenceId: row.georeference_id,
@@ -429,7 +542,7 @@ function mapGeoreferences(rows: GeoreferenceRow[], controlPointRows: ControlPoin
       showSheetBoundaries: row.show_sheet_boundaries ?? true,
       renderingMode: row.rendering_mode ?? "rectangular_preview",
       updatedAt: row.updated_at,
-      controlPoints: pointsByGeoreferenceId.get(row.id) ?? [],
+      controlPoints: controlPoints.map((point) => ({ ...point, targetAssetId: point.targetAssetId ?? targetAsset?.assetId ?? null })),
     };
   });
 }
@@ -500,7 +613,9 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
       .order("uploaded_at", { ascending: true }),
     supabase
       .from("historical_map_workspaces")
-      .select("id, workspace_id, town_package_id, map_year, name, review_status, evidence_classification, viewport_x, viewport_y, viewport_scale, updated_at")
+      .select(
+        "id, workspace_id, town_package_id, map_year, name, review_status, evidence_classification, viewport_x, viewport_y, viewport_scale, selected_basemap, geographic_center_latitude, geographic_center_longitude, geographic_zoom, geographic_edit_mode, global_historical_opacity, updated_at",
+      )
       .eq("town_package_id", activeTownPackage.id)
       .eq("map_year", activeMapYear)
       .maybeSingle<WorkspaceRow>(),
@@ -525,6 +640,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   let workspaceWarning: string | undefined;
   let workspaceRow: WorkspaceRow | null = null;
   let placementRows: PlacementRow[] = [];
+  let sheetGeoreferenceRows: SheetGeoreferenceRow[] = [];
   let georeferenceRows: GeoreferenceRow[] = [];
   let controlPointRows: ControlPointRow[] = [];
 
@@ -545,6 +661,19 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         placementRows = (placementsResult.data ?? []) as PlacementRow[];
       }
 
+      const sheetGeoreferencesResult = await supabase
+        .from("historical_map_sheet_georeferences")
+        .select(
+          "sheet_georeference_id, sanborn_sheet_asset_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, longitude_span, latitude_span, rotation, scale_x, scale_y, skew_x, skew_y, is_flipped_horizontally, is_flipped_vertically, opacity, layer_order, is_visible, is_locked, georeference_status, review_status, evidence_classification, updated_at",
+        )
+        .eq("workspace_id", workspaceRow.id);
+
+      if (sheetGeoreferencesResult.error) {
+        workspaceWarning = `Saved sheet geographic placement query failed: ${sheetGeoreferencesResult.error.message}`;
+      } else {
+        sheetGeoreferenceRows = (sheetGeoreferencesResult.data ?? []) as SheetGeoreferenceRow[];
+      }
+
       const georeferencesResult = await supabase
         .from("historical_map_georeferences")
         .select(
@@ -561,7 +690,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         if (georeferenceIds.length > 0) {
           const controlPointsResult = await supabase
             .from("historical_map_control_points")
-            .select("georeference_id, control_point_id, label, image_x, image_y, latitude, longitude, confidence, notes, created_at, updated_at")
+            .select("georeference_id, sanborn_sheet_asset_id, control_point_id, label, image_x, image_y, latitude, longitude, confidence, residual_error, is_complete, notes, created_at, updated_at")
             .in("georeference_id", georeferenceIds)
             .order("created_at", { ascending: true });
 
@@ -578,8 +707,17 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const workspace = mapWorkspace(workspaceRow, activeTownPackage, activeMapYear);
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
+  const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);
+  const sheetGeoreferences = mergeSavedAndDefaultSheetGeoreferences(assets, savedSheetGeoreferences);
   const georeferences = mapGeoreferences(georeferenceRows, controlPointRows, assets);
   const primaryGeoreference = georeferences[0];
+  const primaryBounds = primaryGeoreference?.bounds;
+  const fallbackGeographicCenter = primaryBounds
+    ? {
+        latitude: (primaryBounds.northLatitude + primaryBounds.southLatitude) / 2,
+        longitude: (primaryBounds.eastLongitude + primaryBounds.westLongitude) / 2,
+      }
+    : null;
   const expectedSheetCount = getExpectedSheetCount(mapLayerRows);
   const sourceOptions = mapSourceOptions(sourceRows);
 
@@ -599,8 +737,10 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     workspace,
     sheets: assets,
     placements,
+    sheetGeoreferences,
+    geographicMap: mapGeographicSettings(workspaceRow, fallbackGeographicCenter),
     georeferences,
-    selectedBasemap: primaryGeoreference?.selectedBasemap ?? "osm",
+    selectedBasemap: workspaceRow?.selected_basemap ?? primaryGeoreference?.selectedBasemap ?? "osm",
     overlayOpacity: primaryGeoreference?.overlayOpacity ?? 0.65,
     overlayVisible: primaryGeoreference?.overlayVisible ?? true,
     lastLoadedAt: new Date().toISOString(),

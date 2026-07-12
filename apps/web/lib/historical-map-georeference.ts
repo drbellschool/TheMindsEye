@@ -28,12 +28,15 @@ export type GeoCorners = {
 
 export type HistoricalMapControlPoint = {
   controlPointId: string;
+  targetAssetId: string | null;
   label: string;
   imageX: number | null;
   imageY: number | null;
   latitude: number | null;
   longitude: number | null;
   confidence: string;
+  residualError: number | null;
+  isComplete: boolean;
   notes: string | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -184,12 +187,17 @@ export function cornersFromBounds(bounds: GeoBounds | null): GeoCorners {
 export function normalizeControlPoint(input: Partial<HistoricalMapControlPoint> & { controlPointId: string }): HistoricalMapControlPoint {
   return {
     controlPointId: input.controlPointId,
+    targetAssetId: input.targetAssetId ?? null,
     label: input.label?.trim().slice(0, 120) || input.controlPointId,
     imageX: isFiniteImageCoordinate(input.imageX) ? Number(input.imageX) : null,
     imageY: isFiniteImageCoordinate(input.imageY) ? Number(input.imageY) : null,
     latitude: isValidLatitude(input.latitude) ? Number(input.latitude) : null,
     longitude: isValidLongitude(input.longitude) ? Number(input.longitude) : null,
     confidence: input.confidence?.trim().slice(0, 40) || "draft",
+    residualError: Number.isFinite(input.residualError) && Number(input.residualError) >= 0 ? Number(input.residualError) : null,
+    isComplete:
+      input.isComplete ??
+      (isFiniteImageCoordinate(input.imageX) && isFiniteImageCoordinate(input.imageY) && isValidLatitude(input.latitude) && isValidLongitude(input.longitude)),
     notes: input.notes?.trim().slice(0, 2000) || null,
     createdAt: input.createdAt ?? null,
     updatedAt: input.updatedAt ?? null,
