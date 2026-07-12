@@ -5,6 +5,9 @@ insert into town_packages (
   year,
   package_id,
   state_region,
+  center_latitude,
+  center_longitude,
+  default_zoom,
   evidence_start_year,
   evidence_end_year,
   release_state,
@@ -20,6 +23,9 @@ values (
   1885,
   'texarkana_1885',
   'Texas / Arkansas',
+  33.425,
+  -94.047,
+  15,
   1880,
   1890,
   'unknown',
@@ -28,7 +34,10 @@ values (
   false,
   'Seeded community data remains review-bound until human verification is complete.'
 )
-on conflict (package_id) do nothing;
+on conflict (package_id) do update
+set center_latitude = coalesce(town_packages.center_latitude, excluded.center_latitude),
+    center_longitude = coalesce(town_packages.center_longitude, excluded.center_longitude),
+    default_zoom = coalesce(town_packages.default_zoom, excluded.default_zoom);
 
 insert into source_records (
   id,

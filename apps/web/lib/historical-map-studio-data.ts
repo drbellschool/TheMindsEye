@@ -3,11 +3,14 @@ import { cache } from "react";
 import {
   clampOverlayOpacity,
   cornersFromBounds,
+  isNearZeroCoordinate,
+  isOperationalMapCenter,
   normalizeControlPoint,
   normalizeGeoreferenceStatus,
   normalizeGeoreferenceTargetType,
   normalizeTransformationType,
   type AffineTransformMatrix,
+  type GeoCoordinate,
   type HistoricalMapControlPoint,
   type HistoricalMapGeoreference,
 } from "./historical-map-georeference.ts";
@@ -48,6 +51,9 @@ type TownPackageRow = {
   name: string;
   state_region: string | null;
   year: number;
+  center_latitude?: number | null;
+  center_longitude?: number | null;
+  default_zoom?: number | null;
 };
 
 type SourceRecordRow = {
@@ -261,7 +267,126 @@ function mapTown(row: TownPackageRow): StudioTownPackage {
     name: row.name,
     region: row.state_region ?? "Unknown region",
     year: row.year,
+    centerLatitude: typeof row.center_latitude === "number" ? row.center_latitude : null,
+    centerLongitude: typeof row.center_longitude === "number" ? row.center_longitude : null,
+    defaultZoom: typeof row.default_zoom === "number" ? row.default_zoom : null,
   };
+}
+
+const configuredTownFallbacks: Record<string, { center: GeoCoordinate; zoom: number }> = {
+  texarkana_1885: {
+    center: { latitude: 33.425, longitude: -94.047 },
+    zoom: 15,
+  },
+};
+
+function getTownPackageCenter(town: StudioTownPackage | null | undefined): GeoCoordinate | null {
+  if (!town || typeof town.centerLatitude !== "number" || typeof town.centerLongitude !== "number") {
+    return null;
+  }
+
+  const center = { latitude: town.centerLatitude, longitude: town.centerLongitude };
+
+  return isOperationalMapCenter(center) ? center : null;
+}
+
+function getConfiguredTownFallback(town: StudioTownPackage | null | undefined): { center: GeoCoordinate; zoom: number } | null {
+  if (!town) {
+    return null;
+  }
+
+  return configuredTownFallbacks[town.packageId] ?? null;
+}
+
+function getBoundsCenter(bounds: { northLatitude: number; southLatitude: number; eastLongitude: number; westLongitude: number } | null): GeoCoordinate | null {
+  if (!bounds) {
+    return null;
+  }
+
+  const center = {
+    latitude: (bounds.northLatitude + bounds.southLatitude) / 2,
+    longitude: (bounds.eastLongitude + bounds.westLongitude) / 2,
+  };
+
+  return isOperationalMapCenter(center) ? center : null;
+}
+
+function getSheetGeoreferenceBoundsCenter(sheets: SheetGeographicTransform[]): GeoCoordinate | null {
+  const coordinates = sheets
+    .filter((sheet) => sheet.isVisible && sheet.placementStatus !== "unplaced" && !isNearZeroCoordinate({ latitude: sheet.centerLatitude, longitude: sheet.centerLongitude }))
+    .flatMap((sheet) => [sheet.corners.northwest, sheet.corners.northeast, sheet.corners.southeast, sheet.corners.southwest])
+    .filter((coordinate): coordinate is GeoCoordinate => Boolean(coordinate) && isOperationalMapCenter(coordinate));
+
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  return getBoundsCenter({
+    northLatitude: Math.max(...coordinates.map((coordinate) => coordinate.latitude)),
+    southLatitude: Math.min(...coordinates.map((coordinate) => coordinate.latitude)),
+    eastLongitude: Math.max(...coordinates.map((coordinate) => coordinate.longitude)),
+    westLongitude: Math.min(...coordinates.map((coordinate) => coordinate.longitude)),
+  });
+}
+
+function getControlPointCenter(georeferences: HistoricalMapGeoreference[]): GeoCoordinate | null {
+  const coordinates = georeferences
+    .flatMap((georeference) => georeference.controlPoints)
+    .filter((point): point is HistoricalMapControlPoint & GeoCoordinate => typeof point.latitude === "number" && typeof point.longitude === "number")
+    .map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
+    .filter((coordinate) => isOperationalMapCenter(coordinate));
+
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  return {
+    latitude: coordinates.reduce((sum, coordinate) => sum + coordinate.latitude, 0) / coordinates.length,
+    longitude: coordinates.reduce((sum, coordinate) => sum + coordinate.longitude, 0) / coordinates.length,
+  };
+}
+
+export function resolveInitialGeographicMapView(input: {
+  workspaceCenter?: GeoCoordinate | null;
+  workspaceZoom?: number | null;
+  town: StudioTownPackage | null;
+  sheetGeoreferences?: SheetGeographicTransform[];
+  georeferences?: HistoricalMapGeoreference[];
+}): { center: GeoCoordinate | null; zoom: number; recoveredFromInvalidWorkspaceCenter: boolean; source: string } {
+  const workspaceCenter = input.workspaceCenter && isOperationalMapCenter(input.workspaceCenter) ? input.workspaceCenter : null;
+  const townCenter = getTownPackageCenter(input.town);
+  const sheetCenter = getSheetGeoreferenceBoundsCenter(input.sheetGeoreferences ?? []);
+  const georeferenceBoundsCenter = getBoundsCenter((input.georeferences ?? []).find((georeference) => georeference.bounds)?.bounds ?? null);
+  const controlPointCenter = getControlPointCenter(input.georeferences ?? []);
+  const configuredFallback = getConfiguredTownFallback(input.town);
+  const townDefaultZoom = typeof input.town?.defaultZoom === "number" ? input.town.defaultZoom : null;
+  const workspaceZoom = Number.isFinite(input.workspaceZoom) ? Number(input.workspaceZoom) : null;
+
+  if (workspaceCenter) {
+    return { center: workspaceCenter, zoom: workspaceZoom ?? townDefaultZoom ?? configuredFallback?.zoom ?? 15, recoveredFromInvalidWorkspaceCenter: false, source: "workspace" };
+  }
+
+  if (townCenter) {
+    return { center: townCenter, zoom: townDefaultZoom ?? workspaceZoom ?? configuredFallback?.zoom ?? 15, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "town_package" };
+  }
+
+  if (sheetCenter) {
+    return { center: sheetCenter, zoom: workspaceZoom ?? townDefaultZoom ?? configuredFallback?.zoom ?? 15, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "sheet_bounds" };
+  }
+
+  if (georeferenceBoundsCenter) {
+    return { center: georeferenceBoundsCenter, zoom: workspaceZoom ?? townDefaultZoom ?? configuredFallback?.zoom ?? 15, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "georeference_bounds" };
+  }
+
+  if (controlPointCenter) {
+    return { center: controlPointCenter, zoom: workspaceZoom ?? townDefaultZoom ?? configuredFallback?.zoom ?? 15, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "control_points" };
+  }
+
+  if (configuredFallback) {
+    return { center: configuredFallback.center, zoom: configuredFallback.zoom, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "configured_fallback" };
+  }
+
+  return { center: null, zoom: workspaceZoom ?? townDefaultZoom ?? 15, recoveredFromInvalidWorkspaceCenter: Boolean(input.workspaceCenter), source: "unresolved" };
 }
 
 export function selectActiveTownPackage(
@@ -408,13 +533,10 @@ function mapWorkspace(row: WorkspaceRow | null, town: StudioTownPackage, mapYear
   };
 }
 
-function mapGeographicSettings(row: WorkspaceRow | null, fallbackCenter: { latitude: number; longitude: number } | null) {
+function mapGeographicSettings(row: WorkspaceRow | null, resolvedView: { center: GeoCoordinate | null; zoom: number }) {
   return normalizeGeographicMapSettings({
-    center:
-      typeof row?.geographic_center_latitude === "number" && typeof row.geographic_center_longitude === "number"
-        ? { latitude: row.geographic_center_latitude, longitude: row.geographic_center_longitude }
-        : fallbackCenter,
-    zoom: row?.geographic_zoom ?? undefined,
+    center: resolvedView.center,
+    zoom: resolvedView.zoom,
     editMode: normalizeGeoEditMode(row?.geographic_edit_mode),
     movementScope: "selected_sheet",
     globalHistoricalOpacity: row?.global_historical_opacity ?? 1,
@@ -610,10 +732,20 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     });
   }
 
-  const townPackagesResult = await supabase
+  let townPackagesResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
     .from("town_packages")
-    .select("id, package_id, name, state_region, year")
+    .select("id, package_id, name, state_region, year, center_latitude, center_longitude, default_zoom")
     .order("year", { ascending: false });
+
+  if (townPackagesResult.error && /center_latitude|center_longitude|default_zoom/i.test(townPackagesResult.error.message)) {
+    console.warn("[HistoricalMapStudio] Town center columns are unavailable; falling back to legacy town package select.", {
+      message: townPackagesResult.error.message,
+    });
+    townPackagesResult = await supabase
+      .from("town_packages")
+      .select("id, package_id, name, state_region, year")
+      .order("year", { ascending: false });
+  }
 
   if (townPackagesResult.error) {
     return createEmptyState({
@@ -747,22 +879,30 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
   const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);
-  const sheetGeoreferences = mergeSavedAndDefaultSheetGeoreferences(assets, savedSheetGeoreferences);
   const georeferences = mapGeoreferences(georeferenceRows, controlPointRows, assets);
+  const workspaceCenter =
+    typeof workspaceRow?.geographic_center_latitude === "number" && typeof workspaceRow.geographic_center_longitude === "number"
+      ? { latitude: workspaceRow.geographic_center_latitude, longitude: workspaceRow.geographic_center_longitude }
+      : null;
+  const resolvedMapView = resolveInitialGeographicMapView({
+    workspaceCenter,
+    workspaceZoom: workspaceRow?.geographic_zoom ?? null,
+    town: activeTownPackage,
+    sheetGeoreferences: savedSheetGeoreferences,
+    georeferences,
+  });
+  const sheetGeoreferences = mergeSavedAndDefaultSheetGeoreferences(assets, savedSheetGeoreferences, resolvedMapView.center);
   const primaryGeoreference = georeferences[0];
-  const primaryBounds = primaryGeoreference?.bounds;
-  const fallbackGeographicCenter = primaryBounds
-    ? {
-        latitude: (primaryBounds.northLatitude + primaryBounds.southLatitude) / 2,
-        longitude: (primaryBounds.eastLongitude + primaryBounds.westLongitude) / 2,
-      }
-    : null;
   const expectedSheetCount = getExpectedSheetCount(mapLayerRows);
   const sourceOptions = mapSourceOptions(sourceRows);
+  const mapWarning =
+    resolvedMapView.recoveredFromInvalidWorkspaceCenter && resolvedMapView.center
+      ? `Recovered map center from invalid saved coordinates using ${resolvedMapView.source.replaceAll("_", " ")}.`
+      : undefined;
 
   return {
     mode: workspaceWarning ? "read_only" : "public",
-    warningMessage: workspaceWarning ?? activeTownSelection.warningMessage,
+    warningMessage: workspaceWarning ?? activeTownSelection.warningMessage ?? mapWarning,
     dataSource: "supabase",
     townPackages,
     activeTownPackage,
@@ -777,7 +917,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     sheets: assets,
     placements,
     sheetGeoreferences,
-    geographicMap: mapGeographicSettings(workspaceRow, fallbackGeographicCenter),
+    geographicMap: mapGeographicSettings(workspaceRow, resolvedMapView),
     georeferences,
     selectedBasemap: workspaceRow?.selected_basemap ?? primaryGeoreference?.selectedBasemap ?? "osm",
     overlayOpacity: primaryGeoreference?.overlayOpacity ?? 0.65,

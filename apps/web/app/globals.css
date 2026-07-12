@@ -2100,12 +2100,38 @@ body:has(.historical-map-studio) {
   max-width: none;
   transform-origin: 0 0;
   will-change: transform;
+  opacity: 0.98;
 }
 
 .map-studio-sheet-overlay__boundary {
   inset: 0;
   background: rgba(226, 190, 126, 0.08);
   border: 2px solid rgba(226, 190, 126, 0.82);
+}
+
+.map-studio-sheet-overlay.has-image-error .map-studio-sheet-overlay__boundary {
+  background: rgba(140, 53, 39, 0.14);
+  border-color: rgba(232, 117, 91, 0.9);
+}
+
+.map-studio-sheet-overlay.has-invalid-transform .map-studio-sheet-overlay__boundary {
+  border-style: dashed;
+}
+
+.map-studio-sheet-overlay__diagnostics {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  max-width: 260px;
+  border: 1px solid rgba(226, 190, 126, 0.34);
+  border-radius: 8px;
+  background: rgba(18, 12, 8, 0.9);
+  color: #f6e7cb;
+  font-size: 0.64rem;
+  line-height: 1.25;
+  padding: 5px 7px;
+  pointer-events: none;
 }
 
 .map-studio-sheet-overlay__pivot {
@@ -2133,6 +2159,66 @@ body:has(.historical-map-studio) {
   margin: -9px 0 0 -9px;
   cursor: move;
   background: #e2be7e;
+}
+
+.map-studio-tile-status {
+  position: absolute;
+  right: 10px;
+  bottom: 24px;
+  z-index: 760;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(18, 12, 8, 0.88);
+  color: #f6e7cb;
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  pointer-events: auto;
+}
+
+.map-studio-tile-status.is-idle,
+.map-studio-tile-status.is-loaded {
+  display: none;
+}
+
+.map-studio-tile-status button {
+  border: 1px solid rgba(226, 190, 126, 0.4);
+  border-radius: 999px;
+  background: rgba(226, 190, 126, 0.14);
+  color: #f6e7cb;
+  font-size: 0.62rem;
+  padding: 2px 7px;
+}
+
+.map-studio-mode-toggle .sanborn-button--primary {
+  box-shadow: inset 0 0 0 2px rgba(246, 231, 203, 0.45), 0 0 14px rgba(226, 190, 126, 0.22);
+}
+
+.map-studio-mode-toggle--compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.map-studio-inspector-primary,
+.map-studio-image-diagnostics {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 10px;
+  background: rgba(12, 10, 8, 0.36);
+  padding: 7px;
+}
+
+.map-studio-image-diagnostics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  font-size: 0.66rem;
+  color: rgba(246, 231, 203, 0.78);
+}
+
+.map-studio-image-diagnostics.is-error {
+  border-color: rgba(232, 117, 91, 0.6);
+  color: #ffd3c9;
 }
 
 .map-studio-inspector {

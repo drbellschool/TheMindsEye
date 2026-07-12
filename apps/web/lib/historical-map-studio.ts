@@ -10,6 +10,7 @@ export const minStudioSkew = -45;
 export const maxStudioSkew = 45;
 export const minStudioOpacity = 0.1;
 export const maxStudioOpacity = 1;
+export const defaultHistoricalSheetOpacity = 0.72;
 export const maxStudioHistoryEntries = 60;
 export const studioTransformerAnchors = [
   "top-left",
@@ -31,6 +32,9 @@ export type StudioTownPackage = {
   name: string;
   region: string;
   year: number;
+  centerLatitude: number | null;
+  centerLongitude: number | null;
+  defaultZoom: number | null;
 };
 
 export type StudioSourceOption = {
@@ -161,6 +165,22 @@ export function clampNumber(value: number, min: number, max: number): number {
   }
 
   return Math.max(min, Math.min(max, value));
+}
+
+export function clampHistoricalOpacity(value: number | null | undefined, fallback = defaultHistoricalSheetOpacity): number {
+  const numeric = Number(value ?? fallback);
+
+  return clampNumber(Number.isFinite(numeric) ? numeric : fallback, minStudioOpacity, maxStudioOpacity);
+}
+
+export function shouldRefreshSignedUrl(expiresAt: string | null | undefined, nowMs = Date.now(), refreshWindowMs = 60_000): boolean {
+  if (!expiresAt) {
+    return true;
+  }
+
+  const expiresMs = Date.parse(expiresAt);
+
+  return !Number.isFinite(expiresMs) || expiresMs - nowMs <= refreshWindowMs;
 }
 
 export function normalizeRotation(value: number): number {
@@ -368,6 +388,14 @@ export function updatePlacement(placements: StudioPlacement[], assetId: string, 
 
 export function canDragStudioPlacement(placement: Pick<StudioPlacement, "isVisible" | "isLocked">): boolean {
   return placement.isVisible && !placement.isLocked;
+}
+
+export function canEditHistoricalSheetOnMap(input: { mode: string; isVisible: boolean; isLocked: boolean }): boolean {
+  return input.mode === "edit_historical_sheets" && input.isVisible && !input.isLocked;
+}
+
+export function shouldPanModernMap(mode: string): boolean {
+  return mode !== "edit_historical_sheets";
 }
 
 export function shouldPanStudioStage(input: { isSpacePanning: boolean; pointerButton: number; targetIsStage: boolean }): boolean {

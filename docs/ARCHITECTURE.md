@@ -96,11 +96,12 @@ Core architecture:
 - local stitching layouts persist transform and viewport data, not screenshots;
 - Leaflet powers client-only modern basemap and GPS overlay views;
 - OpenStreetMap is the default tile provider and attribution must remain visible;
+- town packages may carry `center_latitude`, `center_longitude`, and `default_zoom`; map workspaces must prefer saved map state but must not silently fall back to `0,0`;
 - Georeference Sheets mode is the default and authoritative stitching workspace;
 - each Sanborn sheet remains an independent geographic layer over the modern basemap;
 - sheet-level georeferencing persists four authoritative corner coordinates, center coordinates, geographic spans, rotation, non-uniform scale, affine skew, pivot, projective warp metadata, flips, opacity, layer order, visibility, lock state, placement status, review status, and evidence classification;
 - Modern Overlay renders the saved independent sheet-level geographic arrangement rather than a flattened screenshot or composite;
-- current browser rendering uses a custom Leaflet projective overlay that maps the image rectangle into the stored four-corner geographic quadrilateral;
+- current browser rendering uses a custom Leaflet projective overlay that maps the image rectangle into the stored four-corner geographic quadrilateral and falls back to a visible rectangular preview if the projective transform is invalid;
 - GeoTIFF export, MBTiles, and GDAL processing remain deferred;
 - georeferencing is visual alignment for historical review, not survey-grade certification;
 - persisted control points and transform data must remain suitable for later GDAL-based `gdal_translate` and `gdalwarp` export workflows.

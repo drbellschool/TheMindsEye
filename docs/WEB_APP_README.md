@@ -78,7 +78,7 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 
 ## Deployment Checklist
 
-- Supabase migrations `0001` through `0007` have been applied.
+- Supabase migrations `0001` through `0008` have been applied.
 - `supabase/seed.sql` has been run if seed review data is desired.
 - Private Storage bucket `sanborn-sheets` exists.
 - Vercel has the public Supabase URL and publishable key.
@@ -91,6 +91,8 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - Unplaced Sanborn sheets can be added directly to the modern map without using the optional prep canvas.
 - Georeference Sheets `Edit historical sheets` mode can move, corner-warp, rotate, scale, skew, flip, hide, lock, reorder, save, and reload individual sheets over the modern basemap.
 - Modern Overlay renders the saved independent geographic sheet layers.
+- Historical Map Studio opens near the town-package center; Texarkana 1885 should resolve near `33.425, -94.047`, not `0,0`.
+- Selected Sanborn sheets show signed image load diagnostics and can be dragged by the image body in `Edit Sheet` mode.
 
 ## Public Review Routes
 

@@ -40,6 +40,7 @@ Run these SQL files in order from the Supabase SQL Editor:
 5. `supabase/migrations/0005_historical_map_sheet_placement_transforms.sql`
 6. `supabase/migrations/0006_historical_map_sheet_georeferences.sql`
 7. `supabase/migrations/0007_map_first_sheet_georeferencing.sql`
+8. `supabase/migrations/0008_fix_map_studio_center_and_draft_status.sql`
 
 The migrations create:
 
@@ -51,6 +52,8 @@ The migrations create:
 - Skew and flip placement fields used by the stitching canvas transform controls.
 - `historical_map_sheet_georeferences` for authoritative per-sheet geographic transforms rendered over the modern Leaflet basemap.
 - Pivot, projective warp, transform-version, and placement-status fields for map-first four-corner sheet placement.
+- Town-package map center metadata (`center_latitude`, `center_longitude`, `default_zoom`) so the studio does not silently initialize at `0,0`.
+- Draft placement status and legacy repair logic for accidental all-zero sheet georeferences.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -103,6 +106,8 @@ The studio supports:
 - GPS georeferencing mode with historical image points matched to modern latitude/longitude markers.
 - Authoritative sheet-level geographic placement in Georeferencing mode.
 - Modern Leaflet overlay mode using saved independent Sanborn sheet transforms.
+- Town-package map center recovery; Texarkana 1885 should open near `33.425, -94.047`.
+- Compact image diagnostics for signed URL state, image load state, natural dimensions, and transform fallback.
 
 Layouts are persisted as transform data, not screenshots. The original uploaded image remains unchanged.
 

@@ -26,6 +26,17 @@ export type GeoCorners = {
   southwest: GeoCoordinate | null;
 };
 
+export const geoCornerLabels: Record<keyof GeoCorners, string> = {
+  northwest: "NW",
+  northeast: "NE",
+  southeast: "SE",
+  southwest: "SW",
+};
+
+export function getGeoCornerLabel(corner: keyof GeoCorners): string {
+  return geoCornerLabels[corner];
+}
+
 export type HistoricalMapControlPoint = {
   controlPointId: string;
   targetAssetId: string | null;
@@ -120,6 +131,18 @@ export function validateGeoCoordinate(coordinate: GeoCoordinate): { ok: true } |
   }
 
   return { ok: true };
+}
+
+export function isNearZeroCoordinate(coordinate: GeoCoordinate | null | undefined, tolerance = 0.000001): boolean {
+  return Boolean(coordinate && Math.abs(coordinate.latitude) <= tolerance && Math.abs(coordinate.longitude) <= tolerance);
+}
+
+export function isOperationalMapCenter(coordinate: GeoCoordinate | null | undefined, allowZeroZero = false): coordinate is GeoCoordinate {
+  if (!coordinate || !validateGeoCoordinate(coordinate).ok) {
+    return false;
+  }
+
+  return allowZeroZero || !isNearZeroCoordinate(coordinate);
 }
 
 export function normalizeGeoBounds(input: Partial<GeoBounds> | null | undefined): GeoBounds | null {

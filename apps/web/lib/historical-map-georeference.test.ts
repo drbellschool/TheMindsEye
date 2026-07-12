@@ -10,7 +10,9 @@ import {
   deleteControlPoint,
   deriveGeoreferenceStatus,
   getCompleteControlPoints,
+  getGeoCornerLabel,
   hasMinimumControlPoints,
+  isOperationalMapCenter,
   isValidLatitude,
   isValidLongitude,
   normalizeControlPoint,
@@ -44,6 +46,15 @@ test("validates latitude and longitude ranges", () => {
   assert.equal(isValidLongitude(180), true);
   assert.equal(isValidLongitude(-180), true);
   assert.equal(isValidLongitude(180.01), false);
+  assert.equal(isOperationalMapCenter({ latitude: 0, longitude: 0 }), false);
+  assert.equal(isOperationalMapCenter({ latitude: 0, longitude: 0 }, true), true);
+});
+
+test("uses standard geographic corner labels", () => {
+  assert.equal(getGeoCornerLabel("northwest"), "NW");
+  assert.equal(getGeoCornerLabel("northeast"), "NE");
+  assert.equal(getGeoCornerLabel("southeast"), "SE");
+  assert.equal(getGeoCornerLabel("southwest"), "SW");
 });
 
 test("normalizes geographic bounds regardless of input order", () => {
