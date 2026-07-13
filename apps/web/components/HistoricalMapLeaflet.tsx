@@ -60,6 +60,8 @@ type HistoricalMapLeafletProps = {
   viewRefreshRequest?: number;
   fitBoundsEnabled?: boolean;
   overlayRenderMode?: "projective" | "rectangular";
+  requestedViewSource?: string;
+  onMapInteractionChange?: (state: "idle" | "panning" | "zooming", source: string) => void;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -258,22 +260,31 @@ function getCornerPolygon(corners: GeoCorners): LatLngExpression[] {
 function MapEvents({
   onMapClick,
   onCursorMove,
+  onMapInteractionChange,
   onMapViewChange,
-}: Pick<HistoricalMapLeafletProps, "onMapClick" | "onCursorMove" | "onMapViewChange">) {
+}: Pick<HistoricalMapLeafletProps, "onMapClick" | "onCursorMove" | "onMapInteractionChange" | "onMapViewChange">) {
   const map = useMapEvents({
     click(event) {
       onMapClick(event.latlng.lat, event.latlng.lng);
     },
+    dragstart() {
+      onMapInteractionChange?.("panning", "dragstart");
+    },
+    dragend() {
+      const center = map.getCenter();
+      onMapInteractionChange?.("idle", "dragend");
+      onMapViewChange([center.lat, center.lng], map.getZoom(), "user_pan");
+    },
     mousemove(event) {
       onCursorMove(event.latlng.lat, event.latlng.lng);
     },
-    moveend() {
-      const center = map.getCenter();
-      onMapViewChange([center.lat, center.lng], map.getZoom(), "leaflet_moveend");
+    zoomstart() {
+      onMapInteractionChange?.("zooming", "zoomstart");
     },
     zoomend() {
       const center = map.getCenter();
-      onMapViewChange([center.lat, center.lng], map.getZoom(), "leaflet_zoomend");
+      onMapInteractionChange?.("idle", "zoomend");
+      onMapViewChange([center.lat, center.lng], map.getZoom(), "user_zoom");
     },
   });
 
@@ -323,18 +334,29 @@ function FitBounds({
   return null;
 }
 
-function SyncMapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
+function SyncMapView({
+  center,
+  onViewMutation,
+  request,
+  source,
+  zoom,
+}: {
+  center: LatLngTuple;
+  onViewMutation?: (source: string) => void;
+  request: number;
+  source: string;
+  zoom: number;
+}) {
   const map = useMap();
-  const lastRequestedView = useRef<string>("");
+  const lastRequest = useRef(0);
 
   useEffect(() => {
-    const key = `${center[0].toFixed(7)},${center[1].toFixed(7)},${zoom}`;
-
-    if (lastRequestedView.current === key) {
+    if (request <= 0 || lastRequest.current === request) {
       return;
     }
 
-    lastRequestedView.current = key;
+    lastRequest.current = request;
+    onViewMutation?.(source);
     const currentCenter = map.getCenter();
     const currentZoom = map.getZoom();
     const centerChanged = Math.abs(currentCenter.lat - center[0]) > 0.0000001 || Math.abs(currentCenter.lng - center[1]) > 0.0000001;
@@ -342,7 +364,7 @@ function SyncMapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
     if (centerChanged || currentZoom !== zoom) {
       map.setView(center, zoom, { animate: false });
     }
-  }, [center, map, zoom]);
+  }, [center, map, onViewMutation, request, source, zoom]);
 
   return null;
 }
@@ -361,21 +383,20 @@ function InvalidateMapSize({ request }: { request: number }) {
 }
 
 function ForceLeafletTileRedraw({
-  center,
   onViewMutation,
   request,
-  zoom,
 }: {
-  center: LatLngTuple;
   onViewMutation?: (source: string) => void;
   request: number;
-  zoom: number;
 }) {
   const map = useMap();
 
   useEffect(() => {
+    if (request <= 0) {
+      return undefined;
+    }
+
     onViewMutation?.("force_tile_redraw");
-    map.setView(center, zoom, { animate: false });
     map.invalidateSize({ animate: false });
     map.eachLayer((layer) => {
       if (layer instanceof L.TileLayer) {
@@ -385,7 +406,6 @@ function ForceLeafletTileRedraw({
 
     const timeouts = [100, 500].map((delay) =>
       window.setTimeout(() => {
-        map.setView(center, zoom, { animate: false });
         map.invalidateSize({ animate: false });
         map.eachLayer((layer) => {
           if (layer instanceof L.TileLayer) {
@@ -398,7 +418,7 @@ function ForceLeafletTileRedraw({
     return () => {
       timeouts.forEach((timeout) => window.clearTimeout(timeout));
     };
-  }, [center, map, onViewMutation, request, zoom]);
+  }, [map, onViewMutation, request]);
 
   return null;
 }
@@ -532,7 +552,7 @@ export function PlainLeafletMapTest({
         opacity={1}
         url={basemap.url}
       />
-      <ForceLeafletTileRedraw center={center} request={tileRetry} zoom={14} />
+      <ForceLeafletTileRedraw request={tileRetry} />
       <LeafletTileRuntimeDebugPanel
         basicOnly
         diagnostics={tileDiagnostics}
@@ -1173,7 +1193,7 @@ function TransformedSheetLayer({
       updateFromMap();
     };
     element.addEventListener("pointerdown", startPointerInteraction);
-    map.on("movestart move moveend zoomstart zoom zoomend viewreset resize", scheduleUpdateFromMap);
+    map.on("moveend zoomend viewreset resize", scheduleUpdateFromMap);
     updateFromMap();
 
     return () => {
@@ -1183,7 +1203,7 @@ function TransformedSheetLayer({
       dragCleanup?.();
       interactionCleanupRef.current = null;
       element.removeEventListener("pointerdown", startPointerInteraction);
-      map.off("movestart move moveend zoomstart zoom zoomend viewreset resize", scheduleUpdateFromMap);
+      map.off("moveend zoomend viewreset resize", scheduleUpdateFromMap);
       element.remove();
       containerRef.current = null;
     };
@@ -1195,7 +1215,7 @@ function TransformedSheetLayer({
       return;
     }
 
-    map.fire("move");
+    map.fire("moveend");
   }, [layer, isSelected, mode, globalOpacity, showLabel, map]);
 
   return null;
@@ -1253,11 +1273,11 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
         opacity={getModernTileLayerOpacity()}
         url={basemap.url}
       />
-      <SyncMapView center={props.center} zoom={props.zoom} />
+      <SyncMapView center={props.center} onViewMutation={props.onMapViewMutation} request={props.viewRefreshRequest ?? 0} source={props.requestedViewSource ?? "requested_view"} zoom={props.zoom} />
       <InvalidateMapSize request={props.fitBoundsRequest} />
-      <ForceLeafletTileRedraw center={props.center} onViewMutation={props.onMapViewMutation} request={props.viewRefreshRequest ?? 0} zoom={props.zoom} />
+      <ForceLeafletTileRedraw onViewMutation={props.onMapViewMutation} request={props.viewRefreshRequest ?? 0} />
       {props.plainTileOnly ? null : <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />}
-      <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapViewChange={props.onMapViewChange} />
+      <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapInteractionChange={props.onMapInteractionChange} onMapViewChange={props.onMapViewChange} />
       <FitBounds bounds={derivedBounds} enabled={props.fitBoundsEnabled ?? true} onViewMutation={props.onMapViewMutation} request={props.fitBoundsRequest} />
 
       {overlayRenderMode === "projective" ? sheetLayers

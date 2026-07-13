@@ -550,12 +550,15 @@ test("geocode view refresh forces Leaflet view, size invalidation, and tile redr
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
 
   assert.match(leafletComponent, /function ForceLeafletTileRedraw/);
+  assert.match(leafletComponent, /function SyncMapView/);
+  assert.match(leafletComponent, /request <= 0 \|\| lastRequest\.current === request/);
   assert.match(leafletComponent, /map\.setView\(center, zoom, \{ animate: false \}\)/);
   assert.match(leafletComponent, /map\.invalidateSize\(\{ animate: false \}\)/);
   assert.match(leafletComponent, /layer\.redraw\(\)/);
   assert.match(leafletComponent, /\[100, 500\]/);
   assert.match(studioComponent, /setMapViewRefreshRequest\(\(current\) => current \+ 1\)/);
   assert.match(studioComponent, /viewRefreshRequest=\{mapViewRefreshRequest\}/);
+  assert.match(studioComponent, /requestedViewSource=\{requestedViewSource\}/);
 });
 
 test("location search priority blocks stale near-zero center and avoids automatic FitBounds", () => {
@@ -569,7 +572,7 @@ test("location search priority blocks stale near-zero center and avoids automati
   assert.match(component, /A stale saved map position was prevented from replacing your selected location/);
   assert.match(component, /isNearZeroCoordinate\(nextCenter\)/);
   assert.doesNotMatch(findLocationBody, /setFitOverlayRequest/);
-  assert.match(component, /fitBoundsEnabled=\{!requestedGeocodeCenter \|\| Date\.now\(\) >= locationSearchGuardUntilRef\.current\}/);
+  assert.match(component, /fitBoundsEnabled=\{mapInteractionStatus !== "panning" && mapInteractionStatus !== "zooming"/);
 });
 
 test("invalid legacy sheet bounds are excluded from map layers and FitBounds inputs", () => {
@@ -598,9 +601,81 @@ test("projective overlay is anchored to Leaflet pane coordinates and updates thr
 
   assert.match(component, /L\.DomUtil\.setPosition\(element, offset\)/);
   assert.match(component, /map\.latLngToLayerPoint/);
-  assert.match(component, /movestart move moveend zoomstart zoom zoomend viewreset resize/);
+  assert.match(component, /moveend zoomend viewreset resize/);
+  assert.doesNotMatch(component, /movestart move moveend zoomstart zoom zoomend viewreset resize/);
   assert.match(component, /window\.requestAnimationFrame/);
   assert.match(component, /getProjectiveTransform\(imageSize\.width, imageSize\.height, points, offset\)/);
+});
+
+test("manual pan and zoom disable stale external view synchronization", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.match(component, /const clearActiveExternalViewRequest = useCallback/);
+  assert.match(component, /requestedGeocodeCenterRef\.current = null/);
+  assert.match(component, /locationSearchGuardUntilRef\.current = 0/);
+  assert.match(component, /isUserPanningRef\.current = true/);
+  assert.match(component, /isUserZoomingRef\.current = true/);
+  assert.match(leafletComponent, /dragstart\(\) \{/);
+  assert.match(leafletComponent, /onMapInteractionChange\?\.\("panning", "dragstart"\)/);
+  assert.match(leafletComponent, /onMapViewChange\(\[center\.lat, center\.lng\], map\.getZoom\(\), "user_pan"\)/);
+  assert.match(leafletComponent, /onMapViewChange\(\[center\.lat, center\.lng\], map\.getZoom\(\), "user_zoom"\)/);
+});
+
+test("setView only runs for explicit requested view token changes", () => {
+  const component = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const syncStart = component.indexOf("function SyncMapView");
+  const syncEnd = component.indexOf("function InvalidateMapSize", syncStart);
+  const syncBody = component.slice(syncStart, syncEnd);
+
+  assert.match(syncBody, /request: number/);
+  assert.match(syncBody, /lastRequest\.current = request/);
+  assert.match(syncBody, /onViewMutation\?\.\(source\)/);
+  assert.match(syncBody, /map\.setView\(center, zoom, \{ animate: false \}\)/);
+  assert.doesNotMatch(syncBody, /const key =/);
+});
+
+test("mode switching preserves map view and does not remount map layers", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.match(component, /commitGeographicMapSettings\(\{ editMode: "pan_modern_map", globalHistoricalOpacity: 1 \}, false\)/);
+  assert.match(component, /commitGeographicMapSettings\(\{ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 \}, false\)/);
+  assert.doesNotMatch(component, /key=\{geoEditMode\}/);
+  assert.doesNotMatch(component, /key=\{mapInteractionStatus\}/);
+  assert.match(leafletComponent, /key=\{`\$\{basemap\.key\}-\$\{tileRetry\}`\}/);
+});
+
+test("move and zoom persist only after final gesture events", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.match(component, /const scheduleMapViewPersistence = useCallback/);
+  assert.match(component, /window\.setTimeout\(\(\) => \{/);
+  assert.match(component, /saveMapViewOnly\(center, zoom\)/);
+  assert.match(component, /}, 800\)/);
+  assert.match(leafletComponent, /dragend\(\) \{/);
+  assert.match(leafletComponent, /zoomend\(\) \{/);
+  assert.doesNotMatch(leafletComponent, /move\(\) \{[\s\S]*onMapViewChange/);
+  assert.doesNotMatch(leafletComponent, /zoom\(\) \{[\s\S]*onMapViewChange/);
+});
+
+test("stale geocode and fit-bounds requests do not reapply after user pan or zoom", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(component, /clearActiveExternalViewRequest\(\)/);
+  assert.match(component, /setRequestedGeocodeCenter\(null\)/);
+  assert.match(component, /setFitBoundsActive\(false\)/);
+  assert.match(component, /fitBoundsEnabled=\{mapInteractionStatus !== "panning" && mapInteractionStatus !== "zooming"/);
+});
+
+test("overlay follows pan and zoom with exact recalculation on final events", () => {
+  const component = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+
+  assert.match(component, /map\.on\("moveend zoomend viewreset resize", scheduleUpdateFromMap\)/);
+  assert.match(component, /map\.off\("moveend zoomend viewreset resize", scheduleUpdateFromMap\)/);
+  assert.match(component, /window\.cancelAnimationFrame\(animationFrame\)/);
+  assert.match(component, /map\.fire\("moveend"\)/);
 });
 
 test("rectangular geographic overlay fallback uses native Leaflet ImageOverlay", () => {
