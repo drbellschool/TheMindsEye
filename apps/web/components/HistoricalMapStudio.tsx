@@ -140,12 +140,16 @@ type MapViewChangeSource =
   | "town_package"
   | "leaflet_moveend"
   | "leaflet_zoomend"
-  | "user_pan_zoom"
+  | "user_pan"
+  | "user_zoom"
+  | "requested_view"
   | "fit_bounds"
   | "force_tile_redraw"
   | "fit_sheet"
   | "reset_invalid_placements"
   | "reload_saved";
+
+type MapInteractionStatus = "idle" | "panning" | "zooming" | "saved";
 
 function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : "Unavailable";
@@ -670,6 +674,14 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [fitBoundsActive, setFitBoundsActive] = useState(false);
   const [staleViewBlocked, setStaleViewBlocked] = useState(false);
   const [overlayRenderMode, setOverlayRenderMode] = useState<"projective" | "rectangular">("projective");
+  const [requestedViewSource, setRequestedViewSource] = useState<MapViewChangeSource>("initial");
+  const [mapInteractionStatus, setMapInteractionStatus] = useState<MapInteractionStatus>("idle");
+  const isUserPanningRef = useRef(false);
+  const isUserZoomingRef = useRef(false);
+  const isProgrammaticViewChangeRef = useRef(false);
+  const mapViewSaveInFlightRef = useRef(false);
+  const mapViewSaveTimeoutRef = useRef<number | null>(null);
+  const mapViewSavedStatusTimeoutRef = useRef<number | null>(null);
   const [mapContainerSize, setMapContainerSize] = useState({ width: 0, height: 0 });
   const [autoFallbackNotice, setAutoFallbackNotice] = useState("");
   const present = history.present;
@@ -726,32 +738,175 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     return () => resizeObserver.disconnect();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (mapViewSaveTimeoutRef.current) {
+        window.clearTimeout(mapViewSaveTimeoutRef.current);
+      }
+      if (mapViewSavedStatusTimeoutRef.current) {
+        window.clearTimeout(mapViewSavedStatusTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleTileDiagnosticsChange = useCallback((diagnostics: ModernTileDiagnostics) => {
     setModernTileDiagnostics(diagnostics);
   }, []);
 
+  const requestExternalMapView = useCallback((center: GeoCoordinate, zoom: number, source: MapViewChangeSource, path: string) => {
+    if (!isOperationalMapCenter(center)) {
+      return;
+    }
+
+    isProgrammaticViewChangeRef.current = true;
+    setRequestedViewSource(source);
+    setLastViewChangeSource(source);
+    setLastCenterChangePath(path);
+    setMapCenter(center);
+    setModernMapZoom(zoom);
+    setMapViewRefreshRequest((current) => current + 1);
+    window.setTimeout(() => {
+      isProgrammaticViewChangeRef.current = false;
+    }, 750);
+  }, []);
+
+  const saveMapViewOnly = useCallback(async (center: GeoCoordinate, zoom: number) => {
+    if (
+      mapViewSaveInFlightRef.current ||
+      saveInFlightRef.current ||
+      !initialData.workspace ||
+      !initialData.activeTownPackage ||
+      !canAutosaveStudioMode(initialData.mode) ||
+      !isOperationalMapCenter(center)
+    ) {
+      return;
+    }
+
+    mapViewSaveInFlightRef.current = true;
+    try {
+      const response = await fetch("/api/community/historical-map-studio/sheet-georeferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          townPackageId: initialData.activeTownPackage.id,
+          mapYear: initialData.activeMapYear,
+          workspaceId: initialData.workspace.workspaceId,
+          workspaceName: initialData.workspace.name,
+          selectedBasemap: georeferenceDraft.selectedBasemap,
+          mapCenter: center,
+          mapZoom: zoom,
+          editMode: geoEditMode,
+          globalHistoricalOpacity: 1,
+          sheets: [],
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; savedAt?: string } | null;
+
+      if (response.ok && payload?.ok) {
+        setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+        setMapInteractionStatus("saved");
+        if (mapViewSavedStatusTimeoutRef.current) {
+          window.clearTimeout(mapViewSavedStatusTimeoutRef.current);
+        }
+        mapViewSavedStatusTimeoutRef.current = window.setTimeout(() => setMapInteractionStatus("idle"), 1800);
+      }
+    } finally {
+      mapViewSaveInFlightRef.current = false;
+    }
+  }, [geoEditMode, georeferenceDraft.selectedBasemap, initialData.activeMapYear, initialData.activeTownPackage, initialData.mode, initialData.workspace]);
+
+  const scheduleMapViewPersistence = useCallback((center: GeoCoordinate, zoom: number) => {
+    if (!isOperationalMapCenter(center)) {
+      return;
+    }
+
+    if (mapViewSaveTimeoutRef.current) {
+      window.clearTimeout(mapViewSaveTimeoutRef.current);
+    }
+
+    mapViewSaveTimeoutRef.current = window.setTimeout(() => {
+      mapViewSaveTimeoutRef.current = null;
+      void saveMapViewOnly(center, zoom);
+    }, 800);
+  }, [saveMapViewOnly]);
+
+  const clearActiveExternalViewRequest = useCallback(() => {
+    requestedGeocodeCenterRef.current = null;
+    locationSearchGuardUntilRef.current = 0;
+    setRequestedGeocodeCenter(null);
+    setFitBoundsActive(false);
+  }, []);
+
   const handleMapViewMutation = useCallback((source: string) => {
     setLastCenterChangePath(source);
+    if (source === "requested_view" || source === "location_search" || source === "town_package" || source === "reload_saved" || source === "fit_sheet" || source === "reset_invalid_placements") {
+      isProgrammaticViewChangeRef.current = true;
+    }
     if (source === "fit_bounds") {
       setFitBoundsActive(true);
     }
   }, []);
 
+  const handleMapInteractionChange = useCallback((state: "idle" | "panning" | "zooming", source: string) => {
+    if (state === "panning") {
+      if (mapViewSaveTimeoutRef.current) {
+        window.clearTimeout(mapViewSaveTimeoutRef.current);
+        mapViewSaveTimeoutRef.current = null;
+      }
+      isUserPanningRef.current = true;
+      clearActiveExternalViewRequest();
+      setMapInteractionStatus("panning");
+      setLastCenterChangePath(source);
+      return;
+    }
+
+    if (state === "zooming") {
+      if (mapViewSaveTimeoutRef.current) {
+        window.clearTimeout(mapViewSaveTimeoutRef.current);
+        mapViewSaveTimeoutRef.current = null;
+      }
+      isUserZoomingRef.current = true;
+      clearActiveExternalViewRequest();
+      setMapInteractionStatus("zooming");
+      setLastCenterChangePath(source);
+      return;
+    }
+
+    isUserPanningRef.current = false;
+    isUserZoomingRef.current = false;
+    if (mapInteractionStatus !== "saved") {
+      setMapInteractionStatus("idle");
+    }
+    setLastCenterChangePath(source);
+  }, [clearActiveExternalViewRequest, mapInteractionStatus]);
+
   const handleLeafletViewChange = useCallback((center: LatLngTuple, zoom: number, source: string = "leaflet_moveend") => {
     const nextCenter = { latitude: center[0], longitude: center[1] };
-    const normalizedSource = (source === "leaflet_zoomend" ? "leaflet_zoomend" : "leaflet_moveend") as MapViewChangeSource;
+    const normalizedSource = (
+      source === "user_pan"
+        ? "user_pan"
+        : source === "user_zoom"
+          ? "user_zoom"
+          : source === "leaflet_zoomend"
+            ? "leaflet_zoomend"
+            : "leaflet_moveend"
+    ) as MapViewChangeSource;
+    const userGestureSource = normalizedSource === "user_pan" || normalizedSource === "user_zoom";
     const requested = requestedGeocodeCenterRef.current;
     const guardActive = Boolean(requested && Date.now() < locationSearchGuardUntilRef.current);
 
     setLastViewChangeSource(normalizedSource);
     setLastCenterChangePath(source);
 
+    if (userGestureSource) {
+      clearActiveExternalViewRequest();
+      isProgrammaticViewChangeRef.current = false;
+    }
+
     if (guardActive && requested && isNearZeroCoordinate(nextCenter) && !coordinatesClose(nextCenter, requested)) {
       setStaleViewBlocked(true);
       setLocationMessage("A stale saved map position was prevented from replacing your selected location.");
-      setMapCenter(requested);
-      setModernMapZoom((currentZoom) => Math.max(14, Math.min(16, currentZoom || zoom || 15)));
-      setMapViewRefreshRequest((current) => current + 1);
+      requestExternalMapView(requested, Math.max(14, Math.min(16, modernMapZoom || zoom || 15)), "location_search", `${source}:restore_requested_geocode`);
       return;
     }
 
@@ -763,10 +918,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
 
     setMapCenter(nextCenter);
     setModernMapZoom(zoom);
+    if (userGestureSource) {
+      scheduleMapViewPersistence(nextCenter, zoom);
+    }
     if (!guardActive || coordinatesClose(nextCenter, requested)) {
       setFitBoundsActive(false);
     }
-  }, []);
+  }, [clearActiveExternalViewRequest, modernMapZoom, requestExternalMapView, scheduleMapViewPersistence]);
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -784,7 +942,6 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       ) {
         setGeoreferenceDraft((current) => ({ ...current, selectedBasemap: "esri_world_street" }));
         setAutoFallbackNotice("OpenStreetMap returned no visible tiles, so the studio switched to Alternate streets.");
-        setMapViewRefreshRequest((current) => current + 1);
       }
     }, 5_000);
 
@@ -803,12 +960,10 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     if (isNearZeroCoordinate(actual) && !coordinatesClose(actual, requested)) {
       setStaleViewBlocked(true);
       setLocationMessage("A stale saved map position was prevented from replacing your selected location.");
-      setMapCenter(requested);
-      setModernMapZoom((currentZoom) => Math.max(14, Math.min(16, currentZoom || tileRuntimeDebug.zoom || 15)));
       setLastCenterChangePath("tile_runtime_debug:blocked_stale_zero");
-      setMapViewRefreshRequest((current) => current + 1);
+      requestExternalMapView(requested, Math.max(14, Math.min(16, modernMapZoom || tileRuntimeDebug.zoom || 15)), "location_search", "tile_runtime_debug:restore_requested_geocode");
     }
-  }, [tileRuntimeDebug?.center?.latitude, tileRuntimeDebug?.center?.longitude, tileRuntimeDebug?.zoom]);
+  }, [modernMapZoom, requestExternalMapView, tileRuntimeDebug?.center?.latitude, tileRuntimeDebug?.center?.longitude, tileRuntimeDebug?.zoom]);
 
   useEffect(() => {
     const preferredAssetId = selectPreferredSheetAfterUpload(initialData.sheets, pendingUploadedAssetIdRef.current);
@@ -843,6 +998,11 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setLastCenterChangePath("initial_data_reload");
     setFitBoundsActive(false);
     setStaleViewBlocked(false);
+    setRequestedViewSource("initial");
+    setMapInteractionStatus("idle");
+    isUserPanningRef.current = false;
+    isUserZoomingRef.current = false;
+    isProgrammaticViewChangeRef.current = false;
   }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.geographicMap, initialData.workspace]);
 
   useEffect(() => {
@@ -1310,9 +1470,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     const reloadedCenter = payload.mapCenter && isOperationalMapCenter(payload.mapCenter) ? payload.mapCenter : null;
 
     if (reloadedCenter) {
-      setMapCenter(reloadedCenter);
-      setLastViewChangeSource("reload_saved");
-      setLastCenterChangePath("reloadSavedPlacement");
+      requestExternalMapView(reloadedCenter, payload.mapZoom ?? modernMapZoom, "reload_saved", "reloadSavedPlacement");
     }
 
     if (typeof payload.mapZoom === "number") {
@@ -1406,12 +1564,11 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
 
   function centerSelectedSheet() {
     if (studioMode !== "stitching" && selectedSheetGeoreference && hasOperationalSheetPlacement(selectedSheetGeoreference)) {
-      setMapCenter({ latitude: selectedSheetGeoreference.centerLatitude, longitude: selectedSheetGeoreference.centerLongitude });
-      setLastViewChangeSource("fit_sheet");
-      setLastCenterChangePath("centerSelectedSheet");
+      const nextCenter = { latitude: selectedSheetGeoreference.centerLatitude, longitude: selectedSheetGeoreference.centerLongitude };
+      requestExternalMapView(nextCenter, modernMapZoom, "fit_sheet", "centerSelectedSheet");
       commitGeographicMapSettings(
         {
-          center: { latitude: selectedSheetGeoreference.centerLatitude, longitude: selectedSheetGeoreference.centerLongitude },
+          center: nextCenter,
           zoom: modernMapZoom,
         },
         true,
@@ -1479,7 +1636,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     const nextSheets = geoPresent.sheets.map((sheet) => (sheet.assetId === repaired.assetId ? repaired : sheet));
 
     setSelectedAssetId(repaired.assetId);
-    setMapCenter(center);
+    requestExternalMapView(center, modernMapZoom, "reset_invalid_placements", "resetSelectedPlacementToTownCenter");
     setGeoEditMode("edit_historical_sheets");
     setSheetGeoPresent(
       {
@@ -1529,10 +1686,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       return hasOperationalSheetPlacement(sheet) ? sheet : removeSheetGeographicPlacement(sheet);
     });
 
-    setMapCenter(center);
+    requestExternalMapView(center, modernMapZoom, "reset_invalid_placements", "resetAllSheetPlacementsToCurrentTownLocation");
     setGeoEditMode("edit_historical_sheets");
-    setLastViewChangeSource("reset_invalid_placements");
-    setLastCenterChangePath("resetAllSheetPlacementsToCurrentTownLocation");
     setStaleViewBlocked(false);
     setSheetGeoPresent(
       {
@@ -1548,7 +1703,6 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
       true,
     );
     setSaveMessage(selectedWasPlaced ? "Invalid sheet placements were reset. Save placement to persist the repair." : "No selected sheet was available to place.");
-    setMapViewRefreshRequest((current) => current + 1);
   }
 
   function rotateSelectedSheet(deltaDegrees: number) {
@@ -1661,9 +1815,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     if (studioMode !== "stitching" && sheetGeoreference) {
       if (hasOperationalSheetPlacement(sheetGeoreference)) {
         const nextCenter = { latitude: sheetGeoreference.centerLatitude, longitude: sheetGeoreference.centerLongitude };
-        setMapCenter(nextCenter);
-        setLastViewChangeSource("fit_sheet");
-        setLastCenterChangePath("selectAndCenter");
+        requestExternalMapView(nextCenter, modernMapZoom, "fit_sheet", "selectAndCenter");
         setGeoEditMode("edit_historical_sheets");
         commitGeographicMapSettings({ center: nextCenter, editMode: "edit_historical_sheets" }, false);
       } else {
@@ -1783,11 +1935,12 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     locationSearchGuardUntilRef.current = Date.now() + 2_000;
     setStaleViewBlocked(false);
     setFitBoundsActive(false);
-    setLastViewChangeSource(saveToTownPackage ? "town_package" : "location_search");
-    setLastCenterChangePath(saveToTownPackage ? "findLocation:save_to_town_package" : "findLocation:location_search");
-    setMapCenter(view.center);
-    setModernMapZoom(view.zoom);
-    setMapViewRefreshRequest((current) => current + 1);
+    requestExternalMapView(
+      view.center,
+      view.zoom,
+      saveToTownPackage ? "town_package" : "location_search",
+      saveToTownPackage ? "findLocation:save_to_town_package" : "findLocation:location_search",
+    );
     setResolvedLocationSource(saveToTownPackage ? "town_package" : "location_search");
     setLocationStatus(saveToTownPackage ? "saved" : "found");
     setLocationMessage(
@@ -2262,6 +2415,14 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         : modernTileDiagnostics.successfulTiles > 0
           ? `Modern map: ${modernTileDiagnostics.successfulTiles} tiles loaded but not visibly painted`
         : `Modern map: loading ${selectedBasemap.label}`;
+  const mapInteractionStatusText =
+    mapInteractionStatus === "panning"
+      ? "Panning map"
+      : mapInteractionStatus === "zooming"
+        ? "Zooming map"
+        : mapInteractionStatus === "saved"
+          ? "Map position saved"
+          : "";
   const locationMarker = locationResult ? { latitude: locationResult.latitude, longitude: locationResult.longitude } : null;
   const activeTownCenter =
     typeof initialData.activeTownPackage?.centerLatitude === "number" && typeof initialData.activeTownPackage.centerLongitude === "number"
@@ -2413,6 +2574,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
           {plainMapTestMode ? "Studio map" : "Plain map test"}
         </button>
         <span className="minimal-sanborn-gps__map-status">{modernMapStatusText}</span>
+        {mapInteractionStatusText ? <span className="minimal-sanborn-gps__map-status">{mapInteractionStatusText}</span> : null}
         <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
       </header>
 
@@ -2439,7 +2601,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             center={[mapCenter.latitude, mapCenter.longitude]}
             controlPoints={[]}
             corners={selectedSheetGeoreference?.corners ?? createDefaultGeoCorners(mapCenter)}
-            fitBoundsEnabled={!requestedGeocodeCenter || Date.now() >= locationSearchGuardUntilRef.current}
+            fitBoundsEnabled={mapInteractionStatus !== "panning" && mapInteractionStatus !== "zooming" && (!requestedGeocodeCenter || Date.now() >= locationSearchGuardUntilRef.current)}
             fitBoundsRequest={fitOverlayRequest}
             globalHistoricalOpacity={1}
             imageUrl={null}
@@ -2451,6 +2613,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               commitSheetGeoreference(selectedSheetGeoreference.assetId, { corners: next.corners });
             }}
             onCursorMove={(latitude, longitude) => setMapCursor({ latitude, longitude })}
+            onMapInteractionChange={handleMapInteractionChange}
             onMapClick={(latitude, longitude) => {
               if (placementAnchorAssetId) {
                 addSheetToMap(placementAnchorAssetId, { latitude, longitude });
@@ -2473,6 +2636,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             overlayOpacity={0.5}
             overlayVisible={false}
             plainTileOnly={!hasPlacedHistoricalSheets}
+            requestedViewSource={requestedViewSource}
             selectedControlPointId=""
             selectedSheetAssetId={selectedAssetId}
             sheetEditMode={geoEditMode}
