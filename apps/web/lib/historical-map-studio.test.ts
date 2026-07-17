@@ -392,6 +392,120 @@ test("minimal GPS workflow renders upload controls inside the early-return inter
   assert.match(minimalInterface, /void uploadSheets\(event\.currentTarget\.files\)/);
 });
 
+test("minimal GPS toolbar uses grouped wrapping rows and gates GPS controls", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
+  const legacyStart = component.indexOf('className="historical-map-studio"');
+  const minimalInterface = component.slice(minimalStart, legacyStart);
+  const toolbarCssStart = css.indexOf(".minimal-sanborn-gps__toolbar {");
+  const toolbarCssEnd = css.indexOf(".minimal-sanborn-gps__toolbar-row,", toolbarCssStart);
+  const toolbarCss = css.slice(toolbarCssStart, toolbarCssEnd);
+
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--primary/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__status-row/);
+  assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__workflow-switch/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__gps-workflow/);
+  assert.match(minimalInterface, /Back to \{sanbornAtlasWorkflowSteps\.find/);
+  assert.match(minimalInterface, /aria-label="Atlas workflow step"/);
+  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps"/s);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Place sheet/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
+  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{selectedAsset/s);
+  assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
+  assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
+  assert.doesNotMatch(toolbarCss, /grid-auto-flow/);
+  assert.doesNotMatch(toolbarCss, /grid-auto-columns/);
+  assert.doesNotMatch(toolbarCss, /height:\s*44px/);
+  assert.doesNotMatch(toolbarCss, /overflow-x:\s*auto/);
+});
+
+test("missing Supabase warning names preview admin configuration without exposing service keys", () => {
+  const dataSource = readFileSync("lib/historical-map-studio-data.ts", "utf8");
+
+  assert.match(
+    dataSource,
+    /Supabase admin configuration is missing\. Add SUPABASE_URL \(or NEXT_PUBLIC_SUPABASE_URL\) and SUPABASE_SERVICE_ROLE_KEY to the Vercel Preview environment, then redeploy\./,
+  );
+  assert.doesNotMatch(dataSource, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(dataSource, /Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY\./);
+});
+
+test("draft atlas pages block piece inventory until page assignments are saved", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const workbenchComponent = readFileSync("components/SanbornPageWorkbench.tsx", "utf8");
+  const navigatorComponent = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+
+  assert.match(studioComponent, /pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean\(selectedAtlasPage && !selectedAtlasPage\.isPersisted\)/);
+  assert.match(studioComponent, /if \(!selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\) \{\s*setSaveStatus\("error"\);\s*setSaveMessage\("Save atlas page assignments before saving map pieces\."\);/s);
+  assert.match(studioComponent, /pendingStudioSelectionRef/);
+  assert.match(studioComponent, /workflowStepAfterSave = options\.continueToPieceInventory \? "piece_inventory" : atlasWorkflowStep/);
+  assert.match(studioComponent, /setAtlasWorkflowStep\(workflowStepAfterSave\)/);
+  assert.match(studioComponent, /saveAtlasPages\(\{ continueToPieceInventory: true \}\)/);
+  assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\}/);
+  assert.match(workbenchComponent, /Save the atlas page assignments before drawing map pieces\./);
+  assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw piece/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !selectedPiece\}[\s\S]*Add vertex/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < 3\}[\s\S]*Finish polygon/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length === 0\}[\s\S]*Clear draft/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !page\}[\s\S]*Save pieces/);
+  assert.match(navigatorComponent, /Draft assignment/);
+  assert.match(navigatorComponent, /Saved page/);
+  assert.match(navigatorComponent, /Save pages and continue/);
+});
+
+test("historical map studio uses compact chrome and sticky atlas actions", () => {
+  const shell = readFileSync("components/CommunityShell.tsx", "utf8");
+  const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(shell, /community-shell--studio-focus/);
+  assert.match(shell, /pathname === "\/community\/historical-map-studio"/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__frame\s*\{[\s\S]*height: calc\(100vh - 12px\);/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__frame::before\s*\{\s*display: none;\s*\}/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__main\s*\{[\s\S]*overflow: hidden;/);
+  assert.match(navigator, /sanborn-atlas-navigator__scroll/);
+  assert.match(navigator, /sanborn-atlas-navigator__footer/);
+  assert.match(css, /\.sanborn-atlas-navigator\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.sanborn-atlas-navigator__scroll\s*\{[\s\S]*overflow: auto;/);
+  assert.match(css, /\.sanborn-atlas-navigator__footer\s*\{[\s\S]*border-top:/);
+  assert.match(css, /\.sanborn-atlas-workflow\s*\{[\s\S]*grid-template-columns: clamp\(320px, 28vw, 380px\) minmax\(0, 1fr\);/);
+  assert.match(css, /\.sanborn-page-workbench\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\) clamp\(260px, 24vw, 330px\);/);
+});
+
+test("map piece saves restore selected page, piece, workflow, and source sheet after refresh", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(studioComponent, /type PendingStudioSelection = \{[\s\S]*pieceId\?: string;[\s\S]*assetId\?: string;/);
+  assert.match(studioComponent, /const restoredPage = pendingSelection[\s\S]*activePagesAfterRefresh\.find\(\(page\) => page\.pageId === pendingSelection\.pageId\) \?\? activePagesAfterRefresh\[0\] \?\? null/s);
+  assert.match(studioComponent, /const restoredPiece = pendingSelection\?\.pieceId[\s\S]*piecesAfterRefresh\.find\(\(piece\) => piece\.pieceId === pendingSelection\.pieceId\) \?\? piecesAfterRefresh\[0\] \?\? null/s);
+  assert.match(studioComponent, /setSelectedAssetId\(preferredAssetId\)/);
+  assert.match(studioComponent, /setSelectedMapPieceId\(nextPieceId\)/);
+  assert.match(studioComponent, /setAtlasWorkflowStep\(pendingSelection\.workflowStep\)/);
+  assert.match(studioComponent, /pendingStudioSelectionRef\.current = \{\s*atlasId: selectedAtlasPage\.atlasId,\s*pageId: selectedAtlasPage\.pageId,\s*pieceId: selectedMapPieceId \|\| piecesToSave\[0\]\?\.pieceId,\s*assetId: selectedAtlasPage\.sanbornSheetAssetId,\s*workflowStep: atlasWorkflowStep,/s);
+  assert.match(studioComponent, /onSelectPage=\{\(pageId\) => \{[\s\S]*setSelectedAssetId\(nextPage\.sanbornSheetAssetId\);[\s\S]*changeAtlasWorkflowStep\("piece_inventory"\);/);
+});
+
+test("GPS alignment opens at useful town zoom and exposes GPS-only workflow controls", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+
+  assert.match(studioComponent, /const minimumUsefulGpsZoom = 12;/);
+  assert.match(studioComponent, /const defaultTownGpsZoom = 16;/);
+  assert.match(studioComponent, /const minimumAutoGpsZoom = 15;/);
+  assert.match(studioComponent, /const maximumAutoGpsZoom = 18;/);
+  assert.match(studioComponent, /function isMeaningfulGpsView[\s\S]*zoom >= minimumUsefulGpsZoom/s);
+  assert.match(studioComponent, /function getGpsTownCenterFromState[\s\S]*return getTownCenterFromState\(studioState\) \?\? getDefaultTownCenter\(studioState\);/);
+  assert.match(studioComponent, /function getGpsTownZoomFromState[\s\S]*Math\.min\(maximumAutoGpsZoom, Math\.max\(minimumAutoGpsZoom, preferredZoom\)\)/s);
+  assert.match(studioComponent, /function centerGpsOnActiveTown[\s\S]*const center = getGpsTownCenterFromState\(initialData\);[\s\S]*const zoom = getGpsTownZoomFromState\(initialData\);[\s\S]*setGeoEditMode\("pan_modern_map"\);[\s\S]*requestExternalMapView\(center, zoom, "town_package"/s);
+  assert.match(studioComponent, /function enterGpsAlignment[\s\S]*if \(!isMeaningfulGpsView\(mapCenter, modernMapZoom\)\) \{\s*centerGpsOnActiveTown\("enterGpsAlignment"\);/s);
+  assert.match(studioComponent, /function backToLastNonGpsWorkflowStep\(\)[\s\S]*changeAtlasWorkflowStep\(lastNonGpsWorkflowStep\);/);
+  assert.match(studioComponent, /minimal-sanborn-gps__gps-workflow/);
+  assert.match(studioComponent, /Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
+});
+
 test("upload refresh selects the newly returned uploaded sheet when present", () => {
   const assets = [{ assetId: "asset-1" }, { assetId: "asset-2" }];
 
@@ -593,7 +707,7 @@ test("reset all sheet placements preserves assets and places selected sheet at c
   assert.match(component, /return hasOperationalSheetPlacement\(sheet\) \? sheet : removeSheetGeographicPlacement\(sheet\)/);
   assert.match(component, /resetSheetGeographicPlacementToCenter/);
   assert.match(component, /opacity: 0\.5/);
-  assert.match(component, /Reset all sheet placements to current town location/);
+  assert.match(component, />\s*Reset all\s*</);
 });
 
 test("projective overlay is anchored to Leaflet pane coordinates and updates through zoom lifecycle", () => {
@@ -685,7 +799,7 @@ test("rectangular geographic overlay fallback uses native Leaflet ImageOverlay",
   assert.match(component, /overlayRenderMode\?: "projective" \| "rectangular"/);
   assert.match(component, /overlayRenderMode === "rectangular"/);
   assert.match(component, /<ImageOverlay bounds=\{boundsToLeaflet\(bounds\)\}/);
-  assert.match(studioComponent, /Rectangular geographic overlay/);
+  assert.match(studioComponent, /Rectangular overlay/);
   assert.match(studioComponent, /overlayRenderMode=\{overlayRenderMode\}/);
 });
 

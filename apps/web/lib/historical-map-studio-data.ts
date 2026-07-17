@@ -43,6 +43,8 @@ import {
   type StudioWorkspace,
 } from "./historical-map-studio.ts";
 import { sanbornSheetBucket } from "./sanborn-intake.ts";
+import { createEmptySanbornAtlasInventoryState } from "./sanborn-atlas.ts";
+import { loadSanbornAtlasInventory } from "./sanborn-atlas-data.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
 type TownPackageRow = {
@@ -259,6 +261,7 @@ function createEmptyState(input: {
     sheetGeoreferences: [],
     geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
+    atlasInventory: createEmptySanbornAtlasInventoryState({ warningMessage: input.warningMessage }),
     selectedBasemap: "osm",
     overlayOpacity: 0.65,
     overlayVisible: true,
@@ -732,7 +735,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   if (!hasSupabaseAdminEnv()) {
     return createEmptyState({
       mode: "read_only",
-      warningMessage: "Supabase admin configuration is missing. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      warningMessage:
+        "Supabase admin configuration is missing. Add SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY to the Vercel Preview environment, then redeploy.",
     });
   }
 
@@ -835,6 +839,12 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const mapLayerRows = (mapLayersResult.data ?? []) as MapLayerRow[];
   const assetRows = (assetsResult.data ?? []) as SanbornAssetRow[];
   const assets = await mapAssets(supabase, activeTownPackage, assetRows, sourceRows);
+  const atlasInventory = await loadSanbornAtlasInventory({
+    supabase,
+    town: activeTownPackage,
+    assets,
+    mapYear: activeMapYear,
+  });
   let workspaceWarning: string | undefined;
   let workspaceRow: WorkspaceRow | null = null;
   let placementRows: PlacementRow[] = [];
@@ -946,6 +956,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     sheetGeoreferences,
     geographicMap: mapGeographicSettings(workspaceRow, resolvedMapView),
     georeferences,
+    atlasInventory,
     selectedBasemap: workspaceRow?.selected_basemap ?? primaryGeoreference?.selectedBasemap ?? "osm",
     overlayOpacity: primaryGeoreference?.overlayOpacity ?? 0.65,
     overlayVisible: primaryGeoreference?.overlayVisible ?? true,
