@@ -244,6 +244,86 @@ textarea {
   padding: 24px;
 }
 
+.community-shell--studio-focus {
+  padding: 6px;
+}
+
+.community-shell--studio-focus .community-shell__frame {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: calc(100vh - 12px);
+  border-radius: 16px;
+}
+
+.community-shell--studio-focus .community-shell__topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, auto) minmax(180px, 1fr);
+  align-items: center;
+  gap: 5px 10px;
+  padding: 7px 10px;
+}
+
+.community-shell--studio-focus .community-shell__brand {
+  gap: 8px;
+}
+
+.community-shell--studio-focus .community-shell__meta {
+  display: none;
+}
+
+.community-shell--studio-focus .community-shell__eyebrow {
+  margin: 0;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
+}
+
+.community-shell--studio-focus .community-shell__title {
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.community-shell--studio-focus .community-shell__subtitle {
+  margin: 2px 0 0;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.66rem;
+}
+
+.community-shell--studio-focus .community-shell__status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.community-shell--studio-focus .community-shell__status .source-warning {
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+}
+
+.community-shell--studio-focus .community-shell__nav {
+  grid-column: 1 / -1;
+  gap: 5px;
+}
+
+.community-shell--studio-focus .nav-pill {
+  padding: 0.36rem 0.52rem;
+  font-size: 0.7rem;
+}
+
+.community-shell--studio-focus .community-shell__main {
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+  padding: 0;
+}
+
 .panel {
   position: relative;
   overflow: hidden;
@@ -2347,6 +2427,10 @@ body:has(.minimal-sanborn-gps) {
   overflow: hidden;
 }
 
+.community-shell--studio-focus .minimal-sanborn-gps {
+  height: 100%;
+}
+
 .minimal-sanborn-gps {
   height: calc(100vh - 56px);
   min-height: 0;
@@ -2377,7 +2461,6 @@ body:has(.minimal-sanborn-gps) {
 
 .minimal-sanborn-gps__toolbar-row,
 .minimal-sanborn-gps__toolbar-group,
-.minimal-sanborn-gps__workflow-switch,
 .minimal-sanborn-gps__messages {
   display: flex;
   flex-wrap: wrap;
@@ -2730,34 +2813,60 @@ body:has(.minimal-sanborn-gps) {
   background: rgba(92, 28, 20, 0.92);
 }
 
-.minimal-sanborn-gps__workflow-switch {
-  align-items: center;
-  gap: 4px;
-  flex: 1 1 520px;
-}
-
 .sanborn-atlas-workflow {
   display: grid;
-  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  grid-template-columns: clamp(320px, 28vw, 380px) minmax(0, 1fr);
   gap: 0;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   background: #171614;
   color: #f6e7cb;
 }
 
 .sanborn-atlas-navigator {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   border-right: 1px solid rgba(226, 190, 126, 0.18);
   background: #15130f;
-  padding: 10px;
 }
 
 .sanborn-atlas-navigator__steps {
   display: grid;
   gap: 5px;
-  margin-bottom: 10px;
+  margin: 0;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.14);
+  background: #15130f;
+  padding: 8px;
+}
+
+.sanborn-atlas-navigator__scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 10px;
+}
+
+.sanborn-atlas-navigator__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid rgba(226, 190, 126, 0.18);
+  background: rgba(18, 18, 16, 0.98);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.22);
+  padding: 8px;
+}
+
+.sanborn-atlas-navigator__footer .sanborn-button {
+  flex: 1 1 100%;
+}
+
+.sanborn-atlas-navigator__footer-note {
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .sanborn-atlas-navigator__step {
@@ -2812,9 +2921,9 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-atlas-navigator__section {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   border-top: 1px solid rgba(226, 190, 126, 0.14);
-  padding: 10px 0;
+  padding: 8px 0;
 }
 
 .sanborn-atlas-navigator__section h3 {
@@ -2920,6 +3029,30 @@ body:has(.minimal-sanborn-gps) {
   overflow-wrap: anywhere;
 }
 
+.sanborn-atlas-page-list__state {
+  justify-self: start;
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  border-radius: 999px;
+  background: rgba(226, 190, 126, 0.12);
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.24rem 0.42rem;
+}
+
+.sanborn-atlas-page-list__state.is-saved {
+  border-color: rgba(109, 159, 103, 0.46);
+  background: rgba(109, 159, 103, 0.16);
+  color: #dbeecf;
+}
+
+.sanborn-atlas-page-list__state.is-draft {
+  border-color: rgba(209, 160, 69, 0.46);
+  background: rgba(209, 160, 69, 0.14);
+  color: #fff1cc;
+}
+
 .sanborn-atlas-page-list__actions,
 .sanborn-piece-list__actions {
   display: flex;
@@ -2929,8 +3062,9 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-page-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(290px, 360px);
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 330px);
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -2942,14 +3076,14 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-page-workbench__source {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   background: #20211f;
 }
 
 .sanborn-page-workbench__pieces {
   border-left: 1px solid rgba(226, 190, 126, 0.18);
   background: #141a19;
-  padding: 10px;
+  padding: 8px;
 }
 
 .sanborn-page-workbench__header {
@@ -2960,7 +3094,7 @@ body:has(.minimal-sanborn-gps) {
   min-width: 0;
   border-bottom: 1px solid rgba(226, 190, 126, 0.16);
   background: rgba(12, 12, 11, 0.8);
-  padding: 8px 10px;
+  padding: 6px 8px;
 }
 
 .sanborn-page-workbench__header > div:first-child {
@@ -2981,11 +3115,25 @@ body:has(.minimal-sanborn-gps) {
   gap: 5px;
 }
 
+.sanborn-page-workbench__blocker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.18);
+  background: rgba(64, 42, 20, 0.72);
+  color: #fff1cc;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  padding: 7px 8px;
+}
+
 .sanborn-page-workbench__image-frame {
   position: relative;
   align-self: start;
   width: min(100%, 1400px);
-  margin: 14px auto;
+  margin: 8px auto;
   border: 1px solid rgba(226, 190, 126, 0.22);
   background: #ede9dd;
 }

@@ -18,10 +18,11 @@ export function CommunityShell({ dataSource, demo, warningMessage, children }: C
   const pathname = usePathname();
   const title = demo.town.year > 0 ? `${demo.town.name} ${demo.town.year}` : demo.town.name;
   const topbarChips = demo.statusChips.filter((chip) => ["Release", "Sources", "Sheets", "Buildings"].includes(chip.label));
+  const isHistoricalMapStudio = pathname === "/community/historical-map-studio";
 
   return (
     <div className="page-root">
-      <div className="community-shell">
+      <div className={`community-shell${isHistoricalMapStudio ? " community-shell--studio-focus" : ""}`}>
         <div className="community-shell__frame">
           <header className="community-shell__topbar">
             <div className="community-shell__brand">

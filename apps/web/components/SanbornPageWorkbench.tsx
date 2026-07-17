@@ -26,6 +26,8 @@ type SanbornPageWorkbenchProps = {
   onReorderPiece: (pieceId: string, direction: "up" | "down") => void;
   onDeletePiece: (pieceId: string) => void;
   onSavePieces: () => void;
+  onSavePagesAndContinue?: () => void;
+  savePagesAndContinueDisabled?: boolean;
 };
 
 type EditorMode = "select" | "draw" | "add_vertex";
@@ -99,6 +101,8 @@ export function SanbornPageWorkbench({
   onReorderPiece,
   onDeletePiece,
   onSavePieces,
+  onSavePagesAndContinue,
+  savePagesAndContinueDisabled = false,
 }: SanbornPageWorkbenchProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("select");
@@ -107,6 +111,8 @@ export function SanbornPageWorkbench({
   const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(null);
   const sortedPieces = useMemo(() => [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence), [pieces]);
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
+  const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
+  const editorReadOnly = readOnly || pieceInventoryBlocked;
 
   useEffect(() => {
     setSelectedVertexIndex(null);
@@ -128,7 +134,7 @@ export function SanbornPageWorkbench({
   }
 
   function handleSvgPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || !asset) {
+    if (editorReadOnly || !asset) {
       return;
     }
 
@@ -150,7 +156,7 @@ export function SanbornPageWorkbench({
   }
 
   function handleSvgPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || !draggingVertex || !asset) {
+    if (editorReadOnly || !draggingVertex || !asset) {
       return;
     }
 
@@ -171,7 +177,7 @@ export function SanbornPageWorkbench({
   }
 
   function finishDraft() {
-    if (!page || draftPoints.length < 3) {
+    if (editorReadOnly || !page || draftPoints.length < 3) {
       return;
     }
 
@@ -184,7 +190,7 @@ export function SanbornPageWorkbench({
   }
 
   function removeSelectedVertex() {
-    if (!selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3) {
+    if (editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3) {
       return;
     }
 
@@ -212,26 +218,34 @@ export function SanbornPageWorkbench({
             <button className={`sanborn-button${editorMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setEditorMode("select")} type="button">
               Select
             </button>
-            <button className={`sanborn-button${editorMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={readOnly} onClick={() => setEditorMode("draw")} type="button">
+            <button className={`sanborn-button${editorMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("draw")} type="button">
               Draw piece
             </button>
-            <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={readOnly || !selectedPiece} onClick={() => setEditorMode("add_vertex")} type="button">
+            <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly || !selectedPiece} onClick={() => setEditorMode("add_vertex")} type="button">
               Add vertex
             </button>
-            <button className="sanborn-button" disabled={readOnly || !selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3} onClick={removeSelectedVertex} type="button">
+            <button className="sanborn-button" disabled={editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3} onClick={removeSelectedVertex} type="button">
               Remove vertex
             </button>
-            <button className="sanborn-button sanborn-button--primary" disabled={readOnly || draftPoints.length < 3} onClick={finishDraft} type="button">
+            <button className="sanborn-button sanborn-button--primary" disabled={editorReadOnly || draftPoints.length < 3} onClick={finishDraft} type="button">
               Finish polygon
             </button>
-            <button className="sanborn-button" disabled={readOnly || draftPoints.length === 0} onClick={clearDraft} type="button">
+            <button className="sanborn-button" disabled={editorReadOnly || draftPoints.length === 0} onClick={clearDraft} type="button">
               Clear draft
             </button>
-            <button className="sanborn-button sanborn-button--primary" disabled={readOnly || !page} onClick={onSavePieces} type="button">
+            <button className="sanborn-button sanborn-button--primary" disabled={editorReadOnly || !page} onClick={onSavePieces} type="button">
               Save pieces
             </button>
           </div>
         </header>
+        {pieceInventoryBlocked ? (
+          <div className="sanborn-page-workbench__blocker">
+            <strong>Save the atlas page assignments before drawing map pieces.</strong>
+            <button className="sanborn-button sanborn-button--primary" disabled={savePagesAndContinueDisabled || !onSavePagesAndContinue} onClick={onSavePagesAndContinue} type="button">
+              Save pages and continue
+            </button>
+          </div>
+        ) : null}
         <div className="sanborn-page-workbench__image-frame">
           {asset.signedUrl ? (
             <img alt={asset.originalFilename} src={asset.signedUrl} />
@@ -303,7 +317,7 @@ export function SanbornPageWorkbench({
         <SanbornPieceList
           pieces={sortedPieces}
           selectedPieceId={selectedPieceId}
-          readOnly={readOnly}
+          readOnly={editorReadOnly}
           onDeletePiece={onDeletePiece}
           onPatchPiece={onPatchPiece}
           onReorderPiece={onReorderPiece}

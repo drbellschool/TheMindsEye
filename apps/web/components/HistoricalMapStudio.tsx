@@ -16,7 +16,6 @@ import {
 } from "@/components/HistoricalMapLeaflet";
 import {
   SanbornAtlasNavigator,
-  sanbornAtlasWorkflowSteps,
   type SanbornAtlasWorkflowStep,
 } from "@/components/SanbornAtlasNavigator";
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
@@ -655,6 +654,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
   const [selectedAtlasPageId, setSelectedAtlasPageId] = useState(initialData.atlasInventory.activePageId ?? "");
   const [selectedMapPieceId, setSelectedMapPieceId] = useState("");
+  const pendingAtlasPageSelectionRef = useRef<{ atlasId: string; pageId: string; workflowStep: SanbornAtlasWorkflowStep } | null>(null);
   const [studioMode, setStudioMode] = useState<StudioWorkspaceMode>("georeferencing");
   const [geoEditMode, setGeoEditMode] = useState<GeoEditMode>(getInitialGeoEditMode(initialData, initialSelectedAssetId));
   const [movementScope, setMovementScope] = useState<MovementScope>(initialData.geographicMap.movementScope);
@@ -732,6 +732,8 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
   const atlasReadOnly = initialData.mode === "read_only" || atlasInventory.mode === "read_only";
+  const pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean(selectedAtlasPage && !selectedAtlasPage.isPersisted);
+  const atlasSaveActionsDisabled = saveStatus === "saving";
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1019,9 +1021,23 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setGlobalHistoricalOpacity(initialData.geographicMap.globalHistoricalOpacity);
     setSheetImageStates({});
     setAtlasInventory(initialData.atlasInventory);
-    setSelectedAtlasId(initialData.atlasInventory.activeAtlasId ?? "");
-    setSelectedAtlasPageId(initialData.atlasInventory.activePageId ?? "");
+    const pendingAtlasPageSelection = pendingAtlasPageSelectionRef.current;
+    const pendingAtlasExists = pendingAtlasPageSelection
+      ? initialData.atlasInventory.atlases.some((atlas) => atlas.atlasId === pendingAtlasPageSelection.atlasId)
+      : false;
+    const pendingPageExists = pendingAtlasPageSelection
+      ? initialData.atlasInventory.pages.some((page) => page.atlasId === pendingAtlasPageSelection.atlasId && page.pageId === pendingAtlasPageSelection.pageId)
+      : false;
+    const nextAtlasId = pendingAtlasPageSelection && pendingAtlasExists ? pendingAtlasPageSelection.atlasId : initialData.atlasInventory.activeAtlasId ?? "";
+    const nextPageId = pendingAtlasPageSelection && pendingPageExists ? pendingAtlasPageSelection.pageId : initialData.atlasInventory.activePageId ?? "";
+
+    setSelectedAtlasId(nextAtlasId);
+    setSelectedAtlasPageId(nextPageId);
     setSelectedMapPieceId("");
+    if (pendingAtlasPageSelection && pendingPageExists) {
+      setAtlasWorkflowStep(pendingAtlasPageSelection.workflowStep);
+    }
+    pendingAtlasPageSelectionRef.current = null;
     setLocationQuery(initialData.activeTownPackage?.locationQuery ?? initialData.activeTownPackage?.locationDisplayName ?? "");
     setLocationResult(null);
     setLocationStatus("idle");
@@ -2263,12 +2279,15 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     replaceActiveAtlasPages(reorderAtlasPages(sorted));
   }
 
-  async function saveAtlasPages() {
+  async function saveAtlasPages(options: { continueToPieceInventory?: boolean } = {}) {
     if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) {
       setSaveStatus("error");
       setSaveMessage("Atlas page save failed: active atlas or write access is unavailable.");
       return;
     }
+
+    const selectedPageIdBeforeSave = selectedAtlasPage?.pageId ?? selectedAtlasPageId;
+    const workflowStepAfterSave = options.continueToPieceInventory ? "piece_inventory" : atlasWorkflowStep;
 
     setSaveStatus("saving");
     setSaveMessage("Saving atlas pages...");
@@ -2301,6 +2320,16 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setSaveStatus("saved");
     setSaveMessage("Atlas pages saved.");
     setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    if (selectedPageIdBeforeSave) {
+      pendingAtlasPageSelectionRef.current = {
+        atlasId: activeAtlas.atlasId,
+        pageId: selectedPageIdBeforeSave,
+        workflowStep: workflowStepAfterSave,
+      };
+      setSelectedAtlasId(activeAtlas.atlasId);
+      setSelectedAtlasPageId(selectedPageIdBeforeSave);
+      setAtlasWorkflowStep(workflowStepAfterSave);
+    }
     router.refresh();
   }
 
@@ -2330,7 +2359,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   }
 
   async function saveMapPieces() {
-    if (!initialData.activeTownPackage || !selectedAtlasPage || atlasReadOnly) {
+    if (!selectedAtlasPage || !selectedAtlasPage.isPersisted) {
+      setSaveStatus("error");
+      setSaveMessage("Save atlas page assignments before saving map pieces.");
+      return;
+    }
+
+    if (!initialData.activeTownPackage || atlasReadOnly) {
       setSaveStatus("error");
       setSaveMessage("Map piece save failed: active atlas page or write access is unavailable.");
       return;
@@ -2757,23 +2792,6 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               ))}
             </select>
           </div>
-          <div className="minimal-sanborn-gps__workflow-switch" role="group" aria-label="Sanborn atlas workflow">
-            {sanbornAtlasWorkflowSteps.map((step) => (
-              <button
-                className={`sanborn-button${atlasWorkflowStep === step.id ? " sanborn-button--primary" : ""}`}
-                key={step.id}
-                onClick={() => {
-                  setAtlasWorkflowStep(step.id);
-                  if (step.id === "gps_alignment") {
-                    setStudioMode("georeferencing");
-                  }
-                }}
-                type="button"
-              >
-                {step.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--source" aria-label="Source and sheet controls">
@@ -2825,15 +2843,13 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               </option>
             ))}
           </select>
-          {isGpsAlignmentStep ? (
-            <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
-              Place sheet
-            </button>
-          ) : null}
         </div>
 
         {isGpsAlignmentStep ? (
           <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps" aria-label="GPS controls">
+            <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
+              Place sheet
+            </button>
             <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
               <button
                 className={`sanborn-button${geoEditMode === "pan_modern_map" ? " sanborn-button--primary" : ""}`}
@@ -3100,11 +3116,14 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               selectedPageId={selectedAtlasPage?.pageId ?? selectedAtlasPageId}
               sourceOptions={initialData.sourceOptions}
               workflowStep={atlasWorkflowStep}
+              pieceInventoryBlocked={pieceInventoryBlocked}
+              saveActionsDisabled={atlasSaveActionsDisabled}
               onAssignAsset={assignAssetToAtlas}
               onPatchPage={patchAtlasPage}
               onReorderPage={reorderAtlasPage}
               onSaveAtlas={(draft) => void saveAtlas(draft)}
               onSavePages={() => void saveAtlasPages()}
+              onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
               onSelectAtlas={(atlasId) => {
                 setSelectedAtlasId(atlasId);
                 const nextPage = atlasInventory.pages
@@ -3129,13 +3148,15 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
               asset={selectedAtlasPageAsset}
               page={selectedAtlasPage}
               pieces={selectedAtlasPagePieces}
-              readOnly={atlasReadOnly || !selectedAtlasPage}
+              readOnly={atlasReadOnly || !selectedAtlasPage || !selectedAtlasPage.isPersisted}
+              savePagesAndContinueDisabled={atlasReadOnly || atlasSaveActionsDisabled}
               selectedPieceId={selectedMapPieceId}
               onDeletePiece={deleteMapPiece}
               onPatchPiece={patchMapPiece}
               onPiecesChange={replaceSelectedPagePieces}
               onReorderPiece={reorderMapPiece}
               onSavePieces={() => void saveMapPieces()}
+              onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
               onSelectPiece={setSelectedMapPieceId}
             />
           </div>

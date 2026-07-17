@@ -406,7 +406,10 @@ test("minimal GPS toolbar uses grouped wrapping rows and gates GPS controls", ()
   assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
   assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps/);
   assert.match(minimalInterface, /minimal-sanborn-gps__status-row/);
+  assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__workflow-switch/);
+  assert.doesNotMatch(minimalInterface, /sanbornAtlasWorkflowSteps\.map/);
   assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps"/s);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Place sheet/);
   assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{selectedAsset/s);
   assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
   assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
@@ -425,6 +428,48 @@ test("missing Supabase warning names preview admin configuration without exposin
   );
   assert.doesNotMatch(dataSource, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(dataSource, /Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY\./);
+});
+
+test("draft atlas pages block piece inventory until page assignments are saved", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const workbenchComponent = readFileSync("components/SanbornPageWorkbench.tsx", "utf8");
+  const navigatorComponent = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+
+  assert.match(studioComponent, /pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean\(selectedAtlasPage && !selectedAtlasPage\.isPersisted\)/);
+  assert.match(studioComponent, /if \(!selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\) \{\s*setSaveStatus\("error"\);\s*setSaveMessage\("Save atlas page assignments before saving map pieces\."\);/s);
+  assert.match(studioComponent, /pendingAtlasPageSelectionRef/);
+  assert.match(studioComponent, /workflowStepAfterSave = options\.continueToPieceInventory \? "piece_inventory" : atlasWorkflowStep/);
+  assert.match(studioComponent, /setAtlasWorkflowStep\(workflowStepAfterSave\)/);
+  assert.match(studioComponent, /saveAtlasPages\(\{ continueToPieceInventory: true \}\)/);
+  assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\}/);
+  assert.match(workbenchComponent, /Save the atlas page assignments before drawing map pieces\./);
+  assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw piece/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !selectedPiece\}[\s\S]*Add vertex/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < 3\}[\s\S]*Finish polygon/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length === 0\}[\s\S]*Clear draft/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !page\}[\s\S]*Save pieces/);
+  assert.match(navigatorComponent, /Draft assignment/);
+  assert.match(navigatorComponent, /Saved page/);
+  assert.match(navigatorComponent, /Save pages and continue/);
+});
+
+test("historical map studio uses compact chrome and sticky atlas actions", () => {
+  const shell = readFileSync("components/CommunityShell.tsx", "utf8");
+  const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(shell, /community-shell--studio-focus/);
+  assert.match(shell, /pathname === "\/community\/historical-map-studio"/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__frame\s*\{[\s\S]*height: calc\(100vh - 12px\);/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__main\s*\{[\s\S]*overflow: hidden;/);
+  assert.match(navigator, /sanborn-atlas-navigator__scroll/);
+  assert.match(navigator, /sanborn-atlas-navigator__footer/);
+  assert.match(css, /\.sanborn-atlas-navigator\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.sanborn-atlas-navigator__scroll\s*\{[\s\S]*overflow: auto;/);
+  assert.match(css, /\.sanborn-atlas-navigator__footer\s*\{[\s\S]*border-top:/);
+  assert.match(css, /\.sanborn-atlas-workflow\s*\{[\s\S]*grid-template-columns: clamp\(320px, 28vw, 380px\) minmax\(0, 1fr\);/);
+  assert.match(css, /\.sanborn-page-workbench\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\) clamp\(260px, 24vw, 330px\);/);
 });
 
 test("upload refresh selects the newly returned uploaded sheet when present", () => {
