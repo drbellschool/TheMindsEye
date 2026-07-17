@@ -1,6 +1,7 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 import type { HistoricalMapGeoreference } from "./historical-map-georeference.ts";
 import type { GeographicMapSettings, SheetGeographicTransform } from "./historical-map-sheet-georeference.ts";
+import type { SanbornAtlasInventoryState } from "./sanborn-atlas.ts";
 
 export const studioAutosaveDelayMs = 13_000;
 export const studioSignedUrlTtlSeconds = 300;
@@ -137,6 +138,7 @@ export type HistoricalMapStudioState = {
   sheetGeoreferences: SheetGeographicTransform[];
   geographicMap: GeographicMapSettings;
   georeferences: HistoricalMapGeoreference[];
+  atlasInventory: SanbornAtlasInventoryState;
   selectedBasemap: string;
   overlayOpacity: number;
   overlayVisible: boolean;

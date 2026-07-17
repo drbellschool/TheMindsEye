@@ -14,6 +14,12 @@ import {
   type LeafletTileRuntimeDebug,
   type SheetImageLoadState,
 } from "@/components/HistoricalMapLeaflet";
+import {
+  SanbornAtlasNavigator,
+  sanbornAtlasWorkflowSteps,
+  type SanbornAtlasWorkflowStep,
+} from "@/components/SanbornAtlasNavigator";
+import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
 import {
@@ -75,6 +81,15 @@ import {
   type SheetGeographicTransform,
 } from "@/lib/historical-map-sheet-georeference";
 import { reviewStatuses } from "@/lib/community-status";
+import {
+  buildDefaultSanbornPageId,
+  getUnassignedSanbornUploads,
+  normalizeOptionalSanbornText,
+  reorderAtlasPages,
+  reorderMapPieces,
+  type SanbornAtlasPageRecord,
+  type SanbornMapPieceRecord,
+} from "@/lib/sanborn-atlas";
 import {
   boundsFromCorners,
   calculateAffineTransform,
@@ -635,6 +650,11 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
   const [canvasCoordinates, setCanvasCoordinates] = useState({ x: 0, y: 0 });
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>(createMetadataDraft(initialData.sheets[0] ?? null));
+  const [atlasInventory, setAtlasInventory] = useState(initialData.atlasInventory);
+  const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
+  const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
+  const [selectedAtlasPageId, setSelectedAtlasPageId] = useState(initialData.atlasInventory.activePageId ?? "");
+  const [selectedMapPieceId, setSelectedMapPieceId] = useState("");
   const [studioMode, setStudioMode] = useState<StudioWorkspaceMode>("georeferencing");
   const [geoEditMode, setGeoEditMode] = useState<GeoEditMode>(getInitialGeoEditMode(initialData, initialSelectedAssetId));
   const [movementScope, setMovementScope] = useState<MovementScope>(initialData.geographicMap.movementScope);
@@ -700,6 +720,18 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     saveStatus,
     warningMessage: initialData.warningMessage,
   });
+  const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
+  const activeAtlasPages = atlasInventory.pages
+    .filter((page) => page.atlasId === selectedAtlasId)
+    .sort((left, right) => left.pageSequence - right.pageSequence);
+  const selectedAtlasPage = activeAtlasPages.find((page) => page.pageId === selectedAtlasPageId) ?? activeAtlasPages[0] ?? null;
+  const selectedAtlasPageAsset = selectedAtlasPage ? sheets.find((sheet) => sheet.assetId === selectedAtlasPage.sanbornSheetAssetId) ?? null : null;
+  const selectedAtlasPagePieces = selectedAtlasPage
+    ? atlasInventory.pieces
+        .filter((piece) => piece.atlasPageId === selectedAtlasPage.pageId)
+        .sort((left, right) => left.pieceSequence - right.pieceSequence)
+    : [];
+  const atlasReadOnly = initialData.mode === "read_only" || atlasInventory.mode === "read_only";
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -986,6 +1018,10 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     setMovementScope(initialData.geographicMap.movementScope);
     setGlobalHistoricalOpacity(initialData.geographicMap.globalHistoricalOpacity);
     setSheetImageStates({});
+    setAtlasInventory(initialData.atlasInventory);
+    setSelectedAtlasId(initialData.atlasInventory.activeAtlasId ?? "");
+    setSelectedAtlasPageId(initialData.atlasInventory.activePageId ?? "");
+    setSelectedMapPieceId("");
     setLocationQuery(initialData.activeTownPackage?.locationQuery ?? initialData.activeTownPackage?.locationDisplayName ?? "");
     setLocationResult(null);
     setLocationStatus("idle");
@@ -1003,7 +1039,7 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     isUserPanningRef.current = false;
     isUserZoomingRef.current = false;
     isProgrammaticViewChangeRef.current = false;
-  }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.geographicMap, initialData.workspace]);
+  }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.geographicMap, initialData.workspace, initialData.atlasInventory]);
 
   useEffect(() => {
     setMetadataDraft(createMetadataDraft(selectedAsset));
@@ -2074,6 +2110,269 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     }
   }
 
+  function replaceActiveAtlasPages(nextActivePages: SanbornAtlasPageRecord[]) {
+    if (!activeAtlas) {
+      return;
+    }
+
+    const nextPages = [
+      ...atlasInventory.pages.filter((page) => page.atlasId !== activeAtlas.atlasId),
+      ...reorderAtlasPages(nextActivePages),
+    ];
+
+    setAtlasInventory({
+      ...atlasInventory,
+      pages: nextPages,
+      unassignedAssetIds: getUnassignedSanbornUploads(sheets, nextPages).map((asset) => asset.assetId),
+    });
+  }
+
+  function replaceSelectedPagePieces(nextPieces: SanbornMapPieceRecord[]) {
+    if (!selectedAtlasPage) {
+      return;
+    }
+
+    setAtlasInventory({
+      ...atlasInventory,
+      pieces: [
+        ...atlasInventory.pieces.filter((piece) => piece.atlasPageId !== selectedAtlasPage.pageId),
+        ...reorderMapPieces(nextPieces),
+      ],
+    });
+  }
+
+  async function saveAtlas(draft: {
+    atlasId?: string;
+    title: string;
+    editionYear: string;
+    editionDate: string;
+    volumeLabel: string;
+    expectedPageCount: string;
+    sourceRecordId: string;
+  }) {
+    if (!initialData.activeTownPackage || atlasReadOnly) {
+      setSaveStatus("error");
+      setSaveMessage("Atlas save failed: active town package or write access is unavailable.");
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage("Saving Sanborn atlas...");
+    const response = await fetch("/api/community/historical-map-studio/atlases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        townPackageId: initialData.activeTownPackage.id,
+        mapYear: initialData.activeMapYear,
+        atlasId: draft.atlasId,
+        title: draft.title,
+        editionYear: Number(draft.editionYear),
+        editionDate: draft.editionDate,
+        volumeLabel: draft.volumeLabel,
+        expectedPageCount: draft.expectedPageCount ? Number(draft.expectedPageCount) : null,
+        sourceRecordId: draft.sourceRecordId || null,
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; atlasId?: string; message?: string; savedAt?: string } | null;
+
+    if (!response.ok || !payload?.ok || !payload.atlasId) {
+      setSaveStatus("error");
+      setSaveMessage(payload?.message ?? "Sanborn atlas save failed.");
+      return;
+    }
+
+    setSelectedAtlasId(payload.atlasId);
+    setSaveStatus("saved");
+    setSaveMessage("Sanborn atlas saved.");
+    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    router.refresh();
+  }
+
+  function assignAssetToAtlas(assetId: string) {
+    if (!activeAtlas) {
+      setSaveStatus("error");
+      setSaveMessage("Create or select a Sanborn atlas before assigning uploads.");
+      return;
+    }
+
+    if (activeAtlasPages.some((page) => page.sanbornSheetAssetId === assetId)) {
+      return;
+    }
+
+    const asset = sheets.find((candidate) => candidate.assetId === assetId);
+
+    if (!asset) {
+      setSaveStatus("error");
+      setSaveMessage("Uploaded sheet metadata is unavailable.");
+      return;
+    }
+
+    const nextSequence = Math.max(0, ...activeAtlasPages.map((page) => page.pageSequence)) + 1;
+    const pageType = asset.sheetNumber ? "numbered_sheet" : "unknown";
+    const nextPage: SanbornAtlasPageRecord = {
+      rowId: "",
+      pageId: buildDefaultSanbornPageId({ atlasId: activeAtlas.atlasId, assetId: asset.assetId }),
+      atlasRowId: activeAtlas.rowId,
+      atlasId: activeAtlas.atlasId,
+      sanbornSheetAssetId: asset.assetId,
+      sanbornSheetAssetRowId: asset.rowId,
+      pageSequence: nextSequence,
+      pageType,
+      sheetNumber: asset.sheetNumber,
+      volumeLabel: activeAtlas.volumeLabel,
+      displayLabel: asset.sheetNumber ? `Sheet ${asset.sheetNumber}` : asset.originalFilename,
+      reviewStatus: "unknown",
+      evidenceClassification: "unknown",
+      updatedAt: null,
+      isPersisted: false,
+    };
+
+    replaceActiveAtlasPages([...activeAtlasPages, nextPage]);
+    setSelectedAtlasPageId(nextPage.pageId);
+    setAtlasWorkflowStep("page_classification");
+    setSaveStatus("idle");
+    setSaveMessage("Assigned upload to atlas page draft. Save page order to persist it.");
+  }
+
+  function patchAtlasPage(pageId: string, patch: Partial<SanbornAtlasPageRecord>) {
+    const nextPages = activeAtlasPages.map((page) =>
+      page.pageId === pageId
+        ? {
+            ...page,
+            ...patch,
+            displayLabel: patch.displayLabel !== undefined ? normalizeOptionalSanbornText(patch.displayLabel, 160) : page.displayLabel,
+            volumeLabel: patch.volumeLabel !== undefined ? normalizeOptionalSanbornText(patch.volumeLabel, 80) : page.volumeLabel,
+          }
+        : page,
+    );
+
+    replaceActiveAtlasPages(nextPages);
+  }
+
+  function reorderAtlasPage(pageId: string, direction: "up" | "down") {
+    const sorted = [...activeAtlasPages].sort((left, right) => left.pageSequence - right.pageSequence);
+    const index = sorted.findIndex((page) => page.pageId === pageId);
+
+    if (index < 0) {
+      return;
+    }
+
+    const nextIndex = direction === "up" ? Math.max(0, index - 1) : Math.min(sorted.length - 1, index + 1);
+    const [page] = sorted.splice(index, 1);
+    sorted.splice(nextIndex, 0, page);
+    replaceActiveAtlasPages(reorderAtlasPages(sorted));
+  }
+
+  async function saveAtlasPages() {
+    if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) {
+      setSaveStatus("error");
+      setSaveMessage("Atlas page save failed: active atlas or write access is unavailable.");
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage("Saving atlas pages...");
+    const pagesToSave = reorderAtlasPages(activeAtlasPages);
+    const response = await fetch("/api/community/historical-map-studio/atlas-pages", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        townPackageId: initialData.activeTownPackage.id,
+        atlasId: activeAtlas.atlasId,
+        pages: pagesToSave.map((page) => ({
+          pageId: page.pageId,
+          assetId: page.sanbornSheetAssetId,
+          pageSequence: page.pageSequence,
+          pageType: page.pageType,
+          sheetNumber: page.sheetNumber,
+          volumeLabel: page.volumeLabel,
+          displayLabel: page.displayLabel,
+        })),
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
+
+    if (!response.ok || !payload?.ok) {
+      setSaveStatus("error");
+      setSaveMessage(payload?.message ?? "Atlas page save failed.");
+      return;
+    }
+
+    setSaveStatus("saved");
+    setSaveMessage("Atlas pages saved.");
+    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    router.refresh();
+  }
+
+  function patchMapPiece(pieceId: string, patch: Partial<SanbornMapPieceRecord>) {
+    replaceSelectedPagePieces(selectedAtlasPagePieces.map((piece) => (piece.pieceId === pieceId ? { ...piece, ...patch } : piece)));
+  }
+
+  function reorderMapPiece(pieceId: string, direction: "up" | "down") {
+    const sorted = [...selectedAtlasPagePieces].sort((left, right) => left.pieceSequence - right.pieceSequence);
+    const index = sorted.findIndex((piece) => piece.pieceId === pieceId);
+
+    if (index < 0) {
+      return;
+    }
+
+    const nextIndex = direction === "up" ? Math.max(0, index - 1) : Math.min(sorted.length - 1, index + 1);
+    const [piece] = sorted.splice(index, 1);
+    sorted.splice(nextIndex, 0, piece);
+    replaceSelectedPagePieces(reorderMapPieces(sorted));
+  }
+
+  function deleteMapPiece(pieceId: string) {
+    replaceSelectedPagePieces(selectedAtlasPagePieces.filter((piece) => piece.pieceId !== pieceId));
+    if (selectedMapPieceId === pieceId) {
+      setSelectedMapPieceId("");
+    }
+  }
+
+  async function saveMapPieces() {
+    if (!initialData.activeTownPackage || !selectedAtlasPage || atlasReadOnly) {
+      setSaveStatus("error");
+      setSaveMessage("Map piece save failed: active atlas page or write access is unavailable.");
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage("Saving map pieces...");
+    const piecesToSave = reorderMapPieces(selectedAtlasPagePieces);
+    const response = await fetch("/api/community/historical-map-studio/map-pieces", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        townPackageId: initialData.activeTownPackage.id,
+        pageId: selectedAtlasPage.pageId,
+        pieces: piecesToSave.map((piece) => ({
+          pieceId: piece.pieceId,
+          parentPieceId: piece.parentPieceId,
+          pieceSequence: piece.pieceSequence,
+          pieceType: piece.pieceType,
+          blockNumberText: piece.blockNumberText,
+          titleText: piece.titleText,
+          sourcePolygon: piece.sourcePolygon,
+          creationMethod: piece.creationMethod,
+          inventoryStatus: piece.inventoryStatus,
+          notes: piece.notes,
+        })),
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
+
+    if (!response.ok || !payload?.ok) {
+      setSaveStatus("error");
+      setSaveMessage(payload?.message ?? "Map piece save failed.");
+      return;
+    }
+
+    setSaveStatus("saved");
+    setSaveMessage("Map pieces saved.");
+    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    router.refresh();
+  }
+
   function setGeoreferenceTarget(targetType: "sheet" | "workspace") {
     const targetAssetId = targetType === "sheet" ? selectedAsset?.assetId ?? sheets[0]?.assetId ?? null : null;
     setGeoreferenceDraft(createGeoreferenceDraft(initialData, targetAssetId));
@@ -2453,6 +2752,23 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             <option key={year} value={year}>{year}</option>
           ))}
         </select>
+        <div className="minimal-sanborn-gps__workflow-switch" role="group" aria-label="Sanborn atlas workflow">
+          {sanbornAtlasWorkflowSteps.map((step) => (
+            <button
+              className={`sanborn-button${atlasWorkflowStep === step.id ? " sanborn-button--primary" : ""}`}
+              key={step.id}
+              onClick={() => {
+                setAtlasWorkflowStep(step.id);
+                if (step.id === "gps_alignment") {
+                  setStudioMode("georeferencing");
+                }
+              }}
+              type="button"
+            >
+              {step.label}
+            </button>
+          ))}
+        </div>
         <input
           aria-label="Town, address, or ZIP"
           className="minimal-sanborn-gps__location"
@@ -2583,6 +2899,9 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
         {locationMessage ? <p className={`minimal-sanborn-gps__notice ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</p> : null}
         {autoFallbackNotice ? <p className="minimal-sanborn-gps__notice is-warning">{autoFallbackNotice}</p> : null}
         {uploadStatusText ? <p className={`minimal-sanborn-gps__notice ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</p> : null}
+        {saveMessage ? <p className={`minimal-sanborn-gps__notice ${saveStatus === "error" ? "is-error" : ""}`}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
+        {atlasWorkflowStep === "gps_alignment" ? (
+          <>
         {selectedAsset && !selectedSheetPlaced ? <p className="minimal-sanborn-gps__notice">Selected sheet is not on the map yet. Click Place sheet.</p> : null}
         {selectedSheetPlaced && selectedAsset && !selectedAsset.signedUrl ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image is waiting for a signed URL.</p> : null}
         {selectedAsset?.signedUrlError ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image failed to get a signed URL: {selectedAsset.signedUrlError}</p> : null}
@@ -2748,6 +3067,58 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
             </button>
           </div>
         </details>
+          </>
+        ) : (
+          <div className="sanborn-atlas-workflow">
+            <SanbornAtlasNavigator
+              assets={sheets}
+              fallbackYear={initialData.activeMapYear}
+              inventory={atlasInventory}
+              readOnly={atlasReadOnly}
+              selectedAtlasId={selectedAtlasId}
+              selectedPageId={selectedAtlasPage?.pageId ?? selectedAtlasPageId}
+              sourceOptions={initialData.sourceOptions}
+              workflowStep={atlasWorkflowStep}
+              onAssignAsset={assignAssetToAtlas}
+              onPatchPage={patchAtlasPage}
+              onReorderPage={reorderAtlasPage}
+              onSaveAtlas={(draft) => void saveAtlas(draft)}
+              onSavePages={() => void saveAtlasPages()}
+              onSelectAtlas={(atlasId) => {
+                setSelectedAtlasId(atlasId);
+                const nextPage = atlasInventory.pages
+                  .filter((page) => page.atlasId === atlasId)
+                  .sort((left, right) => left.pageSequence - right.pageSequence)[0];
+                setSelectedAtlasPageId(nextPage?.pageId ?? "");
+                setSelectedMapPieceId("");
+              }}
+              onSelectPage={(pageId) => {
+                setSelectedAtlasPageId(pageId);
+                setAtlasWorkflowStep("piece_inventory");
+                setSelectedMapPieceId("");
+              }}
+              onWorkflowStepChange={(step) => {
+                setAtlasWorkflowStep(step);
+                if (step === "gps_alignment") {
+                  setStudioMode("georeferencing");
+                }
+              }}
+            />
+            <SanbornPageWorkbench
+              asset={selectedAtlasPageAsset}
+              page={selectedAtlasPage}
+              pieces={selectedAtlasPagePieces}
+              readOnly={atlasReadOnly || !selectedAtlasPage}
+              selectedPieceId={selectedMapPieceId}
+              onDeletePiece={deleteMapPiece}
+              onPatchPiece={patchMapPiece}
+              onPiecesChange={replaceSelectedPagePieces}
+              onReorderPiece={reorderMapPiece}
+              onSavePieces={() => void saveMapPieces()}
+              onSelectPiece={setSelectedMapPieceId}
+            />
+          </div>
+        )}
       </main>
     </section>
   );
