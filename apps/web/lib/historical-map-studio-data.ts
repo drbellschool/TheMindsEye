@@ -735,7 +735,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   if (!hasSupabaseAdminEnv()) {
     return createEmptyState({
       mode: "read_only",
-      warningMessage: "Supabase admin configuration is missing. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      warningMessage:
+        "Supabase admin configuration is missing. Add SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY to the Vercel Preview environment, then redeploy.",
     });
   }
 

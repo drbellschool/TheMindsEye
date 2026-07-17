@@ -392,6 +392,41 @@ test("minimal GPS workflow renders upload controls inside the early-return inter
   assert.match(minimalInterface, /void uploadSheets\(event\.currentTarget\.files\)/);
 });
 
+test("minimal GPS toolbar uses grouped wrapping rows and gates GPS controls", () => {
+  const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
+  const legacyStart = component.indexOf('className="historical-map-studio"');
+  const minimalInterface = component.slice(minimalStart, legacyStart);
+  const toolbarCssStart = css.indexOf(".minimal-sanborn-gps__toolbar {");
+  const toolbarCssEnd = css.indexOf(".minimal-sanborn-gps__toolbar-row,", toolbarCssStart);
+  const toolbarCss = css.slice(toolbarCssStart, toolbarCssEnd);
+
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--primary/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__status-row/);
+  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps"/s);
+  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{selectedAsset/s);
+  assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
+  assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
+  assert.doesNotMatch(toolbarCss, /grid-auto-flow/);
+  assert.doesNotMatch(toolbarCss, /grid-auto-columns/);
+  assert.doesNotMatch(toolbarCss, /height:\s*44px/);
+  assert.doesNotMatch(toolbarCss, /overflow-x:\s*auto/);
+});
+
+test("missing Supabase warning names preview admin configuration without exposing service keys", () => {
+  const dataSource = readFileSync("lib/historical-map-studio-data.ts", "utf8");
+
+  assert.match(
+    dataSource,
+    /Supabase admin configuration is missing\. Add SUPABASE_URL \(or NEXT_PUBLIC_SUPABASE_URL\) and SUPABASE_SERVICE_ROLE_KEY to the Vercel Preview environment, then redeploy\./,
+  );
+  assert.doesNotMatch(dataSource, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(dataSource, /Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY\./);
+});
+
 test("upload refresh selects the newly returned uploaded sheet when present", () => {
   const assets = [{ assetId: "asset-1" }, { assetId: "asset-2" }];
 
@@ -593,7 +628,7 @@ test("reset all sheet placements preserves assets and places selected sheet at c
   assert.match(component, /return hasOperationalSheetPlacement\(sheet\) \? sheet : removeSheetGeographicPlacement\(sheet\)/);
   assert.match(component, /resetSheetGeographicPlacementToCenter/);
   assert.match(component, /opacity: 0\.5/);
-  assert.match(component, /Reset all sheet placements to current town location/);
+  assert.match(component, />\s*Reset all\s*</);
 });
 
 test("projective overlay is anchored to Leaflet pane coordinates and updates through zoom lifecycle", () => {
@@ -685,7 +720,7 @@ test("rectangular geographic overlay fallback uses native Leaflet ImageOverlay",
   assert.match(component, /overlayRenderMode\?: "projective" \| "rectangular"/);
   assert.match(component, /overlayRenderMode === "rectangular"/);
   assert.match(component, /<ImageOverlay bounds=\{boundsToLeaflet\(bounds\)\}/);
-  assert.match(studioComponent, /Rectangular geographic overlay/);
+  assert.match(studioComponent, /Rectangular overlay/);
   assert.match(studioComponent, /overlayRenderMode=\{overlayRenderMode\}/);
 });
 

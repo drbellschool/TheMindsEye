@@ -2351,7 +2351,7 @@ body:has(.minimal-sanborn-gps) {
   height: calc(100vh - 56px);
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: #11100d;
   overflow: hidden;
 }
@@ -2366,17 +2366,48 @@ body:has(.minimal-sanborn-gps) {
 
 .minimal-sanborn-gps__toolbar {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  overflow: visible;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.18);
+  background: linear-gradient(180deg, rgba(24, 19, 13, 0.98), rgba(35, 28, 18, 0.94));
+  padding: 7px 8px;
+}
+
+.minimal-sanborn-gps__toolbar-row,
+.minimal-sanborn-gps__toolbar-group,
+.minimal-sanborn-gps__workflow-switch,
+.minimal-sanborn-gps__messages {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.minimal-sanborn-gps__toolbar-row {
   align-items: center;
   gap: 6px;
-  min-width: 0;
-  height: 44px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border-bottom: 1px solid rgba(226, 190, 126, 0.18);
-  background: linear-gradient(90deg, rgba(24, 19, 13, 0.98), rgba(35, 28, 18, 0.94));
-  padding: 5px 8px;
+}
+
+.minimal-sanborn-gps__toolbar-row--primary {
+  gap: 8px;
+}
+
+.minimal-sanborn-gps__toolbar-row--source,
+.minimal-sanborn-gps__toolbar-row--gps {
+  gap: 5px;
+}
+
+.minimal-sanborn-gps__toolbar-group {
+  align-items: center;
+  gap: 5px;
+}
+
+.minimal-sanborn-gps__status-row {
+  align-items: flex-start;
+  gap: 6px;
+  border-top: 1px solid rgba(226, 190, 126, 0.1);
+  padding-top: 4px;
 }
 
 .minimal-sanborn-gps__title {
@@ -2384,6 +2415,7 @@ body:has(.minimal-sanborn-gps) {
   font-size: 0.82rem;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  margin-right: 2px;
 }
 
 .minimal-sanborn-gps__select,
@@ -2401,23 +2433,28 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__select {
-  max-width: 160px;
+  width: clamp(140px, 16vw, 220px);
+  max-width: 100%;
 }
 
 .minimal-sanborn-gps__year {
   width: 76px;
+  max-width: 100%;
 }
 
 .minimal-sanborn-gps__sheet {
-  width: 240px;
+  width: clamp(220px, 28vw, 390px);
+  max-width: 100%;
 }
 
 .minimal-sanborn-gps__basemap {
-  width: 150px;
+  width: clamp(132px, 15vw, 170px);
+  max-width: 100%;
 }
 
 .minimal-sanborn-gps__location {
-  width: 210px;
+  width: clamp(190px, 22vw, 320px);
+  max-width: 100%;
 }
 
 .minimal-sanborn-gps__mode,
@@ -2445,11 +2482,9 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__status {
-  min-width: 116px;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 112px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 1px solid rgba(226, 190, 126, 0.22);
   border-radius: 999px;
   background: rgba(10, 9, 7, 0.68);
@@ -2459,11 +2494,9 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__map-status {
-  min-width: 168px;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 150px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 1px solid rgba(109, 159, 103, 0.34);
   border-radius: 999px;
   background: rgba(10, 9, 7, 0.68);
@@ -2475,6 +2508,35 @@ body:has(.minimal-sanborn-gps) {
 .minimal-sanborn-gps__status.is-error {
   border-color: rgba(232, 117, 91, 0.68);
   color: #ffd7cc;
+}
+
+.minimal-sanborn-gps__messages {
+  align-items: flex-start;
+  flex: 1 1 260px;
+  gap: 5px;
+}
+
+.minimal-sanborn-gps__message {
+  min-width: 0;
+  max-width: min(100%, 680px);
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  border-radius: 999px;
+  background: rgba(10, 9, 7, 0.58);
+  color: #f6e7cb;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  padding: 0.28rem 0.55rem;
+}
+
+.minimal-sanborn-gps__message.is-error {
+  border-color: rgba(232, 117, 91, 0.68);
+  color: #ffd7cc;
+}
+
+.minimal-sanborn-gps__message.is-warning {
+  border-color: rgba(226, 190, 126, 0.62);
+  color: #fff1cc;
 }
 
 .minimal-sanborn-gps__map {
@@ -2669,9 +2731,9 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__workflow-switch {
-  display: flex;
   align-items: center;
   gap: 4px;
+  flex: 1 1 520px;
 }
 
 .sanborn-atlas-workflow {

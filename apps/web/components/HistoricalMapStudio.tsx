@@ -2727,180 +2727,201 @@ export function HistoricalMapStudio({ initialData }: { initialData: HistoricalMa
     typeof initialData.activeTownPackage?.centerLatitude === "number" && typeof initialData.activeTownPackage.centerLongitude === "number"
       ? `${formatCoordinate(initialData.activeTownPackage.centerLatitude)}, ${formatCoordinate(initialData.activeTownPackage.centerLongitude)}`
       : "unavailable";
+  const isGpsAlignmentStep = atlasWorkflowStep === "gps_alignment";
+  const toolbarSaveMessage = saveMessage ? `${saveMessage} Last saved: ${lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.` : "";
 
   return (
     <section className="minimal-sanborn-gps" aria-label="Minimal Sanborn GPS alignment tool">
       <header className="minimal-sanborn-gps__toolbar">
-        <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
-        <select
-          aria-label="Town package"
-          className="minimal-sanborn-gps__select"
-          value={initialData.activeTownPackage?.id ?? ""}
-          onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}
-        >
-          {initialData.townPackages.map((town) => (
-            <option key={town.id} value={town.id}>{town.name}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Map year"
-          className="minimal-sanborn-gps__year"
-          value={initialData.activeMapYear ?? ""}
-          onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}
-        >
-          {initialData.availableMapYears.map((year) => (
-            <option key={year} value={year}>{year}</option>
-          ))}
-        </select>
-        <div className="minimal-sanborn-gps__workflow-switch" role="group" aria-label="Sanborn atlas workflow">
-          {sanbornAtlasWorkflowSteps.map((step) => (
-            <button
-              className={`sanborn-button${atlasWorkflowStep === step.id ? " sanborn-button--primary" : ""}`}
-              key={step.id}
-              onClick={() => {
-                setAtlasWorkflowStep(step.id);
-                if (step.id === "gps_alignment") {
-                  setStudioMode("georeferencing");
-                }
-              }}
-              type="button"
+        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--primary" aria-label="Primary navigation">
+          <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
+          <div className="minimal-sanborn-gps__toolbar-group" aria-label="Town and year selectors">
+            <select
+              aria-label="Town package"
+              className="minimal-sanborn-gps__select"
+              value={initialData.activeTownPackage?.id ?? ""}
+              onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}
             >
-              {step.label}
-            </button>
-          ))}
+              {initialData.townPackages.map((town) => (
+                <option key={town.id} value={town.id}>{town.name}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Map year"
+              className="minimal-sanborn-gps__year"
+              value={initialData.activeMapYear ?? ""}
+              onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}
+            >
+              {initialData.availableMapYears.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <div className="minimal-sanborn-gps__workflow-switch" role="group" aria-label="Sanborn atlas workflow">
+            {sanbornAtlasWorkflowSteps.map((step) => (
+              <button
+                className={`sanborn-button${atlasWorkflowStep === step.id ? " sanborn-button--primary" : ""}`}
+                key={step.id}
+                onClick={() => {
+                  setAtlasWorkflowStep(step.id);
+                  if (step.id === "gps_alignment") {
+                    setStudioMode("georeferencing");
+                  }
+                }}
+                type="button"
+              >
+                {step.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <input
-          aria-label="Town, address, or ZIP"
-          className="minimal-sanborn-gps__location"
-          onChange={(event) => setLocationQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void findLocation(false);
-            }
-          }}
-          placeholder="Town, address, or ZIP"
-          value={locationQuery}
-        />
-        <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(false)} type="button">
-          Find location
-        </button>
-        {locationResult && initialData.activeTownPackage ? (
-          <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(true)} type="button">
-            Use this location for {initialData.activeTownPackage.name} {initialData.activeMapYear}
-          </button>
-        ) : null}
-        <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">
-          Upload Sanborn sheets
-        </button>
-        <input
-          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
-          hidden
-          multiple
-          onChange={(event) => {
-            void uploadSheets(event.currentTarget.files);
-            event.currentTarget.value = "";
-          }}
-          ref={uploadInputRef}
-          type="file"
-        />
-        <select
-          aria-label="Sanborn sheet"
-          className="minimal-sanborn-gps__sheet"
-          value={selectedAssetId}
-          onChange={(event) => selectAndCenter(event.target.value)}
-        >
-          <option value="">Select sheet</option>
-          {sheets.map((sheet) => (
-            <option key={sheet.assetId} value={sheet.assetId}>
-              Sheet {sheet.sheetNumber ?? "?"} - {sheet.originalFilename}
-            </option>
-          ))}
-        </select>
-        <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
-          Place sheet
-        </button>
-        <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
-          <button
-            className={`sanborn-button${geoEditMode === "pan_modern_map" ? " sanborn-button--primary" : ""}`}
-            onClick={() => {
-              setGeoEditMode("pan_modern_map");
-              commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
-            }}
-            type="button"
-          >
-            Pan modern map
-          </button>
-          <button
-            className={`sanborn-button${geoEditMode === "edit_historical_sheets" ? " sanborn-button--primary" : ""}`}
-            onClick={() => {
-              setGeoEditMode("edit_historical_sheets");
-              commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
-            }}
-            type="button"
-          >
-            Edit Sanborn sheet
-          </button>
-        </div>
-        <label className="minimal-sanborn-gps__opacity">
-          <span>Opacity</span>
+
+        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--source" aria-label="Source and sheet controls">
           <input
-            disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
-            max="1"
-            min="0.05"
-            step="0.01"
-            type="range"
-            value={selectedOpacity}
-            onChange={(event) => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity: Number(event.target.value) }) : undefined}
+            aria-label="Town, address, or ZIP"
+            className="minimal-sanborn-gps__location"
+            onChange={(event) => setLocationQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void findLocation(false);
+              }
+            }}
+            placeholder="Town, address, or ZIP"
+            value={locationQuery}
           />
-          <output>{Math.round(selectedOpacity * 100)}%</output>
-        </label>
-        <div className="minimal-sanborn-gps__quick-opacity" aria-label="Quick opacity">
-          {[0.25, 0.5, 0.75, 1].map((opacity) => (
+          <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(false)} type="button">
+            Find location
+          </button>
+          {locationResult && initialData.activeTownPackage ? (
+            <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(true)} type="button">
+              Use this location for {initialData.activeTownPackage.name} {initialData.activeMapYear}
+            </button>
+          ) : null}
+          <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">
+            Upload Sanborn sheets
+          </button>
+          <input
+            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            hidden
+            multiple
+            onChange={(event) => {
+              void uploadSheets(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+            ref={uploadInputRef}
+            type="file"
+          />
+          <select
+            aria-label="Sanborn sheet"
+            className="minimal-sanborn-gps__sheet"
+            value={selectedAssetId}
+            onChange={(event) => selectAndCenter(event.target.value)}
+          >
+            <option value="">Select sheet</option>
+            {sheets.map((sheet) => (
+              <option key={sheet.assetId} value={sheet.assetId}>
+                Sheet {sheet.sheetNumber ?? "?"} - {sheet.originalFilename}
+              </option>
+            ))}
+          </select>
+          {isGpsAlignmentStep ? (
+            <button className="sanborn-button sanborn-button--primary" disabled={!selectedAssetId} onClick={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)} type="button">
+              Place sheet
+            </button>
+          ) : null}
+        </div>
+
+        {isGpsAlignmentStep ? (
+          <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps" aria-label="GPS controls">
+            <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
+              <button
+                className={`sanborn-button${geoEditMode === "pan_modern_map" ? " sanborn-button--primary" : ""}`}
+                onClick={() => {
+                  setGeoEditMode("pan_modern_map");
+                  commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
+                }}
+                type="button"
+              >
+                Pan modern map
+              </button>
+              <button
+                className={`sanborn-button${geoEditMode === "edit_historical_sheets" ? " sanborn-button--primary" : ""}`}
+                onClick={() => {
+                  setGeoEditMode("edit_historical_sheets");
+                  commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
+                }}
+                type="button"
+              >
+                Edit Sanborn sheet
+              </button>
+            </div>
+            <label className="minimal-sanborn-gps__opacity">
+              <span>Opacity</span>
+              <input
+                disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
+                max="1"
+                min="0.05"
+                step="0.01"
+                type="range"
+                value={selectedOpacity}
+                onChange={(event) => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity: Number(event.target.value) }) : undefined}
+              />
+              <output>{Math.round(selectedOpacity * 100)}%</output>
+            </label>
+            <div className="minimal-sanborn-gps__quick-opacity" aria-label="Quick opacity">
+              {[0.25, 0.5, 0.75, 1].map((opacity) => (
+                <button
+                  className="sanborn-button"
+                  disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
+                  key={opacity}
+                  onClick={() => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity }) : undefined}
+                  type="button"
+                >
+                  {Math.round(opacity * 100)}%
+                </button>
+              ))}
+            </div>
+            <button className="sanborn-button sanborn-button--primary" disabled={!selectedSheetPlaced || saveStatus === "saving"} onClick={() => void saveSheetGeoreferences("manual", selectedAssetId)} type="button">
+              Save placement
+            </button>
+            <button className="sanborn-button" disabled={!initialData.workspace || saveStatus === "saving"} onClick={() => void reloadSavedPlacement()} type="button">
+              Reload saved placement
+            </button>
+            <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={resetSelectedPlacementToTownCenter} type="button">Reset</button>
+            <button className="sanborn-button" disabled={!selectedAssetId} onClick={resetAllSheetPlacementsToCurrentTownLocation} type="button">
+              Reset all
+            </button>
+            <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={fitSelectedSheet} type="button">Fit sheet</button>
+            <button className={`sanborn-button${overlayRenderMode === "rectangular" ? " sanborn-button--primary" : ""}`} onClick={() => setOverlayRenderMode((mode) => (mode === "projective" ? "rectangular" : "projective"))} type="button">
+              {overlayRenderMode === "projective" ? "Rectangular overlay" : "Projective overlay"}
+            </button>
             <button
-              className="sanborn-button"
-              disabled={!selectedSheetGeoreference || selectedSheetGeoreference.isLocked}
-              key={opacity}
-              onClick={() => selectedSheetGeoreference ? commitSheetGeoreference(selectedSheetGeoreference.assetId, { opacity }) : undefined}
+              className={`sanborn-button${plainMapTestMode ? " sanborn-button--primary" : ""}`}
+              onClick={() => setPlainMapTestMode((current) => !current)}
               type="button"
             >
-              {Math.round(opacity * 100)}%
+              {plainMapTestMode ? "Studio map" : "Plain map test"}
             </button>
-          ))}
+          </div>
+        ) : null}
+
+        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__status-row" aria-live="polite" aria-label="Map and save status">
+          <span className="minimal-sanborn-gps__map-status">{modernMapStatusText}</span>
+          {mapInteractionStatusText ? <span className="minimal-sanborn-gps__map-status">{mapInteractionStatusText}</span> : null}
+          <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
+          <div className="minimal-sanborn-gps__messages">
+            {initialData.warningMessage ? <span className="minimal-sanborn-gps__message">{initialData.warningMessage}</span> : null}
+            {locationMessage ? <span className={`minimal-sanborn-gps__message ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</span> : null}
+            {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
+            {uploadStatusText ? <span className={`minimal-sanborn-gps__message ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</span> : null}
+            {toolbarSaveMessage ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
+          </div>
         </div>
-        <button className="sanborn-button sanborn-button--primary" disabled={!selectedSheetPlaced || saveStatus === "saving"} onClick={() => void saveSheetGeoreferences("manual", selectedAssetId)} type="button">
-          Save placement
-        </button>
-        <button className="sanborn-button" disabled={!initialData.workspace || saveStatus === "saving"} onClick={() => void reloadSavedPlacement()} type="button">
-          Reload saved placement
-        </button>
-        <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={resetSelectedPlacementToTownCenter} type="button">Reset</button>
-        <button className="sanborn-button" disabled={!selectedAssetId} onClick={resetAllSheetPlacementsToCurrentTownLocation} type="button">
-          Reset all sheet placements to current town location
-        </button>
-        <button className="sanborn-button" disabled={!selectedSheetGeoreference} onClick={fitSelectedSheet} type="button">Fit sheet</button>
-        <button className={`sanborn-button${overlayRenderMode === "rectangular" ? " sanborn-button--primary" : ""}`} onClick={() => setOverlayRenderMode((mode) => (mode === "projective" ? "rectangular" : "projective"))} type="button">
-          {overlayRenderMode === "projective" ? "Rectangular geographic overlay" : "Projective overlay"}
-        </button>
-        <button
-          className={`sanborn-button${plainMapTestMode ? " sanborn-button--primary" : ""}`}
-          onClick={() => setPlainMapTestMode((current) => !current)}
-          type="button"
-        >
-          {plainMapTestMode ? "Studio map" : "Plain map test"}
-        </button>
-        <span className="minimal-sanborn-gps__map-status">{modernMapStatusText}</span>
-        {mapInteractionStatusText ? <span className="minimal-sanborn-gps__map-status">{mapInteractionStatusText}</span> : null}
-        <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
       </header>
 
       <main className="minimal-sanborn-gps__map" ref={minimalMapRef}>
-        {initialData.warningMessage ? <p className="minimal-sanborn-gps__notice">{initialData.warningMessage}</p> : null}
-        {locationMessage ? <p className={`minimal-sanborn-gps__notice ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</p> : null}
-        {autoFallbackNotice ? <p className="minimal-sanborn-gps__notice is-warning">{autoFallbackNotice}</p> : null}
-        {uploadStatusText ? <p className={`minimal-sanborn-gps__notice ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</p> : null}
-        {saveMessage ? <p className={`minimal-sanborn-gps__notice ${saveStatus === "error" ? "is-error" : ""}`}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
-        {atlasWorkflowStep === "gps_alignment" ? (
+        {isGpsAlignmentStep ? (
           <>
         {selectedAsset && !selectedSheetPlaced ? <p className="minimal-sanborn-gps__notice">Selected sheet is not on the map yet. Click Place sheet.</p> : null}
         {selectedSheetPlaced && selectedAsset && !selectedAsset.signedUrl ? <p className="minimal-sanborn-gps__notice">Selected Sanborn image is waiting for a signed URL.</p> : null}
