@@ -61,6 +61,15 @@ import {
   type StudioPlacement,
 } from "./historical-map-studio.ts";
 import { resolveInitialGeographicMapView, selectActiveTownPackage } from "./historical-map-studio-data.ts";
+import {
+  createDefaultMapPieceGeoreference,
+  hasOperationalMapPiecePlacement,
+  mergeSavedAndDefaultMapPieceGeoreferences,
+  piecePlacementMatchesForPersistence,
+  placeMapPieceAtCenter,
+  rotateMapPieceGeoreference,
+} from "./sanborn-map-piece-georeference.ts";
+import type { SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
   return normalizePlacement({
@@ -68,6 +77,37 @@ function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): S
     layerOrder: 0,
     ...overrides,
   });
+}
+
+function mapPiece(pieceId: string, overrides: Partial<SanbornMapPieceRecord> = {}): SanbornMapPieceRecord {
+  const sourcePolygon = overrides.sourcePolygon ?? [
+    { x: 0.1, y: 0.1 },
+    { x: 0.5, y: 0.12 },
+    { x: 0.52, y: 0.42 },
+    { x: 0.12, y: 0.5 },
+  ];
+
+  return {
+    rowId: `${pieceId}-row`,
+    pieceId,
+    atlasPageRowId: "page-row-1",
+    atlasPageId: "page-1",
+    parentPieceId: null,
+    pieceSequence: 1,
+    pieceType: "regular_block",
+    blockNumberText: "68",
+    titleText: "Block 68",
+    sourcePolygon,
+    sourceBBox: { minX: 0.1, minY: 0.1, maxX: 0.52, maxY: 0.5 },
+    creationMethod: "human",
+    inventoryStatus: "draft",
+    reviewStatus: "unknown",
+    evidenceClassification: "unknown",
+    notes: null,
+    updatedAt: null,
+    isPersisted: true,
+    ...overrides,
+  };
 }
 
 test("normalizes placement boundaries and rotation", () => {
@@ -379,7 +419,7 @@ test("configures OpenStreetMap and a no-secret fallback street basemap", () => {
   assert.deepEqual(configuredBasemaps.map((basemap) => basemap.key), ["osm", "esri_world_street"]);
 });
 
-test("minimal GPS workflow renders upload controls inside the early-return interface", () => {
+test("minimal Map placement workflow renders upload controls inside the early-return interface", () => {
   const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
   const legacyStart = component.indexOf('className="historical-map-studio"');
@@ -392,7 +432,7 @@ test("minimal GPS workflow renders upload controls inside the early-return inter
   assert.match(minimalInterface, /void uploadSheets\(event\.currentTarget\.files\)/);
 });
 
-test("minimal GPS toolbar uses grouped wrapping rows and gates GPS controls", () => {
+test("minimal Map placement toolbar uses grouped wrapping rows and gates placement controls", () => {
   const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
   const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
@@ -411,9 +451,10 @@ test("minimal GPS toolbar uses grouped wrapping rows and gates GPS controls", ()
   assert.match(minimalInterface, /Back to \{sanbornAtlasWorkflowSteps\.find/);
   assert.match(minimalInterface, /aria-label="Atlas workflow step"/);
   assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps"/s);
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Place sheet/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Place selected piece/);
+  assert.match(minimalInterface, /Advanced whole-sheet reference[\s\S]*Place sheet/s);
   assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
-  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{selectedAsset/s);
+  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{!selectedMapPiece/s);
   assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
   assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
   assert.doesNotMatch(toolbarCss, /grid-auto-flow/);
@@ -489,8 +530,64 @@ test("map piece saves restore selected page, piece, workflow, and source sheet a
   assert.match(studioComponent, /onSelectPage=\{\(pageId\) => \{[\s\S]*setSelectedAssetId\(nextPage\.sanbornSheetAssetId\);[\s\S]*changeAtlasWorkflowStep\("piece_inventory"\);/);
 });
 
-test("GPS alignment opens at useful town zoom and exposes GPS-only workflow controls", () => {
+test("map piece placement helpers keep piece placement independent from source sheets", () => {
+  const piece = mapPiece("piece-68");
+  const defaultPlacement = createDefaultMapPieceGeoreference(piece);
+  const placed = placeMapPieceAtCenter(piece, defaultPlacement, { latitude: 33.425, longitude: -94.047 });
+  const rotated = rotateMapPieceGeoreference(placed, 22);
+  const saved = { ...rotated, isPersisted: true };
+  const secondPieceDefault = createDefaultMapPieceGeoreference(mapPiece("piece-69", { pieceSequence: 2 }));
+  const merged = mergeSavedAndDefaultMapPieceGeoreferences([piece, mapPiece("piece-69", { pieceSequence: 2 })], [saved]);
+
+  assert.equal(defaultPlacement.placementStatus, "unplaced");
+  assert.equal(defaultPlacement.isVisible, false);
+  assert.equal(hasOperationalMapPiecePlacement(placed), true);
+  assert.equal(rotated.rotation, 22);
+  assert.notDeepEqual(rotated.corners.northwest, placed.corners.northwest);
+  assert.equal(piecePlacementMatchesForPersistence(rotated, saved), true);
+  assert.equal(merged.find((placement) => placement.pieceId === "piece-68")?.isPersisted, true);
+  assert.equal(merged.find((placement) => placement.pieceId === "piece-69")?.placementStatus, secondPieceDefault.placementStatus);
+});
+
+test("map piece placement migration is service-role-only and preserves review metadata", () => {
+  const migration = readFileSync("../../supabase/migrations/0011_sanborn_map_piece_georeferences.sql", "utf8");
+  const normalized = migration.replace(/\s+/g, " ").toLowerCase();
+
+  assert.match(migration, /create table if not exists public\.sanborn_map_piece_georeferences/);
+  assert.match(migration, /references public\.sanborn_map_pieces\(id\) on delete cascade/);
+  assert.match(migration, /placement_status text not null default 'unplaced' check \(placement_status in \('unplaced', 'draft', 'placed', 'aligned', 'reviewed'\)\)/);
+  assert.match(migration, /create or replace function public\.save_sanborn_map_piece_georeference/);
+  assert.match(normalized, /security invoker/);
+  assert.match(normalized, /set search_path = public/);
+  assert.doesNotMatch(normalized, /security definer/);
+  assert.match(normalized, /alter table public\.sanborn_map_piece_georeferences enable row level security/);
+  assert.match(normalized, /revoke all on table public\.sanborn_map_piece_georeferences from public/);
+  assert.match(normalized, /revoke all on table public\.sanborn_map_piece_georeferences from anon/);
+  assert.match(normalized, /revoke all on table public\.sanborn_map_piece_georeferences from authenticated/);
+  assert.match(normalized, /grant select, insert, update, delete on table public\.sanborn_map_piece_georeferences to service_role/);
+  assert.match(normalized, /revoke execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) from public/);
+  assert.match(normalized, /grant execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) to service_role/);
+  assert.doesNotMatch(migration, /review_status\s*=/);
+  assert.doesNotMatch(migration, /evidence_classification\s*=/);
+  assert.doesNotMatch(migration, /create table .*building|create table .*hydrant|create table .*railroad|create table .*historical_feature/i);
+});
+
+test("map piece placement route saves through the scoped service-role RPC", () => {
+  const route = readFileSync("app/api/community/historical-map-studio/map-piece-georeferences/route.ts", "utf8");
+
+  assert.match(route, /requireMapStudioWriteAccess/);
+  assert.match(route, /resolvePieceScope/);
+  assert.match(route, /Map piece belongs to another town package/);
+  assert.match(route, /supabase\.rpc\("save_sanborn_map_piece_georeference"/);
+  assert.match(route, /normalizeSanbornMapPieceGeoreference/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+  assert.doesNotMatch(route, /\.from\("sanborn_map_piece_georeferences"\)[\s\S]{0,240}\.(insert|update|upsert)\(/);
+});
+
+test("Map placement opens at useful town zoom and exposes piece-first controls", () => {
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const pageComponent = readFileSync("app/community/historical-map-studio/page.tsx", "utf8");
 
   assert.match(studioComponent, /const minimumUsefulGpsZoom = 12;/);
   assert.match(studioComponent, /const defaultTownGpsZoom = 16;/);
@@ -500,10 +597,29 @@ test("GPS alignment opens at useful town zoom and exposes GPS-only workflow cont
   assert.match(studioComponent, /function getGpsTownCenterFromState[\s\S]*return getTownCenterFromState\(studioState\) \?\? getDefaultTownCenter\(studioState\);/);
   assert.match(studioComponent, /function getGpsTownZoomFromState[\s\S]*Math\.min\(maximumAutoGpsZoom, Math\.max\(minimumAutoGpsZoom, preferredZoom\)\)/s);
   assert.match(studioComponent, /function centerGpsOnActiveTown[\s\S]*const center = getGpsTownCenterFromState\(initialData\);[\s\S]*const zoom = getGpsTownZoomFromState\(initialData\);[\s\S]*setGeoEditMode\("pan_modern_map"\);[\s\S]*requestExternalMapView\(center, zoom, "town_package"/s);
-  assert.match(studioComponent, /function enterGpsAlignment[\s\S]*if \(!isMeaningfulGpsView\(mapCenter, modernMapZoom\)\) \{\s*centerGpsOnActiveTown\("enterGpsAlignment"\);/s);
+  assert.match(studioComponent, /function enterGpsAlignment[\s\S]*setSelectedMapPieceId\(selectedMapPiece\.pieceId\)[\s\S]*if \(!isMeaningfulGpsView\(mapCenter, modernMapZoom\)\) \{\s*centerGpsOnActiveTown\("enterGpsAlignment"\);/s);
   assert.match(studioComponent, /function backToLastNonGpsWorkflowStep\(\)[\s\S]*changeAtlasWorkflowStep\(lastNonGpsWorkflowStep\);/);
   assert.match(studioComponent, /minimal-sanborn-gps__gps-workflow/);
   assert.match(studioComponent, /Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
+  assert.match(studioComponent, /aria-label="Historical Map Studio map placement tool"/);
+  assert.match(studioComponent, /Place selected piece/);
+  assert.match(studioComponent, /Edit selected piece/);
+  assert.match(studioComponent, /Advanced whole-sheet reference[\s\S]*Place sheet/s);
+  assert.match(studioComponent, /function normalizeAtlasWorkflowStep[\s\S]*value === "map_placement"[\s\S]*return "gps_alignment"/s);
+  assert.match(studioComponent, /initialSelectionAppliedRef/);
+  assert.match(studioComponent, /window\.history\.replaceState\(window\.history\.state, "", nextUrl\)/);
+  assert.match(studioComponent, /params\.set\("workflow", atlasWorkflowStep\)/);
+  assert.match(pageComponent, /workflow\?: string/);
+  assert.match(pageComponent, /initialSelection=\{\{[\s\S]*workflowStep: params\.workflow[\s\S]*pieceId: params\.piece[\s\S]*assetId: params\.sheet/s);
+  assert.match(studioComponent, /pieceLayers=\{mapPieceLayers\}/);
+  assert.match(studioComponent, /mapPieceLayers = selectedMapPieceLayer && hasOperationalMapPiecePlacement\(selectedMapPieceLayer\) \? \[selectedMapPieceLayer\] : \[\]/);
+  assert.match(studioComponent, /showReferenceSheetAlignment && hasPlacedHistoricalSheets/);
+  assert.match(studioComponent, /onPieceTransformCommit=\{\(pieceId, patch\) => commitMapPieceGeoreference\(pieceId, patch\)\}/);
+  assert.match(leafletComponent, /function createMaskedPieceImageUrl/);
+  assert.match(leafletComponent, /document\.createElement\("canvas"\)/);
+  assert.match(leafletComponent, /context\.clip\(\)/);
+  assert.match(leafletComponent, /canvas\.toDataURL\("image\/png"\)/);
+  assert.doesNotMatch(leafletComponent, /supabase|storage|upload/i);
 });
 
 test("upload refresh selects the newly returned uploaded sheet when present", () => {
@@ -707,7 +823,7 @@ test("reset all sheet placements preserves assets and places selected sheet at c
   assert.match(component, /return hasOperationalSheetPlacement\(sheet\) \? sheet : removeSheetGeographicPlacement\(sheet\)/);
   assert.match(component, /resetSheetGeographicPlacementToCenter/);
   assert.match(component, /opacity: 0\.5/);
-  assert.match(component, />\s*Reset all\s*</);
+  assert.match(component, />\s*Reset all sheets\s*</);
 });
 
 test("projective overlay is anchored to Leaflet pane coordinates and updates through zoom lifecycle", () => {
@@ -815,20 +931,23 @@ test("plain map test renders a fixed Texarkana OpenStreetMap TileLayer without s
   assert.match(studioComponent, /<PlainLeafletMapTest/);
 });
 
-test("no placed sheets use a plain TileLayer path instead of custom Sanborn overlays", () => {
+test("unplaced map placement uses a plain TileLayer path until piece or reference overlays are active", () => {
   const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
 
   assert.match(studioComponent, /const hasPlacedHistoricalSheets = historicalSheetLayers\.some/);
-  assert.match(studioComponent, /const mapSheetLayers = hasPlacedHistoricalSheets \? historicalSheetLayers : \[\]/);
-  assert.match(studioComponent, /plainTileOnly=\{!hasPlacedHistoricalSheets\}/);
+  assert.match(studioComponent, /const mapSheetLayers = showReferenceSheetAlignment && hasPlacedHistoricalSheets/);
+  assert.match(studioComponent, /const mapPieceLayers = selectedMapPieceLayer && hasOperationalMapPiecePlacement\(selectedMapPieceLayer\) \? \[selectedMapPieceLayer\] : \[\]/);
+  assert.match(studioComponent, /plainTileOnly=\{!selectedMapPiecePlaced && !\(showReferenceSheetAlignment && hasPlacedHistoricalSheets\)\}/);
+  assert.match(studioComponent, /pieceLayers=\{mapPieceLayers\}/);
   assert.match(studioComponent, /sheetLayers=\{mapSheetLayers\}/);
   assert.match(leafletComponent, /const sheetLayers = props\.plainTileOnly \? \[\] : props\.sheetLayers \?\? \[\]/);
+  assert.match(leafletComponent, /const pieceLayers = props\.plainTileOnly \? \[\] : props\.pieceLayers \?\? \[\]/);
   assert.match(leafletComponent, /props\.plainTileOnly \? null : <ConfigureLeafletPanes/);
   assert.match(leafletComponent, /<FitBounds bounds=\{derivedBounds\}/);
 });
 
-test("minimal GPS workflow cannot hide the modern tile layer", () => {
+test("minimal Map placement workflow cannot hide the modern tile layer", () => {
   assert.equal(getModernTileLayerOpacity(), 1);
 });
 

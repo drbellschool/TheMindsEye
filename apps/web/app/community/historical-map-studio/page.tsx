@@ -10,7 +10,12 @@ export const metadata = {
 
 type HistoricalMapStudioPageProps = {
   searchParams?: Promise<{
+    atlas?: string;
+    page?: string;
+    piece?: string;
+    sheet?: string;
     town?: string;
+    workflow?: string;
     year?: string;
   }>;
 };
@@ -22,5 +27,16 @@ export default async function HistoricalMapStudioPage({ searchParams }: Historic
     mapYear: params.year,
   });
 
-  return <HistoricalMapStudio initialData={studioState} />;
+  return (
+    <HistoricalMapStudio
+      initialData={studioState}
+      initialSelection={{
+        workflowStep: params.workflow,
+        atlasId: params.atlas,
+        pageId: params.page,
+        pieceId: params.piece,
+        assetId: params.sheet,
+      }}
+    />
+  );
 }

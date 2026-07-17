@@ -290,7 +290,7 @@ test("normalizes map edit mode, movement scope, center, zoom, and global opacity
   assert.equal(normalizeGeographicMapSettings({ center: { latitude: 0.002738, longitude: 0.002895 } }).center, null);
 });
 
-test("manual GPS alignment save selects one visible placed sheet and allows zero control points", () => {
+test("manual whole-sheet reference save selects one visible placed sheet and allows zero control points", () => {
   const placed = sheet("asset-1", { isVisible: true, placementStatus: "draft", opacity: 0.5, controlPointCount: 0 });
   const hidden = sheet("asset-2", { isVisible: false, placementStatus: "unplaced", controlPointCount: 0 });
 

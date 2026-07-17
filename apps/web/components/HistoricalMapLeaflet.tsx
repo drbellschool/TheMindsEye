@@ -20,6 +20,11 @@ import {
   type GeoEditMode,
   type SheetGeographicTransform,
 } from "@/lib/historical-map-sheet-georeference";
+import {
+  normalizeSanbornMapPieceGeoreference,
+  type SanbornMapPieceGeoreference,
+} from "@/lib/sanborn-map-piece-georeference";
+import type { SanbornNormalizedPoint, SanbornSourceBBox } from "@/lib/sanborn-atlas";
 
 export { basemaps };
 
@@ -38,7 +43,9 @@ type HistoricalMapLeafletProps = {
   showSheetBoundaries: boolean;
   fitBoundsRequest: number;
   sheetLayers?: HistoricalSheetMapLayer[];
+  pieceLayers?: HistoricalPieceMapLayer[];
   selectedSheetAssetId?: string;
+  selectedPieceId?: string;
   sheetEditMode?: GeoEditMode | "preview";
   globalHistoricalOpacity?: number;
   showSheetLabels?: boolean;
@@ -51,7 +58,9 @@ type HistoricalMapLeafletProps = {
   onMapViewMutation?: (source: string) => void;
   onSelectSheet?: (assetId: string) => void;
   onSheetTransformCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
+  onPieceTransformCommit?: (pieceId: string, patch: Partial<SanbornMapPieceGeoreference>) => void;
   onRefreshSheetSignedUrl?: (assetId: string) => void;
+  onSelectPiece?: (pieceId: string) => void;
   onSheetImageStateChange?: (state: SheetImageLoadState) => void;
   onTileDiagnosticsChange?: (diagnostics: TileDiagnostics & { basemapKey: string; tileLayerMounted: boolean }) => void;
   onTileRuntimeDebugChange?: (debug: LeafletTileRuntimeDebug) => void;
@@ -71,6 +80,16 @@ export type HistoricalSheetMapLayer = SheetGeographicTransform & {
   width: number;
   height: number;
   signedUrlError?: string;
+};
+
+export type HistoricalPieceMapLayer = SanbornMapPieceGeoreference & {
+  imageUrl: string | null;
+  signedUrlError?: string;
+  sourcePolygon: SanbornNormalizedPoint[];
+  sourceBBox: SanbornSourceBBox;
+  sourceImageWidth: number;
+  sourceImageHeight: number;
+  pieceLabel: string;
 };
 
 export type SheetImageLoadState = {
@@ -641,6 +660,15 @@ function getSheetCornerPoints(map: L.Map, sheet: SheetGeographicTransform): Quad
   };
 }
 
+function getPieceCornerPoints(map: L.Map, piece: SanbornMapPieceGeoreference): QuadPoints {
+  return {
+    northwest: map.latLngToLayerPoint([piece.corners.northwest?.latitude ?? piece.centerLatitude, piece.corners.northwest?.longitude ?? piece.centerLongitude]),
+    northeast: map.latLngToLayerPoint([piece.corners.northeast?.latitude ?? piece.centerLatitude, piece.corners.northeast?.longitude ?? piece.centerLongitude]),
+    southeast: map.latLngToLayerPoint([piece.corners.southeast?.latitude ?? piece.centerLatitude, piece.corners.southeast?.longitude ?? piece.centerLongitude]),
+    southwest: map.latLngToLayerPoint([piece.corners.southwest?.latitude ?? piece.centerLatitude, piece.corners.southwest?.longitude ?? piece.centerLongitude]),
+  };
+}
+
 function getPointCenter(points: QuadPoints) {
   const values = [points.northwest, points.northeast, points.southeast, points.southwest];
 
@@ -820,6 +848,65 @@ function setEdge(points: QuadPoints, edge: string, nextPoint: L.Point): QuadPoin
   }
 
   return points;
+}
+
+function getPieceSourcePixelBounds(layer: HistoricalPieceMapLayer) {
+  const minX = Math.max(0, Math.floor(layer.sourceBBox.minX * layer.sourceImageWidth));
+  const minY = Math.max(0, Math.floor(layer.sourceBBox.minY * layer.sourceImageHeight));
+  const maxX = Math.min(layer.sourceImageWidth, Math.ceil(layer.sourceBBox.maxX * layer.sourceImageWidth));
+  const maxY = Math.min(layer.sourceImageHeight, Math.ceil(layer.sourceBBox.maxY * layer.sourceImageHeight));
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+async function createMaskedPieceImageUrl(layer: HistoricalPieceMapLayer): Promise<{ url: string; width: number; height: number }> {
+  if (!layer.imageUrl) {
+    throw new Error("Source image URL is unavailable.");
+  }
+
+  const sourceBounds = getPieceSourcePixelBounds(layer);
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.decoding = "async";
+  const loaded = new Promise<HTMLImageElement>((resolve, reject) => {
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Source image failed to load."));
+  });
+  image.src = layer.imageUrl;
+  await loaded;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sourceBounds.width;
+  canvas.height = sourceBounds.height;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas context is unavailable.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.save();
+  context.beginPath();
+  layer.sourcePolygon.forEach((point, index) => {
+    const x = point.x * layer.sourceImageWidth - sourceBounds.x;
+    const y = point.y * layer.sourceImageHeight - sourceBounds.y;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.closePath();
+  context.clip();
+  context.drawImage(image, sourceBounds.x, sourceBounds.y, sourceBounds.width, sourceBounds.height, 0, 0, sourceBounds.width, sourceBounds.height);
+  context.restore();
+
+  return { url: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
 }
 
 function TransformedSheetLayer({
@@ -1221,11 +1308,338 @@ function TransformedSheetLayer({
   return null;
 }
 
+function TransformedPieceLayer({
+  layer,
+  isSelected,
+  mode,
+  onSelect,
+  onCommit,
+}: {
+  layer: HistoricalPieceMapLayer;
+  isSelected: boolean;
+  mode: HistoricalMapLeafletProps["sheetEditMode"];
+  onSelect?: (pieceId: string) => void;
+  onCommit?: (pieceId: string, patch: Partial<SanbornMapPieceGeoreference>) => void;
+}) {
+  const map = useMap();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit });
+  latestRef.current = { layer, isSelected, mode, onSelect, onCommit };
+  const [maskedImage, setMaskedImage] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [maskError, setMaskError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setMaskedImage(null);
+    setMaskError("");
+    if (!layer.imageUrl) {
+      setMaskError("Source image signed URL is unavailable.");
+      return;
+    }
+
+    void createMaskedPieceImageUrl(layer)
+      .then((image) => {
+        if (!cancelled) {
+          setMaskedImage(image);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setMaskError(error instanceof Error ? error.message : "Masked piece image could not be generated.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layer.imageUrl, layer.pieceId, JSON.stringify(layer.sourcePolygon), layer.sourceImageWidth, layer.sourceImageHeight]);
+
+  useEffect(() => {
+    const pane = map.getPane("historical-sheet-pane") ?? map.createPane("historical-sheet-pane");
+    pane.style.zIndex = String(leafletPaneStack.historicalSheetPane);
+    pane.style.background = "transparent";
+    pane.style.opacity = "1";
+    pane.style.pointerEvents = "auto";
+    const element = L.DomUtil.create("div", "map-studio-piece-overlay", pane);
+    const image = L.DomUtil.create("img", "map-studio-piece-overlay__image", element);
+    const boundary = L.DomUtil.create("span", "map-studio-piece-overlay__boundary", element);
+    const label = L.DomUtil.create("span", "map-studio-piece-overlay__label", element);
+    const diagnostics = L.DomUtil.create("span", "map-studio-piece-overlay__diagnostics", element);
+    const handles = [
+      ["rotate", "rotate"],
+      ["center", "drag"],
+      ["top-left", "corner"],
+      ["top-right", "corner"],
+      ["bottom-left", "corner"],
+      ["bottom-right", "corner"],
+    ].map(([position, action]) => {
+      const handle = L.DomUtil.create("button", `map-studio-piece-overlay__handle handle-${position}`, element);
+      handle.type = "button";
+      handle.dataset.action = action;
+      handle.dataset.position = position;
+      handle.setAttribute("aria-label", `${action} ${position}`);
+      return handle;
+    });
+    let draft: SanbornMapPieceGeoreference | null = null;
+    let dragCleanup: (() => void) | null = null;
+    containerRef.current = element;
+    L.DomEvent.disableClickPropagation(element);
+    L.DomEvent.disableScrollPropagation(element);
+
+    function effectiveLayer() {
+      return draft ?? latestRef.current.layer;
+    }
+
+    function getImageSize() {
+      return {
+        width: Math.max(1, maskedImage?.width ?? getPieceSourcePixelBounds(latestRef.current.layer).width),
+        height: Math.max(1, maskedImage?.height ?? getPieceSourcePixelBounds(latestRef.current.layer).height),
+      };
+    }
+
+    function setElementTransform(piece: SanbornMapPieceGeoreference) {
+      const points = getPieceCornerPoints(map, piece);
+      const bounds = getTransformedQuadBounds(points);
+      const selected = latestRef.current.isSelected;
+      const editMode = latestRef.current.mode === "edit_historical_sheets";
+      const visibleHandles = selected && editMode && !piece.isLocked;
+      const offset = L.point(bounds.minX, bounds.minY);
+      const imageSize = getImageSize();
+      const projectiveTransform = getProjectiveTransform(imageSize.width, imageSize.height, points, offset);
+      const centerPoint = getPointCenter(points);
+      const handlePositions: Record<string, L.Point> = {
+        "top-left": points.northwest,
+        "top-right": points.northeast,
+        "bottom-right": points.southeast,
+        "bottom-left": points.southwest,
+        center: centerPoint,
+        rotate: L.point((points.northwest.x + points.northeast.x) / 2, (points.northwest.y + points.northeast.y) / 2 - 34),
+      };
+
+      element.style.left = "0";
+      element.style.top = "0";
+      element.style.width = `${bounds.width}px`;
+      element.style.height = `${bounds.height}px`;
+      L.DomUtil.setPosition(element, offset);
+      element.style.opacity = String(Math.max(0.05, Math.min(1, piece.opacity)));
+      element.style.pointerEvents = editMode ? "auto" : "none";
+      element.style.zIndex = String(580 + piece.layerOrder + (selected ? 1000 : 0));
+      element.style.cursor = piece.isLocked ? "not-allowed" : editMode ? "grab" : "default";
+      element.classList.toggle("is-selected", selected);
+      element.classList.toggle("is-locked", piece.isLocked);
+      element.classList.toggle("is-hidden", !piece.isVisible);
+      element.classList.toggle("has-image-error", Boolean(maskError || latestRef.current.layer.signedUrlError));
+      element.classList.toggle("has-invalid-transform", !projectiveTransform.valid);
+      image.src = maskedImage?.url ?? "";
+      image.alt = latestRef.current.layer.pieceLabel;
+      image.style.display = maskedImage?.url ? "block" : "none";
+      image.style.width = `${imageSize.width}px`;
+      image.style.height = `${imageSize.height}px`;
+      image.style.pointerEvents = editMode ? "auto" : "none";
+      image.style.transform = projectiveTransform.transform;
+      boundary.style.clipPath = `polygon(${points.northwest.x - offset.x}px ${points.northwest.y - offset.y}px, ${points.northeast.x - offset.x}px ${points.northeast.y - offset.y}px, ${points.southeast.x - offset.x}px ${points.southeast.y - offset.y}px, ${points.southwest.x - offset.x}px ${points.southwest.y - offset.y}px)`;
+      boundary.style.display = selected ? "block" : "none";
+      label.textContent = latestRef.current.layer.pieceLabel;
+      label.style.display = selected ? "block" : "none";
+      diagnostics.style.display = selected && Boolean(maskError || latestRef.current.layer.signedUrlError || !projectiveTransform.valid) ? "block" : "none";
+      diagnostics.textContent = latestRef.current.layer.signedUrlError
+        ? `Image: signed URL failed (${latestRef.current.layer.signedUrlError})`
+        : maskError
+          ? `Piece mask: ${maskError}`
+          : !projectiveTransform.valid
+            ? "Transform: rectangular fallback"
+            : "";
+      handles.forEach((handle) => {
+        const point = handlePositions[handle.dataset.position ?? ""];
+        handle.style.display = visibleHandles ? "block" : "none";
+        if (point) {
+          handle.style.left = `${point.x - offset.x}px`;
+          handle.style.top = `${point.y - offset.y}px`;
+        }
+      });
+    }
+
+    function updateFromMap() {
+      const piece = effectiveLayer();
+      if (piece.isVisible) {
+        element.style.display = "block";
+        setElementTransform(piece);
+      } else {
+        element.style.display = "none";
+      }
+    }
+
+    let animationFrame = 0;
+    function scheduleUpdateFromMap() {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = 0;
+        updateFromMap();
+      });
+    }
+
+    function finishInteraction(nextDraft: SanbornMapPieceGeoreference | null) {
+      if (!nextDraft) {
+        return;
+      }
+
+      const committed = normalizeSanbornMapPieceGeoreference({
+        ...nextDraft,
+        placementStatus: nextDraft.placementStatus === "aligned" || nextDraft.placementStatus === "reviewed" ? nextDraft.placementStatus : "draft",
+      });
+
+      latestRef.current.onCommit?.(committed.pieceId, {
+        centerLatitude: committed.centerLatitude,
+        centerLongitude: committed.centerLongitude,
+        rotation: committed.rotation,
+        opacity: committed.opacity,
+        placementStatus: committed.placementStatus,
+        isVisible: committed.isVisible,
+        isLocked: committed.isLocked,
+        corners: committed.corners,
+      });
+    }
+
+    function startPointerInteraction(event: PointerEvent) {
+      const current = latestRef.current;
+      const piece = current.layer;
+      const target = event.target as HTMLElement;
+      const action = target.dataset.action ?? "drag";
+
+      if (current.mode !== "edit_historical_sheets") {
+        return;
+      }
+
+      L.DomEvent.stop(event);
+      event.preventDefault();
+      event.stopPropagation();
+      current.onSelect?.(piece.pieceId);
+
+      if (piece.isLocked) {
+        return;
+      }
+
+      map.dragging.disable();
+      try {
+        target.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Some transformed DOM nodes cannot capture every pointer.
+      }
+      const startPoints = getPieceCornerPoints(map, piece);
+      const start = {
+        x: event.clientX,
+        y: event.clientY,
+        piece,
+        points: startPoints,
+        centerPoint: getPointCenter(startPoints),
+        rotation: piece.rotation,
+      };
+
+      function handleMove(moveEvent: PointerEvent) {
+        if (latestRef.current.mode !== "edit_historical_sheets") {
+          handleUp(moveEvent);
+          return;
+        }
+
+        moveEvent.preventDefault();
+        const dx = moveEvent.clientX - start.x;
+        const dy = moveEvent.clientY - start.y;
+
+        if (action === "corner") {
+          const position = target.dataset.position ?? "";
+          const cornerByPosition: Record<string, keyof QuadPoints> = {
+            "top-left": "northwest",
+            "top-right": "northeast",
+            "bottom-right": "southeast",
+            "bottom-left": "southwest",
+          };
+          const corner = cornerByPosition[position];
+          if (!corner) {
+            return;
+          }
+          const nextPoints = { ...start.points, [corner]: L.point(start.points[corner].x + dx, start.points[corner].y + dy) };
+          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+        } else if (action === "rotate") {
+          const startAngle = Math.atan2(start.y - start.centerPoint.y, start.x - start.centerPoint.x);
+          const nextAngle = Math.atan2(moveEvent.clientY - start.centerPoint.y, moveEvent.clientX - start.centerPoint.x);
+          const deltaDegrees = ((nextAngle - startAngle) * 180) / Math.PI;
+          const nextPoints = rotatePoints(start.points, start.centerPoint, deltaDegrees);
+          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, rotation: start.rotation + deltaDegrees, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+        } else {
+          const nextPoints = translatePoints(start.points, dx, dy);
+          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+        }
+
+        updateFromMap();
+      }
+
+      function handleUp(upEvent: PointerEvent | Event = event) {
+        document.removeEventListener("pointermove", handleMove);
+        document.removeEventListener("pointerup", handleUp);
+        document.removeEventListener("pointercancel", handleUp);
+        const pointerId = "pointerId" in upEvent ? upEvent.pointerId : event.pointerId;
+        try {
+          target.releasePointerCapture?.(pointerId);
+        } catch {
+          // Pointer capture may already be released.
+        }
+        if (latestRef.current.mode === "edit_historical_sheets") {
+          map.dragging.disable();
+        } else {
+          map.dragging.enable();
+        }
+        finishInteraction(draft);
+        draft = null;
+        updateFromMap();
+        dragCleanup = null;
+      }
+
+      document.addEventListener("pointermove", handleMove);
+      document.addEventListener("pointerup", handleUp);
+      document.addEventListener("pointercancel", handleUp);
+      dragCleanup = () => {
+        document.removeEventListener("pointermove", handleMove);
+        document.removeEventListener("pointerup", handleUp);
+        document.removeEventListener("pointercancel", handleUp);
+      };
+    }
+
+    element.addEventListener("pointerdown", startPointerInteraction);
+    map.on("moveend zoomend viewreset resize", scheduleUpdateFromMap);
+    updateFromMap();
+
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      dragCleanup?.();
+      element.removeEventListener("pointerdown", startPointerInteraction);
+      map.off("moveend zoomend viewreset resize", scheduleUpdateFromMap);
+      element.remove();
+      containerRef.current = null;
+    };
+  }, [map, maskedImage, maskError]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+
+    map.fire("moveend");
+  }, [layer, isSelected, mode, maskedImage, maskError, map]);
+
+  return null;
+}
+
 export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   const basemap = getBasemap(props.basemapKey);
   const derivedBounds = props.plainTileOnly ? null : props.bounds ?? boundsFromCorners(props.corners);
   const polygon = useMemo(() => getCornerPolygon(props.corners), [props.corners]);
   const sheetLayers = props.plainTileOnly ? [] : props.sheetLayers ?? [];
+  const pieceLayers = props.plainTileOnly ? [] : props.pieceLayers ?? [];
   const [tileDiagnostics, setTileDiagnostics] = useState(createTileDiagnostics);
   const [tileRetry, setTileRetry] = useState(0);
   const showLegacyOverlayControls = !props.plainTileOnly && sheetLayers.length === 0 && props.overlayVisible;
@@ -1279,6 +1693,20 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       {props.plainTileOnly ? null : <MapInteractionMode mode={props.sheetEditMode ?? "pan_modern_map"} />}
       <MapEvents onCursorMove={props.onCursorMove} onMapClick={props.onMapClick} onMapInteractionChange={props.onMapInteractionChange} onMapViewChange={props.onMapViewChange} />
       <FitBounds bounds={derivedBounds} enabled={props.fitBoundsEnabled ?? true} onViewMutation={props.onMapViewMutation} request={props.fitBoundsRequest} />
+
+      {pieceLayers
+        .filter((piece) => piece.imageUrl && piece.isVisible)
+        .sort((a, b) => a.layerOrder - b.layerOrder)
+        .map((piece) => (
+          <TransformedPieceLayer
+            isSelected={props.selectedPieceId === piece.pieceId}
+            key={piece.pieceId}
+            layer={piece}
+            mode={props.sheetEditMode ?? "pan_modern_map"}
+            onCommit={props.onPieceTransformCommit}
+            onSelect={props.onSelectPiece}
+          />
+        ))}
 
       {overlayRenderMode === "projective" ? sheetLayers
         .filter((sheet) => sheet.imageUrl && sheet.isVisible)
