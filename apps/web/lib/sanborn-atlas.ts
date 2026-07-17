@@ -180,6 +180,23 @@ export function calculateSourceBoundingBox(points: SanbornNormalizedPoint[]): Sa
   };
 }
 
+export function countDistinctNormalizedPolygonVertices(points: SanbornNormalizedPoint[]): number {
+  return new Set(points.map((point) => `${point.x.toFixed(6)},${point.y.toFixed(6)}`)).size;
+}
+
+export function calculateNormalizedPolygonArea(points: SanbornNormalizedPoint[]): number {
+  if (points.length < 3) {
+    return 0;
+  }
+
+  const areaSum = points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0);
+
+  return Math.abs(areaSum) / 2;
+}
+
 export function validateNormalizedPolygon(value: unknown): SanbornPieceValidationResult {
   if (!Array.isArray(value) || value.length < 3) {
     return { ok: false, error: "Map piece polygon must contain at least three points." };
@@ -200,6 +217,14 @@ export function validateNormalizedPolygon(value: unknown): SanbornPieceValidatio
     }
 
     polygon.push({ x: Number(x.toFixed(6)), y: Number(y.toFixed(6)) });
+  }
+
+  if (countDistinctNormalizedPolygonVertices(polygon) < 3) {
+    return { ok: false, error: "Map piece polygon must contain at least three distinct points." };
+  }
+
+  if (calculateNormalizedPolygonArea(polygon) <= 0.000000000001) {
+    return { ok: false, error: "Map piece polygon must have nonzero area." };
   }
 
   return { ok: true, polygon, bbox: calculateSourceBoundingBox(polygon) };

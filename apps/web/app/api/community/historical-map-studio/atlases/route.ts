@@ -4,7 +4,6 @@ import {
   buildDefaultSanbornAtlasId,
   normalizeOptionalSanbornText,
   normalizePositiveInteger,
-  normalizeSanbornReviewStatus,
 } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
@@ -24,6 +23,13 @@ type AtlasSaveBody = {
 
 type SourceRecordRow = {
   id: string;
+};
+
+type AtlasRow = {
+  id: string;
+  atlas_id: string;
+  town_package_id: string;
+  updated_at: string | null;
 };
 
 function normalizeEditionDate(value: string | null | undefined): string | null {
@@ -54,14 +60,16 @@ export async function POST(request: NextRequest) {
   const volumeLabel = normalizeOptionalSanbornText(body.volumeLabel, 80);
   const expectedPageCount = normalizePositiveInteger(body.expectedPageCount);
   const title = normalizeOptionalSanbornText(body.title, 240) ?? `${townPackage.name} ${editionYear} Sanborn Atlas`;
+  const requestedAtlasId = normalizeOptionalSanbornText(body.atlasId, 160);
   let atlasId =
-    normalizeOptionalSanbornText(body.atlasId, 160) ??
+    requestedAtlasId ??
     buildDefaultSanbornAtlasId({
       townPackageId: townPackage.package_id,
       editionYear,
       volumeLabel,
     });
   const sourceRecordId = normalizeOptionalSanbornText(body.sourceRecordId, 120);
+  const editionDate = normalizeEditionDate(body.editionDate);
 
   if (sourceRecordId) {
     const sourceResult = await supabase
@@ -80,41 +88,70 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const suppliedAtlasResult = await supabase
+    .from("sanborn_atlases")
+    .select("id, atlas_id, town_package_id, updated_at")
+    .eq("atlas_id", atlasId)
+    .maybeSingle<AtlasRow>();
+
+  if (suppliedAtlasResult.error) {
+    return jsonError(503, "Existing Sanborn atlas ID could not be checked.");
+  }
+
+  if (suppliedAtlasResult.data && suppliedAtlasResult.data.town_package_id !== townPackage.id) {
+    return jsonError(400, "Atlas ID belongs to another town package.");
+  }
+
   let existingAtlasQuery = supabase
     .from("sanborn_atlases")
-    .select("atlas_id")
+    .select("id, atlas_id, town_package_id, updated_at")
     .eq("town_package_id", townPackage.id)
     .eq("edition_year", editionYear)
     .limit(1);
 
   existingAtlasQuery = volumeLabel ? existingAtlasQuery.eq("volume_label", volumeLabel) : existingAtlasQuery.is("volume_label", null);
-  const existingAtlasResult = await existingAtlasQuery.maybeSingle<{ atlas_id: string }>();
+  const existingAtlasResult = await existingAtlasQuery.maybeSingle<AtlasRow>();
 
   if (existingAtlasResult.error) {
     return jsonError(503, "Existing Sanborn atlas could not be checked.");
   }
 
-  atlasId = existingAtlasResult.data?.atlas_id ?? atlasId;
+  if (suppliedAtlasResult.data && existingAtlasResult.data && suppliedAtlasResult.data.id !== existingAtlasResult.data.id) {
+    return jsonError(400, "Atlas edition and volume already belong to another Sanborn atlas.");
+  }
 
-  const saveResult = await supabase
-    .from("sanborn_atlases")
-    .upsert(
-      {
-        atlas_id: atlasId,
-        town_package_id: townPackage.id,
-        source_record_id: sourceRecordId,
-        title,
-        edition_year: editionYear,
-        edition_date: normalizeEditionDate(body.editionDate),
-        volume_label: volumeLabel,
-        expected_page_count: expectedPageCount,
-        review_status: normalizeSanbornReviewStatus("unknown"),
-        evidence_classification: normalizeSanbornReviewStatus("unknown"),
-      },
-      { onConflict: "atlas_id" },
-    )
-    .select("id, atlas_id, updated_at")
-    .single();
+  if (requestedAtlasId && !suppliedAtlasResult.data && existingAtlasResult.data && existingAtlasResult.data.atlas_id !== requestedAtlasId) {
+    return jsonError(400, "Atlas edition and volume already belong to another Sanborn atlas.");
+  }
+
+  const existingAtlas = suppliedAtlasResult.data ?? existingAtlasResult.data ?? null;
+  atlasId = existingAtlas?.atlas_id ?? atlasId;
+
+  const record = {
+    source_record_id: sourceRecordId,
+    title,
+    edition_year: editionYear,
+    edition_date: editionDate,
+    volume_label: volumeLabel,
+    expected_page_count: expectedPageCount,
+  };
+
+  const saveResult = existingAtlas
+    ? await supabase
+        .from("sanborn_atlases")
+        .update(record)
+        .eq("id", existingAtlas.id)
+        .select("id, atlas_id, updated_at")
+        .single()
+    : await supabase
+        .from("sanborn_atlases")
+        .insert({
+          ...record,
+          atlas_id: atlasId,
+          town_package_id: townPackage.id,
+        })
+        .select("id, atlas_id, updated_at")
+        .single();
 
   if (saveResult.error || !saveResult.data) {
     return jsonError(503, "Sanborn atlas could not be saved.");

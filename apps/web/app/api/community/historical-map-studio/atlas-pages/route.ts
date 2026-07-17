@@ -5,7 +5,6 @@ import {
   isSanbornPageType,
   normalizeOptionalSanbornText,
   normalizePositiveInteger,
-  normalizeSanbornReviewStatus,
 } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
@@ -25,28 +24,14 @@ type AtlasPageSaveBody = {
   }>;
 };
 
-type AtlasRow = {
-  id: string;
-  atlas_id: string;
-  town_package_id: string;
-};
-
-type AssetRow = {
-  id: string;
-  asset_id: string;
-};
-
-type ExistingPageRow = {
-  id: string;
-};
-
 export async function PUT(request: NextRequest) {
   const access = await requireMapStudioWriteAccess();
   if (!access.ok) return access.response;
 
   const body = (await request.json().catch(() => null)) as AtlasPageSaveBody | null;
+  const atlasId = normalizeOptionalSanbornText(body?.atlasId, 160);
 
-  if (!body || !body.atlasId || !Array.isArray(body.pages)) {
+  if (!body || !atlasId || !Array.isArray(body.pages)) {
     return jsonError(400, "Atlas page payload is invalid.");
   }
 
@@ -58,22 +43,6 @@ export async function PUT(request: NextRequest) {
   }
 
   const townPackage = townPackageResult.data;
-  const atlasResult = await supabase
-    .from("sanborn_atlases")
-    .select("id, atlas_id, town_package_id")
-    .eq("atlas_id", body.atlasId)
-    .eq("town_package_id", townPackage.id)
-    .maybeSingle<AtlasRow>();
-
-  if (atlasResult.error) {
-    return jsonError(503, "Sanborn atlas could not be loaded before saving pages.");
-  }
-
-  if (!atlasResult.data) {
-    return jsonError(400, "Atlas pages can only be saved for an atlas in the active town package.");
-  }
-
-  const atlas = atlasResult.data;
   const normalizedPages = body.pages.map((page, index) => {
     const assetId = normalizeOptionalSanbornText(page.assetId, 160);
     const pageSequence = normalizePositiveInteger(page.pageSequence) ?? index + 1;
@@ -94,7 +63,7 @@ export async function PUT(request: NextRequest) {
         pageId:
           normalizeOptionalSanbornText(page.pageId, 220) ??
           buildDefaultSanbornPageId({
-            atlasId: atlas.atlas_id,
+            atlasId,
             assetId,
           }),
         assetId,
@@ -115,6 +84,7 @@ export async function PUT(request: NextRequest) {
   const pages = normalizedPages.map((page) => (page.ok ? page.value : neverPage()));
   const sequenceCount = new Set(pages.map((page) => page.pageSequence)).size;
   const assetCount = new Set(pages.map((page) => page.assetId)).size;
+  const pageIdCount = new Set(pages.map((page) => page.pageId)).size;
 
   if (sequenceCount !== pages.length) {
     return jsonError(400, "Atlas page sequences must be unique.");
@@ -124,68 +94,26 @@ export async function PUT(request: NextRequest) {
     return jsonError(400, "Each uploaded Sanborn sheet can appear once in atlas pages.");
   }
 
-  const assetsResult =
-    pages.length > 0
-      ? await supabase.from("sanborn_sheet_assets").select("id, asset_id").eq("town_package_id", townPackage.id).in("asset_id", pages.map((page) => page.assetId))
-      : { data: [], error: null };
-
-  if (assetsResult.error) {
-    return jsonError(503, "Sanborn sheet assets could not be verified before saving atlas pages.");
+  if (pageIdCount !== pages.length) {
+    return jsonError(400, "Atlas page IDs must be unique.");
   }
 
-  const assetRows = (assetsResult.data ?? []) as AssetRow[];
-  const rowIdByAssetId = new Map(assetRows.map((row) => [row.asset_id, row.id]));
+  const saveResult = await supabase.rpc("save_sanborn_atlas_pages", {
+    p_town_package_id: townPackage.id,
+    p_atlas_id: atlasId,
+    p_pages: pages,
+  });
 
-  if (rowIdByAssetId.size !== pages.length) {
-    return jsonError(400, "Atlas pages can only reference uploaded sheets in the active town package.");
-  }
-
-  const existingPagesResult = await supabase.from("sanborn_atlas_pages").select("id").eq("atlas_id", atlas.id);
-
-  if (existingPagesResult.error) {
-    return jsonError(503, "Existing atlas pages could not be prepared for reordering.");
-  }
-
-  const existingPages = (existingPagesResult.data ?? []) as ExistingPageRow[];
-  for (const [index, page] of existingPages.entries()) {
-    const offsetResult = await supabase
-      .from("sanborn_atlas_pages")
-      .update({ page_sequence: 100_000 + index + 1 })
-      .eq("id", page.id);
-
-    if (offsetResult.error) {
-      return jsonError(503, "Existing atlas pages could not be prepared for reordering.");
-    }
-  }
-
-  const records = pages.map((page) => ({
-    page_id: page.pageId,
-    atlas_id: atlas.id,
-    sanborn_sheet_asset_id: rowIdByAssetId.get(page.assetId),
-    page_sequence: page.pageSequence,
-    page_type: page.pageType,
-    sheet_number: page.sheetNumber,
-    volume_label: page.volumeLabel,
-    display_label: page.displayLabel,
-    review_status: normalizeSanbornReviewStatus("unknown"),
-    evidence_classification: normalizeSanbornReviewStatus("unknown"),
-  }));
-
-  if (records.length > 0) {
-    const saveResult = await supabase
-      .from("sanborn_atlas_pages")
-      .upsert(records, { onConflict: "sanborn_sheet_asset_id" })
-      .select("id, page_id, updated_at");
-
-    if (saveResult.error) {
-      return jsonError(503, "Sanborn atlas pages could not be saved.");
-    }
+  if (saveResult.error) {
+    const status = saveResult.error.code === "P0001" ? 400 : 503;
+    return jsonError(status, `Sanborn atlas pages could not be saved: ${saveResult.error.message}`);
   }
 
   return NextResponse.json({
     ok: true,
-    atlasId: atlas.atlas_id,
-    pageCount: records.length,
+    atlasId,
+    pageCount: pages.length,
+    result: saveResult.data ?? null,
     savedAt: new Date().toISOString(),
   });
 }

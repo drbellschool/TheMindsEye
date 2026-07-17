@@ -4,7 +4,9 @@ import test from "node:test";
 
 import {
   buildDefaultSanbornAtlasId,
+  calculateNormalizedPolygonArea,
   calculateSourceBoundingBox,
+  countDistinctNormalizedPolygonVertices,
   getUnassignedSanbornUploads,
   isSanbornMapPieceType,
   isSanbornPageType,
@@ -18,6 +20,27 @@ import {
   validateNormalizedPolygon,
   type SanbornMapPieceRecord,
 } from "./sanborn-atlas.ts";
+
+const migrationPath = "../../supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql";
+const atlasRoutePath = "app/api/community/historical-map-studio/atlases/route.ts";
+const pageRoutePath = "app/api/community/historical-map-studio/atlas-pages/route.ts";
+const pieceRoutePath = "app/api/community/historical-map-studio/map-pieces/route.ts";
+
+function readMigration(): string {
+  return readFileSync(migrationPath, "utf8");
+}
+
+function readRoute(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+function readSqlFunction(sql: string, functionName: string): string {
+  const start = sql.indexOf(`create or replace function public.${functionName}`);
+  assert.notEqual(start, -1, `${functionName} should exist in migration 0010.`);
+  const end = sql.indexOf("\n$$;", start);
+  assert.notEqual(end, -1, `${functionName} should close with $$;`);
+  return sql.slice(start, end + 4);
+}
 
 test("sanborn atlas page and piece type allowlists match the manual inventory workflow", () => {
   assert.deepEqual(sanbornPageTypes, [
@@ -57,14 +80,20 @@ test("validates normalized polygon coordinates without accepting source-image cr
   assert.equal(valid.ok, true);
   if (valid.ok) {
     assert.deepEqual(valid.bbox, { minX: 0.1052, minY: 0.2013, maxX: 0.4578, maxY: 0.5017 });
+    assert.equal(countDistinctNormalizedPolygonVertices(valid.polygon), 4);
+    assert.ok(calculateNormalizedPolygonArea(valid.polygon) > 0);
   }
 
   assert.equal(validateNormalizedPolygon([{ x: 0, y: 0 }, { x: 1, y: 1 }]).ok, false);
   assert.equal(validateNormalizedPolygon([{ x: -0.01, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }]).ok, false);
+  assert.equal(validateNormalizedPolygon([{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 1 }]).ok, false);
+  assert.equal(validateNormalizedPolygon([{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }]).ok, false);
 
-  const migration = readFileSync("../../supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql", "utf8");
+  const migration = readMigration();
   assert.match(migration, /source_polygon jsonb not null/);
-  assert.match(migration, /jsonb_array_length\(source_polygon\) >= 3/);
+  assert.match(migration, /sanborn_source_polygon_is_valid\(source_polygon\)/);
+  assert.match(migration, /array_length\(distinct_keys, 1\)/);
+  assert.match(migration, /abs\(area_sum\) > 0\.000000000001/);
   assert.doesNotMatch(migration, /crop|cropped|derivative_storage|storage_path/i);
 });
 
@@ -128,8 +157,122 @@ test("rejects map-piece saves for atlas pages outside the active town package", 
     assert.match(rejected.error, /active town package/);
   }
 
-  const route = readFileSync("app/api/community/historical-map-studio/map-pieces/route.ts", "utf8");
-  assert.match(route, /validateMapPieceSaveTownScope/);
+  const migration = readMigration();
+  const savePieces = readSqlFunction(migration, "save_sanborn_map_pieces");
+  assert.match(savePieces, /Atlas page belongs to another town package/);
+});
+
+test("atlas saves reject cross-town atlas IDs and avoid global-ID upserts", () => {
+  const route = readRoute(atlasRoutePath);
+
+  assert.match(route, /Atlas ID belongs to another town package/);
+  assert.match(route, /\.update\(record\)/);
+  assert.match(route, /\.eq\("id", existingAtlas\.id\)/);
+  assert.match(route, /\.insert\(\{/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+});
+
+test("page saves resolve existing page IDs under the selected atlas before writing", () => {
+  const route = readRoute(pageRoutePath);
+  const migration = readMigration();
+  const savePages = readSqlFunction(migration, "save_sanborn_atlas_pages");
+
+  assert.match(route, /\.rpc\("save_sanborn_atlas_pages"/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+  assert.doesNotMatch(route, /page_sequence:\s*100_000/);
+  assert.match(savePages, /Atlas ID belongs to another town package/);
+  assert.match(savePages, /Page ID belongs to another Sanborn atlas/);
+  assert.match(savePages, /where page\.id = payload\.existing_page_row_id/);
+  assert.match(savePages, /where payload\.existing_page_row_id is null/);
+  assert.match(savePages, /Existing atlas page IDs cannot be reassigned to a different Sanborn sheet asset/);
+});
+
+test("piece saves reject cross-page piece IDs and update by scoped row ID", () => {
+  const route = readRoute(pieceRoutePath);
+  const migration = readMigration();
+  const savePieces = readSqlFunction(migration, "save_sanborn_map_pieces");
+
+  assert.match(route, /\.rpc\("save_sanborn_map_pieces"/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+  assert.doesNotMatch(route, /piece_sequence:\s*100_000/);
+  assert.match(savePieces, /Piece ID belongs to another atlas page/);
+  assert.match(savePieces, /final_piece_row_id = piece\.id/);
+  assert.match(savePieces, /where piece\.id = payload\.final_piece_row_id/);
+  assert.match(savePieces, /where payload\.existing_piece_row_id is null/);
+  assert.match(savePieces, /join public\.sanborn_map_pieces piece on piece\.id = payload\.existing_piece_row_id/);
+});
+
+test("ordinary atlas, page, and piece saves preserve review and evidence metadata", () => {
+  const routes = [atlasRoutePath, pageRoutePath, pieceRoutePath].map(readRoute).join("\n");
+  const migration = readMigration();
+  const savePages = readSqlFunction(migration, "save_sanborn_atlas_pages");
+  const savePieces = readSqlFunction(migration, "save_sanborn_map_pieces");
+
+  assert.doesNotMatch(routes, /review_status|evidence_classification/);
+  assert.doesNotMatch(savePages, /review_status|evidence_classification/);
+  assert.doesNotMatch(savePieces, /review_status|evidence_classification/);
+  assert.match(migration, /review_status review_status_enum not null default 'unknown'/);
+  assert.match(migration, /evidence_classification review_status_enum not null default 'unknown'/);
+});
+
+test("page and piece saves run through atomic RPCs with explicit empty-payload behavior", () => {
+  const pageRoute = readRoute(pageRoutePath);
+  const pieceRoute = readRoute(pieceRoutePath);
+  const migration = readMigration();
+  const savePages = readSqlFunction(migration, "save_sanborn_atlas_pages");
+  const savePieces = readSqlFunction(migration, "save_sanborn_map_pieces");
+
+  assert.match(pageRoute, /\.rpc\("save_sanborn_atlas_pages"/);
+  assert.match(pieceRoute, /\.rpc\("save_sanborn_map_pieces"/);
+  assert.match(savePages, /raise exception/);
+  assert.match(savePieces, /raise exception/);
+  assert.match(savePages, /'pageOmission', 'unchanged'/);
+  assert.match(savePages, /Atlas page sequence belongs to an omitted page assignment/);
+  assert.doesNotMatch(savePages, /delete from public\.sanborn_atlas_pages/);
+  assert.match(savePieces, /if jsonb_array_length\(p_pieces\) = 0 then/);
+  assert.match(savePieces, /Only draft map pieces can be deleted by omission/);
+  assert.match(savePieces, /and inventory_status = 'draft'/);
+  assert.match(savePieces, /'pieceOmission', 'delete'/);
+});
+
+test("piece parent resolution supports same-payload parents and rejects invalid references", () => {
+  const route = readRoute(pieceRoutePath);
+  const migration = readMigration();
+  const savePieces = readSqlFunction(migration, "save_sanborn_map_pieces");
+
+  assert.match(route, /Parent piece cannot be the same as the child piece/);
+  assert.match(savePieces, /set resolved_parent_row_id = parent\.final_piece_row_id/);
+  assert.match(savePieces, /Parent piece cannot be the same as the child piece/);
+  assert.match(savePieces, /Parent piece belongs to another atlas page/);
+  assert.match(savePieces, /Parent piece reference is invalid for the selected atlas page/);
+});
+
+test("rejects duplicate-point and collinear normalized polygons", () => {
+  const duplicatePoint = validateNormalizedPolygon([
+    { x: 0.1, y: 0.1 },
+    { x: 0.1, y: 0.1 },
+    { x: 0.8, y: 0.8 },
+  ]);
+  const collinear = validateNormalizedPolygon([
+    { x: 0.1, y: 0.1 },
+    { x: 0.4, y: 0.4 },
+    { x: 0.8, y: 0.8 },
+  ]);
+  const migration = readMigration();
+  const polygonFunction = readSqlFunction(migration, "sanborn_source_polygon_is_valid");
+
+  assert.equal(duplicatePoint.ok, false);
+  if (!duplicatePoint.ok) {
+    assert.match(duplicatePoint.error, /distinct/);
+  }
+
+  assert.equal(collinear.ok, false);
+  if (!collinear.ok) {
+    assert.match(collinear.error, /nonzero area/);
+  }
+
+  assert.match(polygonFunction, /array_length\(distinct_keys, 1\)/);
+  assert.match(polygonFunction, /abs\(area_sum\) > 0\.000000000001/);
 });
 
 test("round trips manual piece inventory data through JSON serialization", () => {
