@@ -52,6 +52,10 @@ export type MapPieceGeographicCornersValidation =
   | { ok: true; corners: CompleteGeoCorners; signedArea: number }
   | { ok: false; error: string };
 
+export type MapPieceInteractiveDraftResult =
+  | { ok: true; placement: SanbornMapPieceGeoreference }
+  | { ok: false; message: string; placement: SanbornMapPieceGeoreference };
+
 function normalizeCenterLatitude(value: number | null | undefined): number {
   return isValidLatitude(value) ? Number(value) : 0;
 }
@@ -170,6 +174,10 @@ export function validateMapPieceGeographicCorners(corners: GeoCorners | null | u
     return { ok: false, error: `${invalidMapPieceGeographicQuadMessage} The quadrilateral area is zero or too small.` };
   }
 
+  if (area >= -mapPieceGeographicQuadAreaTolerance) {
+    return { ok: false, error: `${invalidMapPieceGeographicQuadMessage} Corners must use northwest, northeast, southeast, southwest clockwise winding.` };
+  }
+
   if (
     segmentsCross(completeCorners.northwest, completeCorners.northeast, completeCorners.southeast, completeCorners.southwest) ||
     segmentsCross(completeCorners.northeast, completeCorners.southeast, completeCorners.southwest, completeCorners.northwest)
@@ -183,11 +191,10 @@ export function validateMapPieceGeographicCorners(corners: GeoCorners | null | u
     crossProduct(completeCorners.southeast, completeCorners.southwest, completeCorners.northwest),
     crossProduct(completeCorners.southwest, completeCorners.northwest, completeCorners.northeast),
   ];
-  const allPositive = crossProducts.every((value) => value > mapPieceGeographicQuadAreaTolerance);
   const allNegative = crossProducts.every((value) => value < -mapPieceGeographicQuadAreaTolerance);
 
-  if (!allPositive && !allNegative) {
-    return { ok: false, error: `${invalidMapPieceGeographicQuadMessage} Corners must stay in northwest, northeast, southeast, southwest order without foldover.` };
+  if (!allNegative) {
+    return { ok: false, error: `${invalidMapPieceGeographicQuadMessage} Corners must stay in clockwise northwest, northeast, southeast, southwest order without foldover.` };
   }
 
   return { ok: true, corners: completeCorners, signedArea: area };
@@ -358,21 +365,79 @@ export function placeMapPieceAtCenter(piece: SanbornMapPieceRecord, placement: S
   });
 }
 
+export function createMapPieceInteractiveDraft(
+  placement: SanbornMapPieceGeoreference,
+  patch: {
+    corners: GeoCorners;
+    rotation?: number;
+    placementStatus?: string | null;
+  },
+): MapPieceInteractiveDraftResult {
+  const validation = validateMapPieceGeographicCorners(patch.corners);
+
+  if (!validation.ok) {
+    return {
+      ok: false,
+      message: validation.error,
+      placement,
+    };
+  }
+
+  return {
+    ok: true,
+    placement: normalizeSanbornMapPieceGeoreference({
+      ...placement,
+      rotation: patch.rotation ?? placement.rotation,
+      corners: validation.corners,
+      isVisible: true,
+      placementStatus: patch.placementStatus ?? "draft",
+      isPersisted: false,
+    }),
+  };
+}
+
+export function finishMapPieceInteractiveDraft(
+  originalPlacement: SanbornMapPieceGeoreference,
+  draftPlacement: SanbornMapPieceGeoreference | null,
+  invalidMessage = "",
+): MapPieceInteractiveDraftResult {
+  if (invalidMessage) {
+    return {
+      ok: false,
+      message: invalidMessage,
+      placement: originalPlacement,
+    };
+  }
+
+  if (!draftPlacement) {
+    return {
+      ok: false,
+      message: "No map piece placement change was available.",
+      placement: originalPlacement,
+    };
+  }
+
+  return createMapPieceInteractiveDraft(draftPlacement, {
+    corners: draftPlacement.corners,
+    rotation: draftPlacement.rotation,
+    placementStatus: draftPlacement.placementStatus === "aligned" || draftPlacement.placementStatus === "reviewed" ? draftPlacement.placementStatus : "draft",
+  });
+}
+
 export function updateMapPieceGeographicCorner(
   placement: SanbornMapPieceGeoreference,
   corner: keyof GeoCorners,
   coordinate: GeoCoordinate,
 ): SanbornMapPieceGeoreference {
-  return normalizeSanbornMapPieceGeoreference({
-    ...placement,
+  const next = createMapPieceInteractiveDraft(placement, {
     corners: {
       ...placement.corners,
       [corner]: coordinate,
     },
-    isVisible: true,
     placementStatus: "draft",
-    isPersisted: false,
   });
+
+  return next.ok ? next.placement : placement;
 }
 
 export function rotateMapPieceGeoreference(

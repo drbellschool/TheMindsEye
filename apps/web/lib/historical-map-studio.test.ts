@@ -62,13 +62,16 @@ import {
 } from "./historical-map-studio.ts";
 import { resolveInitialGeographicMapView, selectActiveTownPackage } from "./historical-map-studio-data.ts";
 import {
+  createMapPieceInteractiveDraft,
   createDefaultMapPieceGeoreference,
+  finishMapPieceInteractiveDraft,
   hasOperationalMapPiecePlacement,
   mergeSavedAndDefaultMapPieceGeoreferences,
   piecePlacementMatchesForPersistence,
   placeMapPieceAtCenter,
   rotateMapPieceGeoreference,
   runMapPiecePlacementNetworkRequest,
+  updateMapPieceGeographicCorner,
   validateMapPieceGeographicCorners,
   validateMapPiecePlacementForPersistence,
 } from "./sanborn-map-piece-georeference.ts";
@@ -565,8 +568,20 @@ test("map piece geographic corner validation rejects unusable quadrilaterals", (
     southeast: { latitude: 33.419, longitude: -94.038 },
     southwest: { latitude: 33.418, longitude: -94.056 },
   };
+  const reversedWinding = {
+    northwest: validSkewed.northwest,
+    northeast: validSkewed.southwest,
+    southeast: validSkewed.southeast,
+    southwest: validSkewed.northeast,
+  };
+  const rotatedNormal = rotateMapPieceGeoreference(
+    placeMapPieceAtCenter(mapPiece("piece-68"), createDefaultMapPieceGeoreference(mapPiece("piece-68")), { latitude: 33.425, longitude: -94.047 }),
+    37,
+  );
 
   assert.equal(validateMapPieceGeographicCorners(validSkewed).ok, true);
+  assert.equal(validateMapPieceGeographicCorners(rotatedNormal.corners).ok, true);
+  assert.equal(validateMapPieceGeographicCorners(reversedWinding).ok, false);
   assert.equal(validateMapPieceGeographicCorners({ ...validSkewed, southwest: validSkewed.northwest }).ok, false);
   assert.equal(
     validateMapPieceGeographicCorners({
@@ -596,6 +611,53 @@ test("map piece geographic corner validation rejects unusable quadrilaterals", (
     false,
   );
   assert.equal(validateMapPieceGeographicCorners({ ...validSkewed, northwest: { latitude: 91, longitude: -94.055 } }).ok, false);
+});
+
+test("interactive map piece dragging rejects invalid geometry without fallback commits", () => {
+  const piece = mapPiece("piece-68");
+  const original = placeMapPieceAtCenter(piece, createDefaultMapPieceGeoreference(piece), { latitude: 33.425, longitude: -94.047 });
+  const invalidCorners = {
+    ...original.corners,
+    northeast: original.corners.northwest,
+  };
+  const invalidDraft = createMapPieceInteractiveDraft(original, { corners: invalidCorners, rotation: original.rotation, placementStatus: "draft" });
+
+  assert.equal(invalidDraft.ok, false);
+  assert.deepEqual(invalidDraft.placement, original);
+
+  const rejected = finishMapPieceInteractiveDraft(original, invalidDraft.ok ? invalidDraft.placement : null, invalidDraft.ok ? "" : invalidDraft.message);
+  assert.equal(rejected.ok, false);
+  assert.deepEqual(rejected.placement, original);
+  if (!rejected.ok) {
+    assert.match(rejected.message, /valid, non-crossing geographic quadrilateral/);
+  }
+
+  const invalidSingleCorner = updateMapPieceGeographicCorner(original, "northeast", original.corners.northwest!);
+  assert.deepEqual(invalidSingleCorner, original);
+});
+
+test("interactive map piece dragging commits valid raw corner geometry", () => {
+  const piece = mapPiece("piece-68");
+  const original = placeMapPieceAtCenter(piece, createDefaultMapPieceGeoreference(piece), { latitude: 33.425, longitude: -94.047 });
+  const validCorners = {
+    ...original.corners,
+    northeast: {
+      latitude: (original.corners.northeast?.latitude ?? 0) + 0.00002,
+      longitude: (original.corners.northeast?.longitude ?? 0) + 0.00002,
+    },
+  };
+  const draft = createMapPieceInteractiveDraft(original, { corners: validCorners, rotation: original.rotation, placementStatus: "draft" });
+
+  assert.equal(draft.ok, true);
+  if (!draft.ok) return;
+
+  const committed = finishMapPieceInteractiveDraft(original, draft.placement);
+  assert.equal(committed.ok, true);
+  if (!committed.ok) return;
+
+  assert.notDeepEqual(committed.placement.corners.northeast, original.corners.northeast);
+  assert.equal(validateMapPieceGeographicCorners(committed.placement.corners).ok, true);
+  assert.equal(committed.placement.placementStatus, "draft");
 });
 
 test("map piece persistence validator rejects route payloads before normalization", () => {
@@ -716,6 +778,8 @@ test("map piece placement migration is service-role-only and preserves review me
   assert.match(migration, /create or replace function public\.sanborn_map_piece_geographic_quad_is_valid/);
   assert.match(migration, /constraint sanborn_map_piece_georeferences_geographic_quad_check check/);
   assert.match(migration, /target_geometry text not null default 'polygon' check \(target_geometry = 'polygon'\)/);
+  assert.match(normalized, /and cross_abc < -0\.000000000001 and cross_bcd < -0\.000000000001 and cross_cda < -0\.000000000001 and cross_dab < -0\.000000000001/);
+  assert.doesNotMatch(normalized, /cross_abc > 0\.000000000001/);
   assert.match(migration, /create or replace function public\.save_sanborn_map_piece_georeference/);
   assert.match(migration, /Map piece placement corners must form a valid, non-crossing geographic quadrilateral\./);
   assert.match(normalized, /security invoker/);
@@ -790,6 +854,9 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(leafletComponent, /canvas\.toBlob/);
   assert.match(leafletComponent, /URL\.createObjectURL\(blob\)/);
   assert.match(leafletComponent, /URL\.revokeObjectURL/);
+  assert.match(leafletComponent, /createMapPieceInteractiveDraft\(start\.piece/);
+  assert.match(leafletComponent, /finishMapPieceInteractiveDraft\(latestRef\.current\.layer, nextDraft, invalidDragDiagnostic\)/);
+  assert.doesNotMatch(leafletComponent, /draft = normalizeSanbornMapPieceGeoreference/);
   assert.doesNotMatch(leafletComponent, /supabase|upload/i);
 });
 

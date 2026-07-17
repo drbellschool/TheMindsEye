@@ -21,8 +21,8 @@ import {
   type SheetGeographicTransform,
 } from "@/lib/historical-map-sheet-georeference";
 import {
-  normalizeSanbornMapPieceGeoreference,
-  validateMapPieceGeographicCorners,
+  createMapPieceInteractiveDraft,
+  finishMapPieceInteractiveDraft,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import {
@@ -1358,6 +1358,7 @@ function TransformedPieceLayer({
   latestRef.current = { layer, isSelected, mode, onSelect, onCommit };
   const [maskedImage, setMaskedImage] = useState<{ url: string; width: number; height: number } | null>(null);
   const [maskError, setMaskError] = useState("");
+  const [geometryError, setGeometryError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -1483,7 +1484,7 @@ function TransformedPieceLayer({
       element.classList.toggle("is-selected", selected);
       element.classList.toggle("is-locked", piece.isLocked);
       element.classList.toggle("is-hidden", !piece.isVisible);
-      element.classList.toggle("has-image-error", Boolean(maskError || latestRef.current.layer.signedUrlError));
+      element.classList.toggle("has-image-error", Boolean(maskError || geometryError || latestRef.current.layer.signedUrlError));
       element.classList.toggle("has-invalid-transform", !projectiveTransform.valid);
       image.src = maskedImage?.url ?? "";
       image.alt = latestRef.current.layer.pieceLabel;
@@ -1496,11 +1497,13 @@ function TransformedPieceLayer({
       boundary.style.display = selected ? "block" : "none";
       label.textContent = latestRef.current.layer.pieceLabel;
       label.style.display = selected ? "block" : "none";
-      diagnostics.style.display = selected && Boolean(maskError || latestRef.current.layer.signedUrlError || !projectiveTransform.valid) ? "block" : "none";
+      diagnostics.style.display = selected && Boolean(maskError || geometryError || latestRef.current.layer.signedUrlError || !projectiveTransform.valid) ? "block" : "none";
       diagnostics.textContent = latestRef.current.layer.signedUrlError
         ? `Image: signed URL failed (${latestRef.current.layer.signedUrlError})`
         : maskError
           ? `Piece mask: ${maskError}`
+          : geometryError
+            ? `Geometry: ${geometryError}`
           : !projectiveTransform.valid
             ? "Transform: rectangular fallback"
             : "";
@@ -1535,29 +1538,16 @@ function TransformedPieceLayer({
       });
     }
 
-    function finishInteraction(nextDraft: SanbornMapPieceGeoreference | null) {
-      if (!nextDraft) {
+    function finishInteraction(nextDraft: SanbornMapPieceGeoreference | null, invalidDragDiagnostic: string) {
+      const result = finishMapPieceInteractiveDraft(latestRef.current.layer, nextDraft, invalidDragDiagnostic);
+
+      if (!result.ok) {
+        setGeometryError(result.message);
         return;
       }
 
-      const draftValidation = validateMapPieceGeographicCorners(nextDraft.corners);
-      if (!draftValidation.ok) {
-        setMaskError(draftValidation.error);
-        return;
-      }
-
-      const committed = normalizeSanbornMapPieceGeoreference({
-        ...nextDraft,
-        corners: draftValidation.corners,
-        placementStatus: nextDraft.placementStatus === "aligned" || nextDraft.placementStatus === "reviewed" ? nextDraft.placementStatus : "draft",
-      });
-      const validation = validateMapPieceGeographicCorners(committed.corners);
-
-      if (!validation.ok) {
-        setMaskError(validation.error);
-        return;
-      }
-
+      const committed = result.placement;
+      setGeometryError("");
       latestRef.current.onCommit?.(committed.pieceId, {
         centerLatitude: committed.centerLatitude,
         centerLongitude: committed.centerLongitude,
@@ -1597,6 +1587,8 @@ function TransformedPieceLayer({
       }
       const startPoints = getPieceCornerPoints(map, piece);
       const startPointerPoint = pointerEventToLayerPoint(map, event);
+      let lastValidDraft: SanbornMapPieceGeoreference | null = null;
+      let invalidDragDiagnostic = "";
       const start = {
         pointerPoint: startPointerPoint,
         piece,
@@ -1604,6 +1596,26 @@ function TransformedPieceLayer({
         centerPoint: getPointCenter(startPoints),
         rotation: piece.rotation,
       };
+      setGeometryError("");
+
+      function applyDraftCandidate(nextCorners: GeoCorners, rotation = start.rotation) {
+        const result = createMapPieceInteractiveDraft(start.piece, {
+          corners: nextCorners,
+          rotation,
+          placementStatus: "draft",
+        });
+
+        if (result.ok) {
+          draft = result.placement;
+          lastValidDraft = result.placement;
+          invalidDragDiagnostic = "";
+          setGeometryError("");
+        } else {
+          draft = lastValidDraft;
+          invalidDragDiagnostic = result.message;
+          setGeometryError(result.message);
+        }
+      }
 
       function handleMove(moveEvent: PointerEvent) {
         if (latestRef.current.mode !== "edit_historical_sheets") {
@@ -1629,14 +1641,14 @@ function TransformedPieceLayer({
             return;
           }
           const nextPoints = { ...start.points, [corner]: L.point(start.points[corner].x + dx, start.points[corner].y + dy) };
-          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+          applyDraftCandidate(pointsToCorners(map, nextPoints));
         } else if (action === "rotate") {
           const deltaDegrees = calculateRotationDeltaDegrees(start.pointerPoint, currentPointerPoint, start.centerPoint);
           const nextPoints = rotatePoints(start.points, start.centerPoint, deltaDegrees);
-          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, rotation: start.rotation + deltaDegrees, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+          applyDraftCandidate(pointsToCorners(map, nextPoints), start.rotation + deltaDegrees);
         } else {
           const nextPoints = translatePoints(start.points, dx, dy);
-          draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
+          applyDraftCandidate(pointsToCorners(map, nextPoints));
         }
 
         updateFromMap();
@@ -1657,7 +1669,7 @@ function TransformedPieceLayer({
         } else {
           map.dragging.enable();
         }
-        finishInteraction(draft);
+        finishInteraction(draft, invalidDragDiagnostic);
         draft = null;
         updateFromMap();
         dragCleanup = null;
@@ -1697,7 +1709,7 @@ function TransformedPieceLayer({
       element.remove();
       containerRef.current = null;
     };
-  }, [map, maskedImage, maskError]);
+  }, [map, maskedImage, maskError, geometryError]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -1706,7 +1718,7 @@ function TransformedPieceLayer({
     }
 
     map.fire("moveend");
-  }, [layer, isSelected, mode, maskedImage, maskError, map]);
+  }, [layer, isSelected, mode, maskedImage, maskError, geometryError, map]);
 
   return null;
 }

@@ -59,11 +59,10 @@ as $$
     and polygon_area > 0.000000000001
     and not (cross_abc * cross_abd < -0.000000000001 and cross_cda_for_edges * cross_cdb < -0.000000000001)
     and not (cross_bcd * cross_bca < -0.000000000001 and cross_dab_for_edges * cross_dac < -0.000000000001)
-    and (
-      (cross_abc > 0.000000000001 and cross_bcd > 0.000000000001 and cross_cda > 0.000000000001 and cross_dab > 0.000000000001)
-      or
-      (cross_abc < -0.000000000001 and cross_bcd < -0.000000000001 and cross_cda < -0.000000000001 and cross_dab < -0.000000000001)
-    ),
+    and cross_abc < -0.000000000001
+    and cross_bcd < -0.000000000001
+    and cross_cda < -0.000000000001
+    and cross_dab < -0.000000000001,
     false
   )
   from measurements;
