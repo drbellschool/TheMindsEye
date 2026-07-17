@@ -770,7 +770,9 @@ test("map piece placement network helper clears in-flight state after rejected r
 
 test("map piece placement migration is service-role-only and preserves review metadata", () => {
   const migration = readFileSync("../../supabase/migrations/0011_sanborn_map_piece_georeferences.sql", "utf8");
+  const fixMigration = readFileSync("../../supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql", "utf8");
   const normalized = migration.replace(/\s+/g, " ").toLowerCase();
+  const normalizedFix = fixMigration.replace(/\s+/g, " ").toLowerCase();
 
   assert.match(migration, /create table if not exists public\.sanborn_map_piece_georeferences/);
   assert.match(migration, /references public\.sanborn_map_pieces\(id\) on delete cascade/);
@@ -794,9 +796,42 @@ test("map piece placement migration is service-role-only and preserves review me
   assert.match(normalized, /grant execute on function public\.sanborn_map_piece_geographic_quad_is_valid\(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision\) to service_role/);
   assert.match(normalized, /revoke execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) from public/);
   assert.match(normalized, /grant execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) to service_role/);
+  assert.match(fixMigration, /create or replace function public\.save_sanborn_map_piece_georeference/);
+  assert.match(normalizedFix, /security invoker/);
+  assert.match(normalizedFix, /set search_path = public/);
+  assert.doesNotMatch(normalizedFix, /security definer/);
+  assert.match(normalizedFix, /revoke execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) from public/);
+  assert.match(normalizedFix, /grant execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) to service_role/);
   assert.doesNotMatch(migration, /review_status\s*=/);
   assert.doesNotMatch(migration, /evidence_classification\s*=/);
   assert.doesNotMatch(migration, /create table .*building|create table .*hydrant|create table .*railroad|create table .*historical_feature/i);
+});
+
+test("map piece save RPC avoids PL/pgSQL record and alias collision", () => {
+  const migrations = [
+    readFileSync("../../supabase/migrations/0011_sanborn_map_piece_georeferences.sql", "utf8"),
+    readFileSync("../../supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql", "utf8"),
+  ];
+
+  migrations.forEach((migration) => {
+    const normalized = migration.replace(/\s+/g, " ").toLowerCase();
+    const assignIndex = normalized.indexOf("into piece_scope from public.sanborn_map_pieces as map_piece_row");
+    const firstFieldAccess = normalized.indexOf("piece_scope.town_package_id");
+
+    assert.doesNotMatch(migration, /\npiece record;/i);
+    assert.doesNotMatch(migration, /from public\.sanborn_map_pieces\s+(?:as\s+)?piece\b/i);
+    assert.match(normalized, /piece_scope record/);
+    assert.match(normalized, /from public\.sanborn_map_pieces as map_piece_row/);
+    assert.match(normalized, /join public\.sanborn_atlas_pages as atlas_page_row/);
+    assert.match(normalized, /join public\.sanborn_atlases as atlas_row/);
+    assert.equal(assignIndex >= 0, true);
+    assert.equal(firstFieldAccess > assignIndex, true);
+    assert.doesNotMatch(normalized, /\bpiece\.(town_package_id|map_piece_row_id|atlas_page_id)\b/);
+    assert.match(normalized, /piece_scope\.town_package_id/);
+    assert.match(normalized, /piece_scope\.map_piece_row_id/);
+    assert.match(normalized, /piece_scope\.atlas_page_id/);
+    assert.doesNotMatch(normalized, /security definer/);
+  });
 });
 
 test("map piece placement route saves through the scoped service-role RPC", () => {
