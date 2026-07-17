@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { isOperationalMapCenter, type GeoCoordinate } from "@/lib/historical-map-georeference";
 import {
   normalizeSanbornMapPieceGeoreference,
+  persistedMapPieceTargetGeometry,
+  validateMapPieceGeographicCorners,
+  validateMapPiecePlacementForPersistence,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import { normalizeOptionalSanbornText } from "@/lib/sanborn-atlas";
@@ -126,19 +129,30 @@ async function resolvePieceScope(supabase: SupabaseAdminClient, pieceId: string,
 }
 
 function mapSavedPiece(row: SavedPieceGeoreferenceRow, piece: PieceRow, page: PageRow): SanbornMapPieceGeoreference {
+  if (row.target_geometry !== persistedMapPieceTargetGeometry) {
+    throw new Error("Saved map piece placement target geometry is invalid.");
+  }
+
+  const corners = {
+    northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
+    northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
+    southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
+    southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
+  };
+  const validation = validateMapPieceGeographicCorners(corners);
+
+  if (!validation.ok) {
+    throw new Error(validation.error);
+  }
+
   return normalizeSanbornMapPieceGeoreference({
     pieceGeoreferenceId: row.piece_georeference_id,
     pieceId: piece.piece_id,
     atlasPageId: page.page_id,
-    targetGeometry: row.target_geometry === "line" || row.target_geometry === "point" ? row.target_geometry : "polygon",
+    targetGeometry: persistedMapPieceTargetGeometry,
     centerLatitude: row.center_latitude,
     centerLongitude: row.center_longitude,
-    corners: {
-      northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
-      northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
-      southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
-      southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
-    },
+    corners,
     rotation: row.rotation ?? 0,
     opacity: row.opacity ?? undefined,
     layerOrder: row.layer_order ?? 0,
@@ -165,10 +179,17 @@ async function loadSavedPiecePlacement(supabase: SupabaseAdminClient, workspaceI
     return { error: result.error, placement: null };
   }
 
-  return {
-    error: null,
-    placement: result.data ? mapSavedPiece(result.data, piece, page) : null,
-  };
+  try {
+    return {
+      error: null,
+      placement: result.data ? mapSavedPiece(result.data, piece, page) : null,
+    };
+  } catch (error) {
+    return {
+      error,
+      placement: null,
+    };
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -238,6 +259,11 @@ export async function PUT(request: NextRequest) {
 
   if (!body?.placement || !body.pieceId) {
     return jsonError(400, "Map piece placement payload is invalid.");
+  }
+
+  const placementValidation = validateMapPiecePlacementForPersistence(body.placement);
+  if (!placementValidation.ok) {
+    return jsonError(400, placementValidation.message);
   }
 
   const { supabase } = access;

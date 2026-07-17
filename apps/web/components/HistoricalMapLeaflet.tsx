@@ -22,8 +22,14 @@ import {
 } from "@/lib/historical-map-sheet-georeference";
 import {
   normalizeSanbornMapPieceGeoreference,
+  validateMapPieceGeographicCorners,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
+import {
+  calculateMapPieceMaskRasterPlan,
+  calculateRotationDeltaDegrees,
+  clientPointToContainerPoint,
+} from "@/lib/sanborn-map-piece-rendering";
 import type { SanbornNormalizedPoint, SanbornSourceBBox } from "@/lib/sanborn-atlas";
 
 export { basemaps };
@@ -688,6 +694,12 @@ function pointToCoordinate(map: L.Map, point: L.Point) {
   return { latitude: latLng.lat, longitude: latLng.lng };
 }
 
+function pointerEventToLayerPoint(map: L.Map, event: PointerEvent): L.Point {
+  const containerPoint = clientPointToContainerPoint(event.clientX, event.clientY, map.getContainer().getBoundingClientRect());
+
+  return map.containerPointToLayerPoint(L.point(containerPoint.x, containerPoint.y));
+}
+
 function pointsToCorners(map: L.Map, points: QuadPoints): GeoCorners {
   return {
     northwest: pointToCoordinate(map, points.northwest),
@@ -850,26 +862,11 @@ function setEdge(points: QuadPoints, edge: string, nextPoint: L.Point): QuadPoin
   return points;
 }
 
-function getPieceSourcePixelBounds(layer: HistoricalPieceMapLayer) {
-  const minX = Math.max(0, Math.floor(layer.sourceBBox.minX * layer.sourceImageWidth));
-  const minY = Math.max(0, Math.floor(layer.sourceBBox.minY * layer.sourceImageHeight));
-  const maxX = Math.min(layer.sourceImageWidth, Math.ceil(layer.sourceBBox.maxX * layer.sourceImageWidth));
-  const maxY = Math.min(layer.sourceImageHeight, Math.ceil(layer.sourceBBox.maxY * layer.sourceImageHeight));
-
-  return {
-    x: minX,
-    y: minY,
-    width: Math.max(1, maxX - minX),
-    height: Math.max(1, maxY - minY),
-  };
-}
-
 async function createMaskedPieceImageUrl(layer: HistoricalPieceMapLayer): Promise<{ url: string; width: number; height: number }> {
   if (!layer.imageUrl) {
     throw new Error("Source image URL is unavailable.");
   }
 
-  const sourceBounds = getPieceSourcePixelBounds(layer);
   const image = new Image();
   image.crossOrigin = "anonymous";
   image.decoding = "async";
@@ -879,10 +876,17 @@ async function createMaskedPieceImageUrl(layer: HistoricalPieceMapLayer): Promis
   });
   image.src = layer.imageUrl;
   await loaded;
+  const sourceImageWidth = image.naturalWidth || layer.sourceImageWidth;
+  const sourceImageHeight = image.naturalHeight || layer.sourceImageHeight;
+  const raster = calculateMapPieceMaskRasterPlan({
+    sourceImageWidth,
+    sourceImageHeight,
+    sourcePolygon: layer.sourcePolygon,
+  });
 
   const canvas = document.createElement("canvas");
-  canvas.width = sourceBounds.width;
-  canvas.height = sourceBounds.height;
+  canvas.width = raster.outputWidth;
+  canvas.height = raster.outputHeight;
   const context = canvas.getContext("2d");
 
   if (!context) {
@@ -892,21 +896,48 @@ async function createMaskedPieceImageUrl(layer: HistoricalPieceMapLayer): Promis
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.save();
   context.beginPath();
-  layer.sourcePolygon.forEach((point, index) => {
-    const x = point.x * layer.sourceImageWidth - sourceBounds.x;
-    const y = point.y * layer.sourceImageHeight - sourceBounds.y;
+  raster.clipPolygon.forEach((point, index) => {
     if (index === 0) {
-      context.moveTo(x, y);
+      context.moveTo(point.x, point.y);
     } else {
-      context.lineTo(x, y);
+      context.lineTo(point.x, point.y);
     }
   });
   context.closePath();
   context.clip();
-  context.drawImage(image, sourceBounds.x, sourceBounds.y, sourceBounds.width, sourceBounds.height, 0, 0, sourceBounds.width, sourceBounds.height);
+  try {
+    context.drawImage(image, raster.sourceX, raster.sourceY, raster.sourceWidth, raster.sourceHeight, 0, 0, raster.outputWidth, raster.outputHeight);
+  } catch (error) {
+    context.restore();
+    throw new Error(error instanceof Error ? `Source image could not be drawn: ${error.message}` : "Source image could not be drawn.");
+  }
   context.restore();
 
-  return { url: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    try {
+      canvas.toBlob((encoded) => {
+        if (encoded) {
+          resolve(encoded);
+        } else {
+          reject(new Error("Canvas encoding failed."));
+        }
+      }, "image/png");
+    } catch (error) {
+      reject(
+        new Error(
+          error instanceof DOMException && error.name === "SecurityError"
+            ? "Canvas is tainted by the signed source image. Check storage CORS configuration."
+            : "Canvas encoding failed.",
+        ),
+      );
+    }
+  });
+
+  if (typeof URL.createObjectURL !== "function") {
+    throw new Error("Canvas object URL creation is unavailable in this browser.");
+  }
+
+  return { url: URL.createObjectURL(blob), width: canvas.width, height: canvas.height };
 }
 
 function TransformedSheetLayer({
@@ -1330,6 +1361,7 @@ function TransformedPieceLayer({
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     setMaskedImage(null);
     setMaskError("");
     if (!layer.imageUrl) {
@@ -1340,7 +1372,10 @@ function TransformedPieceLayer({
     void createMaskedPieceImageUrl(layer)
       .then((image) => {
         if (!cancelled) {
+          objectUrl = image.url;
           setMaskedImage(image);
+        } else {
+          URL.revokeObjectURL(image.url);
         }
       })
       .catch((error: unknown) => {
@@ -1351,8 +1386,17 @@ function TransformedPieceLayer({
 
     return () => {
       cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
   }, [layer.imageUrl, layer.pieceId, JSON.stringify(layer.sourcePolygon), layer.sourceImageWidth, layer.sourceImageHeight]);
+
+  useEffect(() => {
+    if (mode !== "edit_historical_sheets") {
+      map.dragging.enable();
+    }
+  }, [map, mode]);
 
   useEffect(() => {
     const pane = map.getPane("historical-sheet-pane") ?? map.createPane("historical-sheet-pane");
@@ -1391,10 +1435,21 @@ function TransformedPieceLayer({
     }
 
     function getImageSize() {
-      return {
-        width: Math.max(1, maskedImage?.width ?? getPieceSourcePixelBounds(latestRef.current.layer).width),
-        height: Math.max(1, maskedImage?.height ?? getPieceSourcePixelBounds(latestRef.current.layer).height),
-      };
+      if (maskedImage) {
+        return { width: maskedImage.width, height: maskedImage.height };
+      }
+
+      try {
+        const raster = calculateMapPieceMaskRasterPlan({
+          sourceImageWidth: latestRef.current.layer.sourceImageWidth,
+          sourceImageHeight: latestRef.current.layer.sourceImageHeight,
+          sourcePolygon: latestRef.current.layer.sourcePolygon,
+        });
+
+        return { width: raster.outputWidth, height: raster.outputHeight };
+      } catch {
+        return { width: 1000, height: 800 };
+      }
     }
 
     function setElementTransform(piece: SanbornMapPieceGeoreference) {
@@ -1485,10 +1540,23 @@ function TransformedPieceLayer({
         return;
       }
 
+      const draftValidation = validateMapPieceGeographicCorners(nextDraft.corners);
+      if (!draftValidation.ok) {
+        setMaskError(draftValidation.error);
+        return;
+      }
+
       const committed = normalizeSanbornMapPieceGeoreference({
         ...nextDraft,
+        corners: draftValidation.corners,
         placementStatus: nextDraft.placementStatus === "aligned" || nextDraft.placementStatus === "reviewed" ? nextDraft.placementStatus : "draft",
       });
+      const validation = validateMapPieceGeographicCorners(committed.corners);
+
+      if (!validation.ok) {
+        setMaskError(validation.error);
+        return;
+      }
 
       latestRef.current.onCommit?.(committed.pieceId, {
         centerLatitude: committed.centerLatitude,
@@ -1528,9 +1596,9 @@ function TransformedPieceLayer({
         // Some transformed DOM nodes cannot capture every pointer.
       }
       const startPoints = getPieceCornerPoints(map, piece);
+      const startPointerPoint = pointerEventToLayerPoint(map, event);
       const start = {
-        x: event.clientX,
-        y: event.clientY,
+        pointerPoint: startPointerPoint,
         piece,
         points: startPoints,
         centerPoint: getPointCenter(startPoints),
@@ -1544,8 +1612,9 @@ function TransformedPieceLayer({
         }
 
         moveEvent.preventDefault();
-        const dx = moveEvent.clientX - start.x;
-        const dy = moveEvent.clientY - start.y;
+        const currentPointerPoint = pointerEventToLayerPoint(map, moveEvent);
+        const dx = currentPointerPoint.x - start.pointerPoint.x;
+        const dy = currentPointerPoint.y - start.pointerPoint.y;
 
         if (action === "corner") {
           const position = target.dataset.position ?? "";
@@ -1562,9 +1631,7 @@ function TransformedPieceLayer({
           const nextPoints = { ...start.points, [corner]: L.point(start.points[corner].x + dx, start.points[corner].y + dy) };
           draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
         } else if (action === "rotate") {
-          const startAngle = Math.atan2(start.y - start.centerPoint.y, start.x - start.centerPoint.x);
-          const nextAngle = Math.atan2(moveEvent.clientY - start.centerPoint.y, moveEvent.clientX - start.centerPoint.x);
-          const deltaDegrees = ((nextAngle - startAngle) * 180) / Math.PI;
+          const deltaDegrees = calculateRotationDeltaDegrees(start.pointerPoint, currentPointerPoint, start.centerPoint);
           const nextPoints = rotatePoints(start.points, start.centerPoint, deltaDegrees);
           draft = normalizeSanbornMapPieceGeoreference({ ...start.piece, rotation: start.rotation + deltaDegrees, corners: pointsToCorners(map, nextPoints), placementStatus: "draft" });
         } else {
@@ -1603,6 +1670,16 @@ function TransformedPieceLayer({
         document.removeEventListener("pointermove", handleMove);
         document.removeEventListener("pointerup", handleUp);
         document.removeEventListener("pointercancel", handleUp);
+        try {
+          target.releasePointerCapture?.(event.pointerId);
+        } catch {
+          // Pointer capture may already be released.
+        }
+        if (latestRef.current.mode === "edit_historical_sheets") {
+          map.dragging.disable();
+        } else {
+          map.dragging.enable();
+        }
       };
     }
 

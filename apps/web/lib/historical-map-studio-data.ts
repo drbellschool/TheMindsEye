@@ -28,6 +28,8 @@ import {
 import {
   mergeSavedAndDefaultMapPieceGeoreferences,
   normalizeSanbornMapPieceGeoreference,
+  persistedMapPieceTargetGeometry,
+  validateMapPieceGeographicCorners,
   type SanbornMapPieceGeoreference,
 } from "./sanborn-map-piece-georeference.ts";
 import {
@@ -675,16 +677,31 @@ function mapSheetGeoreferences(rows: SheetGeoreferenceRow[], assets: StudioSheet
     .filter((placement): placement is SheetGeographicTransform => Boolean(placement));
 }
 
-function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventory: Awaited<ReturnType<typeof loadSanbornAtlasInventory>>): SanbornMapPieceGeoreference[] {
+function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventory: Awaited<ReturnType<typeof loadSanbornAtlasInventory>>): { placements: SanbornMapPieceGeoreference[]; invalidCount: number } {
   const pieceByRowId = new Map(atlasInventory.pieces.map((piece) => [piece.rowId, piece]));
   const pageByRowId = new Map(atlasInventory.pages.map((page) => [page.rowId, page]));
+  let invalidCount = 0;
 
-  return rows
+  const placements = rows
     .map((row) => {
       const piece = pieceByRowId.get(row.map_piece_id);
       const page = pageByRowId.get(row.atlas_page_id);
 
       if (!piece || !page) {
+        invalidCount += 1;
+        return null;
+      }
+
+      const corners = {
+        northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
+        northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
+        southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
+        southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
+      };
+      const validation = validateMapPieceGeographicCorners(corners);
+
+      if (row.target_geometry !== persistedMapPieceTargetGeometry || !validation.ok) {
+        invalidCount += 1;
         return null;
       }
 
@@ -692,15 +709,10 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
         pieceGeoreferenceId: row.piece_georeference_id,
         pieceId: piece.pieceId,
         atlasPageId: page.pageId,
-        targetGeometry: row.target_geometry === "line" || row.target_geometry === "point" ? row.target_geometry : "polygon",
+        targetGeometry: persistedMapPieceTargetGeometry,
         centerLatitude: row.center_latitude,
         centerLongitude: row.center_longitude,
-        corners: {
-          northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
-          northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
-          southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
-          southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
-        },
+        corners,
         rotation: row.rotation ?? 0,
         opacity: row.opacity ?? undefined,
         layerOrder: row.layer_order ?? 0,
@@ -715,6 +727,8 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
       });
     })
     .filter((placement): placement is SanbornMapPieceGeoreference => Boolean(placement));
+
+  return { placements, invalidCount };
 }
 
 function getCornerCoordinate(latitude: number | null, longitude: number | null) {
@@ -1005,8 +1019,11 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
   const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);
-  const savedMapPieceGeoreferences = mapMapPieceGeoreferences(mapPieceGeoreferenceRows, atlasInventory);
-  const mapPieceGeoreferences = mergeSavedAndDefaultMapPieceGeoreferences(atlasInventory.pieces, savedMapPieceGeoreferences);
+  const savedMapPieceGeoreferenceMapping = mapMapPieceGeoreferences(mapPieceGeoreferenceRows, atlasInventory);
+  if (savedMapPieceGeoreferenceMapping.invalidCount > 0 && !workspaceWarning) {
+    workspaceWarning = `Saved map piece placement query returned ${savedMapPieceGeoreferenceMapping.invalidCount} invalid geographic placement row(s).`;
+  }
+  const mapPieceGeoreferences = mergeSavedAndDefaultMapPieceGeoreferences(atlasInventory.pieces, savedMapPieceGeoreferenceMapping.placements);
   const georeferences = mapGeoreferences(georeferenceRows, controlPointRows, assets);
   const workspaceCenter =
     typeof workspaceRow?.geographic_center_latitude === "number" && typeof workspaceRow.geographic_center_longitude === "number"

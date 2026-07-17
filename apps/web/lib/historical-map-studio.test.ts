@@ -68,7 +68,16 @@ import {
   piecePlacementMatchesForPersistence,
   placeMapPieceAtCenter,
   rotateMapPieceGeoreference,
+  runMapPiecePlacementNetworkRequest,
+  validateMapPieceGeographicCorners,
+  validateMapPiecePlacementForPersistence,
 } from "./sanborn-map-piece-georeference.ts";
+import {
+  calculateMapPieceMaskRasterPlan,
+  calculateRotationDeltaDegrees,
+  clientPointToContainerPoint,
+  maxMapPieceMaskRasterDimension,
+} from "./sanborn-map-piece-rendering.ts";
 import type { SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
@@ -549,6 +558,154 @@ test("map piece placement helpers keep piece placement independent from source s
   assert.equal(merged.find((placement) => placement.pieceId === "piece-69")?.placementStatus, secondPieceDefault.placementStatus);
 });
 
+test("map piece geographic corner validation rejects unusable quadrilaterals", () => {
+  const validSkewed = {
+    northwest: { latitude: 33.43, longitude: -94.055 },
+    northeast: { latitude: 33.431, longitude: -94.04 },
+    southeast: { latitude: 33.419, longitude: -94.038 },
+    southwest: { latitude: 33.418, longitude: -94.056 },
+  };
+
+  assert.equal(validateMapPieceGeographicCorners(validSkewed).ok, true);
+  assert.equal(validateMapPieceGeographicCorners({ ...validSkewed, southwest: validSkewed.northwest }).ok, false);
+  assert.equal(
+    validateMapPieceGeographicCorners({
+      northwest: { latitude: 33.43, longitude: -94.06 },
+      northeast: { latitude: 33.43, longitude: -94.05 },
+      southeast: { latitude: 33.43, longitude: -94.04 },
+      southwest: { latitude: 33.43, longitude: -94.03 },
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateMapPieceGeographicCorners({
+      northwest: { latitude: 33.43, longitude: -94.06 },
+      northeast: { latitude: 33.418, longitude: -94.04 },
+      southeast: { latitude: 33.43, longitude: -94.04 },
+      southwest: { latitude: 33.418, longitude: -94.06 },
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateMapPieceGeographicCorners({
+      northwest: { latitude: 33.43, longitude: -94.06 },
+      northeast: { latitude: 33.43, longitude: -94.04 },
+      southeast: { latitude: 33.424, longitude: -94.052 },
+      southwest: { latitude: 33.418, longitude: -94.06 },
+    }).ok,
+    false,
+  );
+  assert.equal(validateMapPieceGeographicCorners({ ...validSkewed, northwest: { latitude: 91, longitude: -94.055 } }).ok, false);
+});
+
+test("map piece persistence validator rejects route payloads before normalization", () => {
+  const validCorners = {
+    northwest: { latitude: 33.43, longitude: -94.055 },
+    northeast: { latitude: 33.431, longitude: -94.04 },
+    southeast: { latitude: 33.419, longitude: -94.038 },
+    southwest: { latitude: 33.418, longitude: -94.056 },
+  };
+
+  assert.equal(validateMapPiecePlacementForPersistence({ targetType: "sanborn_map_piece", targetGeometry: "polygon", corners: validCorners }).ok, true);
+  assert.deepEqual(validateMapPiecePlacementForPersistence({ targetType: "sanborn_map_piece", targetGeometry: "line", corners: validCorners }), {
+    ok: false,
+    message: "Map piece placement target geometry must be polygon.",
+  });
+  assert.deepEqual(validateMapPiecePlacementForPersistence({ targetType: "sanborn_map_piece", targetGeometry: "polygon", corners: { ...validCorners, southwest: validCorners.northwest } }), {
+    ok: false,
+    message: "Map piece placement corners must form a valid, non-crossing geographic quadrilateral.",
+  });
+});
+
+test("map piece persistence comparison checks every editable saved field", () => {
+  const piece = mapPiece("piece-68");
+  const baseline = {
+    ...placeMapPieceAtCenter(piece, createDefaultMapPieceGeoreference(piece), { latitude: 33.425, longitude: -94.047 }),
+    notes: "Railroad lumber-loading dock and cotton platform.",
+    layerOrder: 3,
+    placementStatus: "draft" as const,
+    isVisible: true,
+    isLocked: false,
+  };
+  const saved = { ...baseline, isPersisted: true };
+
+  assert.equal(piecePlacementMatchesForPersistence(baseline, saved), true);
+
+  const changedCorner = {
+    ...saved,
+    corners: {
+      ...saved.corners,
+      northeast: {
+        latitude: (saved.corners.northeast?.latitude ?? 0) + 0.001,
+        longitude: saved.corners.northeast?.longitude ?? 0,
+      },
+    },
+  };
+  const mismatches = [
+    { ...saved, pieceId: "piece-69" },
+    { ...saved, centerLatitude: saved.centerLatitude + 0.001 },
+    { ...saved, rotation: saved.rotation + 1 },
+    { ...saved, opacity: saved.opacity - 0.1 },
+    { ...saved, layerOrder: saved.layerOrder + 1 },
+    { ...saved, placementStatus: "aligned" as const },
+    { ...saved, isVisible: !saved.isVisible },
+    { ...saved, isLocked: !saved.isLocked },
+    { ...saved, notes: "Different notes" },
+    changedCorner,
+  ];
+
+  mismatches.forEach((candidate) => {
+    assert.equal(piecePlacementMatchesForPersistence(baseline, candidate), false);
+  });
+});
+
+test("map piece rotation helper uses one coordinate space when the map is offset", () => {
+  const mapContainerRect = { left: 200, top: 150 };
+  const startPoint = clientPointToContainerPoint(220, 160, mapContainerRect);
+  const currentPoint = clientPointToContainerPoint(210, 170, mapContainerRect);
+
+  assert.deepEqual(startPoint, { x: 20, y: 10 });
+  assert.deepEqual(currentPoint, { x: 10, y: 20 });
+  assert.equal(Math.round(calculateRotationDeltaDegrees(startPoint, currentPoint, { x: 10, y: 10 })), 90);
+});
+
+test("map piece mask raster plans cap large source pieces without changing aspect ratio", () => {
+  const plan = calculateMapPieceMaskRasterPlan({
+    sourceImageWidth: 20_000,
+    sourceImageHeight: 12_000,
+    sourcePolygon: [
+      { x: 0.1, y: 0.2 },
+      { x: 0.9, y: 0.2 },
+      { x: 0.9, y: 0.7 },
+      { x: 0.1, y: 0.7 },
+    ],
+  });
+
+  assert.equal(Math.max(plan.outputWidth, plan.outputHeight), maxMapPieceMaskRasterDimension);
+  assert.equal(plan.outputWidth, 3072);
+  assert.equal(plan.outputHeight, 1152);
+  assert.equal(plan.sourceWidth / plan.sourceHeight, 16_000 / 6_000);
+  assert.equal(plan.outputWidth / plan.outputHeight, 3072 / 1152);
+});
+
+test("map piece placement network helper clears in-flight state after rejected requests", async () => {
+  let cleanedUp = false;
+  const result = await runMapPiecePlacementNetworkRequest(
+    async () => {
+      throw new Error("network offline");
+    },
+    () => {
+      cleanedUp = true;
+    },
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(cleanedUp, true);
+  if (!result.ok) {
+    assert.match(result.message, /network offline/);
+  }
+});
+
 test("map piece placement migration is service-role-only and preserves review metadata", () => {
   const migration = readFileSync("../../supabase/migrations/0011_sanborn_map_piece_georeferences.sql", "utf8");
   const normalized = migration.replace(/\s+/g, " ").toLowerCase();
@@ -556,7 +713,11 @@ test("map piece placement migration is service-role-only and preserves review me
   assert.match(migration, /create table if not exists public\.sanborn_map_piece_georeferences/);
   assert.match(migration, /references public\.sanborn_map_pieces\(id\) on delete cascade/);
   assert.match(migration, /placement_status text not null default 'unplaced' check \(placement_status in \('unplaced', 'draft', 'placed', 'aligned', 'reviewed'\)\)/);
+  assert.match(migration, /create or replace function public\.sanborn_map_piece_geographic_quad_is_valid/);
+  assert.match(migration, /constraint sanborn_map_piece_georeferences_geographic_quad_check check/);
+  assert.match(migration, /target_geometry text not null default 'polygon' check \(target_geometry = 'polygon'\)/);
   assert.match(migration, /create or replace function public\.save_sanborn_map_piece_georeference/);
+  assert.match(migration, /Map piece placement corners must form a valid, non-crossing geographic quadrilateral\./);
   assert.match(normalized, /security invoker/);
   assert.match(normalized, /set search_path = public/);
   assert.doesNotMatch(normalized, /security definer/);
@@ -565,6 +726,8 @@ test("map piece placement migration is service-role-only and preserves review me
   assert.match(normalized, /revoke all on table public\.sanborn_map_piece_georeferences from anon/);
   assert.match(normalized, /revoke all on table public\.sanborn_map_piece_georeferences from authenticated/);
   assert.match(normalized, /grant select, insert, update, delete on table public\.sanborn_map_piece_georeferences to service_role/);
+  assert.match(normalized, /revoke execute on function public\.sanborn_map_piece_geographic_quad_is_valid\(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision\) from public/);
+  assert.match(normalized, /grant execute on function public\.sanborn_map_piece_geographic_quad_is_valid\(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision\) to service_role/);
   assert.match(normalized, /revoke execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) from public/);
   assert.match(normalized, /grant execute on function public\.save_sanborn_map_piece_georeference\(uuid, text, text, integer, jsonb, double precision, text, jsonb\) to service_role/);
   assert.doesNotMatch(migration, /review_status\s*=/);
@@ -574,10 +737,15 @@ test("map piece placement migration is service-role-only and preserves review me
 
 test("map piece placement route saves through the scoped service-role RPC", () => {
   const route = readFileSync("app/api/community/historical-map-studio/map-piece-georeferences/route.ts", "utf8");
+  const dataSource = readFileSync("lib/historical-map-studio-data.ts", "utf8");
 
   assert.match(route, /requireMapStudioWriteAccess/);
   assert.match(route, /resolvePieceScope/);
   assert.match(route, /Map piece belongs to another town package/);
+  assert.match(route, /validateMapPiecePlacementForPersistence\(body\.placement\)/);
+  assert.match(route, /function mapSavedPiece[\s\S]*validateMapPieceGeographicCorners\(corners\)/);
+  assert.match(dataSource, /validateMapPieceGeographicCorners\(corners\)/);
+  assert.match(dataSource, /Saved map piece placement query returned \$\{savedMapPieceGeoreferenceMapping\.invalidCount\} invalid geographic placement row\(s\)\./);
   assert.match(route, /supabase\.rpc\("save_sanborn_map_piece_georeference"/);
   assert.match(route, /normalizeSanbornMapPieceGeoreference/);
   assert.doesNotMatch(route, /\.upsert\(/);
@@ -616,10 +784,13 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(studioComponent, /showReferenceSheetAlignment && hasPlacedHistoricalSheets/);
   assert.match(studioComponent, /onPieceTransformCommit=\{\(pieceId, patch\) => commitMapPieceGeoreference\(pieceId, patch\)\}/);
   assert.match(leafletComponent, /function createMaskedPieceImageUrl/);
+  assert.match(leafletComponent, /calculateMapPieceMaskRasterPlan/);
   assert.match(leafletComponent, /document\.createElement\("canvas"\)/);
   assert.match(leafletComponent, /context\.clip\(\)/);
-  assert.match(leafletComponent, /canvas\.toDataURL\("image\/png"\)/);
-  assert.doesNotMatch(leafletComponent, /supabase|storage|upload/i);
+  assert.match(leafletComponent, /canvas\.toBlob/);
+  assert.match(leafletComponent, /URL\.createObjectURL\(blob\)/);
+  assert.match(leafletComponent, /URL\.revokeObjectURL/);
+  assert.doesNotMatch(leafletComponent, /supabase|upload/i);
 });
 
 test("upload refresh selects the newly returned uploaded sheet when present", () => {

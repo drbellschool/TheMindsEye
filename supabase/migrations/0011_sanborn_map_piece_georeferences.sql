@@ -1,3 +1,74 @@
+create or replace function public.sanborn_map_piece_geographic_quad_is_valid(
+  p_northwest_latitude double precision,
+  p_northwest_longitude double precision,
+  p_northeast_latitude double precision,
+  p_northeast_longitude double precision,
+  p_southeast_latitude double precision,
+  p_southeast_longitude double precision,
+  p_southwest_latitude double precision,
+  p_southwest_longitude double precision
+)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = public
+as $$
+  with geometry as (
+    select
+      p_northwest_longitude as ax,
+      p_northwest_latitude as ay,
+      p_northeast_longitude as bx,
+      p_northeast_latitude as by,
+      p_southeast_longitude as cx,
+      p_southeast_latitude as cy,
+      p_southwest_longitude as dx,
+      p_southwest_latitude as dy
+  ),
+  measurements as (
+    select
+      *,
+      ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) as cross_abc,
+      ((cx - bx) * (dy - by) - (cy - by) * (dx - bx)) as cross_bcd,
+      ((dx - cx) * (ay - cy) - (dy - cy) * (ax - cx)) as cross_cda,
+      ((ax - dx) * (by - dy) - (ay - dy) * (bx - dx)) as cross_dab,
+      ((bx - ax) * (dy - ay) - (by - ay) * (dx - ax)) as cross_abd,
+      ((dx - cx) * (ay - cy) - (dy - cy) * (ax - cx)) as cross_cda_for_edges,
+      ((dx - cx) * (by - cy) - (dy - cy) * (bx - cx)) as cross_cdb,
+      ((cx - bx) * (ay - by) - (cy - by) * (ax - bx)) as cross_bca,
+      ((ax - dx) * (by - dy) - (ay - dy) * (bx - dx)) as cross_dab_for_edges,
+      ((ax - dx) * (cy - dy) - (ay - dy) * (cx - dx)) as cross_dac,
+      abs((ax * by - bx * ay + bx * cy - cx * by + cx * dy - dx * cy + dx * ay - ax * dy) / 2.0) as polygon_area
+    from geometry
+  )
+  select coalesce(
+    p_northwest_latitude between -90 and 90
+    and p_northwest_longitude between -180 and 180
+    and p_northeast_latitude between -90 and 90
+    and p_northeast_longitude between -180 and 180
+    and p_southeast_latitude between -90 and 90
+    and p_southeast_longitude between -180 and 180
+    and p_southwest_latitude between -90 and 90
+    and p_southwest_longitude between -180 and 180
+    and (abs(ax - bx) > 0.0000000001 or abs(ay - by) > 0.0000000001)
+    and (abs(ax - cx) > 0.0000000001 or abs(ay - cy) > 0.0000000001)
+    and (abs(ax - dx) > 0.0000000001 or abs(ay - dy) > 0.0000000001)
+    and (abs(bx - cx) > 0.0000000001 or abs(by - cy) > 0.0000000001)
+    and (abs(bx - dx) > 0.0000000001 or abs(by - dy) > 0.0000000001)
+    and (abs(cx - dx) > 0.0000000001 or abs(cy - dy) > 0.0000000001)
+    and polygon_area > 0.000000000001
+    and not (cross_abc * cross_abd < -0.000000000001 and cross_cda_for_edges * cross_cdb < -0.000000000001)
+    and not (cross_bcd * cross_bca < -0.000000000001 and cross_dab_for_edges * cross_dac < -0.000000000001)
+    and (
+      (cross_abc > 0.000000000001 and cross_bcd > 0.000000000001 and cross_cda > 0.000000000001 and cross_dab > 0.000000000001)
+      or
+      (cross_abc < -0.000000000001 and cross_bcd < -0.000000000001 and cross_cda < -0.000000000001 and cross_dab < -0.000000000001)
+    ),
+    false
+  )
+  from measurements;
+$$;
+
 create table if not exists public.sanborn_map_piece_georeferences (
   id uuid primary key default gen_random_uuid(),
   piece_georeference_id text not null unique,
@@ -6,7 +77,7 @@ create table if not exists public.sanborn_map_piece_georeferences (
   atlas_page_id uuid not null references public.sanborn_atlas_pages(id) on delete cascade,
   map_piece_id uuid not null references public.sanborn_map_pieces(id) on delete cascade,
   target_type text not null default 'sanborn_map_piece' check (target_type = 'sanborn_map_piece'),
-  target_geometry text not null default 'polygon' check (target_geometry in ('polygon', 'line', 'point')),
+  target_geometry text not null default 'polygon' check (target_geometry = 'polygon'),
   northwest_latitude double precision not null check (northwest_latitude between -90 and 90),
   northwest_longitude double precision not null check (northwest_longitude between -180 and 180),
   northeast_latitude double precision not null check (northeast_latitude between -90 and 90),
@@ -15,6 +86,18 @@ create table if not exists public.sanborn_map_piece_georeferences (
   southeast_longitude double precision not null check (southeast_longitude between -180 and 180),
   southwest_latitude double precision not null check (southwest_latitude between -90 and 90),
   southwest_longitude double precision not null check (southwest_longitude between -180 and 180),
+  constraint sanborn_map_piece_georeferences_geographic_quad_check check (
+    public.sanborn_map_piece_geographic_quad_is_valid(
+      northwest_latitude,
+      northwest_longitude,
+      northeast_latitude,
+      northeast_longitude,
+      southeast_latitude,
+      southeast_longitude,
+      southwest_latitude,
+      southwest_longitude
+    )
+  ),
   center_latitude double precision not null check (center_latitude between -90 and 90),
   center_longitude double precision not null check (center_longitude between -180 and 180),
   rotation double precision not null default 0,
@@ -81,6 +164,16 @@ declare
   normalized_layer_order integer;
   normalized_is_visible boolean;
   normalized_is_locked boolean;
+  normalized_target_type text;
+  normalized_target_geometry text;
+  northwest_latitude double precision;
+  northwest_longitude double precision;
+  northeast_latitude double precision;
+  northeast_longitude double precision;
+  southeast_latitude double precision;
+  southeast_longitude double precision;
+  southwest_latitude double precision;
+  southwest_longitude double precision;
 begin
   if p_town_package_id is null or nullif(trim(p_workspace_id), '') is null or nullif(trim(p_piece_id), '') is null then
     raise exception 'Map piece placement saves require a town package, workspace ID, and map piece ID.';
@@ -92,6 +185,17 @@ begin
 
   if p_placement is null or jsonb_typeof(p_placement) <> 'object' then
     raise exception 'Map piece placement payload must be an object.';
+  end if;
+
+  normalized_target_type := coalesce(nullif(trim(p_placement ->> 'targetType'), ''), 'sanborn_map_piece');
+  normalized_target_geometry := coalesce(nullif(trim(p_placement ->> 'targetGeometry'), ''), 'polygon');
+
+  if normalized_target_type <> 'sanborn_map_piece' then
+    raise exception 'Map piece placement target type must be sanborn_map_piece.';
+  end if;
+
+  if normalized_target_geometry <> 'polygon' then
+    raise exception 'Map piece placement target geometry must be polygon.';
   end if;
 
   select id, package_id, name, year
@@ -202,19 +306,30 @@ begin
     raise exception 'Map piece placement corners are required.';
   end if;
 
-  perform 1
-  where
-    ((p_placement -> 'corners' -> 'northwest' ->> 'latitude')::double precision between -90 and 90)
-    and ((p_placement -> 'corners' -> 'northwest' ->> 'longitude')::double precision between -180 and 180)
-    and ((p_placement -> 'corners' -> 'northeast' ->> 'latitude')::double precision between -90 and 90)
-    and ((p_placement -> 'corners' -> 'northeast' ->> 'longitude')::double precision between -180 and 180)
-    and ((p_placement -> 'corners' -> 'southeast' ->> 'latitude')::double precision between -90 and 90)
-    and ((p_placement -> 'corners' -> 'southeast' ->> 'longitude')::double precision between -180 and 180)
-    and ((p_placement -> 'corners' -> 'southwest' ->> 'latitude')::double precision between -90 and 90)
-    and ((p_placement -> 'corners' -> 'southwest' ->> 'longitude')::double precision between -180 and 180);
+  begin
+    northwest_latitude := (p_placement -> 'corners' -> 'northwest' ->> 'latitude')::double precision;
+    northwest_longitude := (p_placement -> 'corners' -> 'northwest' ->> 'longitude')::double precision;
+    northeast_latitude := (p_placement -> 'corners' -> 'northeast' ->> 'latitude')::double precision;
+    northeast_longitude := (p_placement -> 'corners' -> 'northeast' ->> 'longitude')::double precision;
+    southeast_latitude := (p_placement -> 'corners' -> 'southeast' ->> 'latitude')::double precision;
+    southeast_longitude := (p_placement -> 'corners' -> 'southeast' ->> 'longitude')::double precision;
+    southwest_latitude := (p_placement -> 'corners' -> 'southwest' ->> 'latitude')::double precision;
+    southwest_longitude := (p_placement -> 'corners' -> 'southwest' ->> 'longitude')::double precision;
+  exception when others then
+    raise exception 'Map piece placement corners contain invalid numeric values.';
+  end;
 
-  if not found then
-    raise exception 'Map piece placement corners are out of range.';
+  if not public.sanborn_map_piece_geographic_quad_is_valid(
+    northwest_latitude,
+    northwest_longitude,
+    northeast_latitude,
+    northeast_longitude,
+    southeast_latitude,
+    southeast_longitude,
+    southwest_latitude,
+    southwest_longitude
+  ) then
+    raise exception 'Map piece placement corners must form a valid, non-crossing geographic quadrilateral.';
   end if;
 
   requested_georeference_id := coalesce(
@@ -265,14 +380,14 @@ begin
     piece.map_piece_row_id,
     'sanborn_map_piece',
     'polygon',
-    (p_placement -> 'corners' -> 'northwest' ->> 'latitude')::double precision,
-    (p_placement -> 'corners' -> 'northwest' ->> 'longitude')::double precision,
-    (p_placement -> 'corners' -> 'northeast' ->> 'latitude')::double precision,
-    (p_placement -> 'corners' -> 'northeast' ->> 'longitude')::double precision,
-    (p_placement -> 'corners' -> 'southeast' ->> 'latitude')::double precision,
-    (p_placement -> 'corners' -> 'southeast' ->> 'longitude')::double precision,
-    (p_placement -> 'corners' -> 'southwest' ->> 'latitude')::double precision,
-    (p_placement -> 'corners' -> 'southwest' ->> 'longitude')::double precision,
+    northwest_latitude,
+    northwest_longitude,
+    northeast_latitude,
+    northeast_longitude,
+    southeast_latitude,
+    southeast_longitude,
+    southwest_latitude,
+    southwest_longitude,
     center_latitude,
     center_longitude,
     normalized_rotation,
@@ -320,6 +435,11 @@ revoke all on table public.sanborn_map_piece_georeferences from PUBLIC;
 revoke all on table public.sanborn_map_piece_georeferences from anon;
 revoke all on table public.sanborn_map_piece_georeferences from authenticated;
 grant select, insert, update, delete on table public.sanborn_map_piece_georeferences to service_role;
+
+revoke execute on function public.sanborn_map_piece_geographic_quad_is_valid(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision) from PUBLIC;
+revoke execute on function public.sanborn_map_piece_geographic_quad_is_valid(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision) from anon;
+revoke execute on function public.sanborn_map_piece_geographic_quad_is_valid(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision) from authenticated;
+grant execute on function public.sanborn_map_piece_geographic_quad_is_valid(double precision, double precision, double precision, double precision, double precision, double precision, double precision, double precision) to service_role;
 
 revoke execute on function public.save_sanborn_map_piece_georeference(uuid, text, text, integer, jsonb, double precision, text, jsonb) from PUBLIC;
 revoke execute on function public.save_sanborn_map_piece_georeference(uuid, text, text, integer, jsonb, double precision, text, jsonb) from anon;

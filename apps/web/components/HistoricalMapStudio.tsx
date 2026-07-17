@@ -88,6 +88,8 @@ import {
   piecePlacementMatchesForPersistence,
   placeMapPieceAtCenter,
   rotateMapPieceGeoreference,
+  runMapPiecePlacementNetworkRequest,
+  validateMapPieceGeographicCorners,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import { reviewStatuses } from "@/lib/community-status";
@@ -214,12 +216,9 @@ function hasMapPieceGeographicFootprint(placement: SanbornMapPieceGeoreference |
     return false;
   }
 
-  return [
-    placement.corners.northwest,
-    placement.corners.northeast,
-    placement.corners.southeast,
-    placement.corners.southwest,
-  ].some((coordinate) => coordinate && isOperationalMapCenter(coordinate));
+  const validation = validateMapPieceGeographicCorners(placement.corners);
+
+  return validation.ok && [validation.corners.northwest, validation.corners.northeast, validation.corners.southeast, validation.corners.southwest].some((coordinate) => isOperationalMapCenter(coordinate));
 }
 
 function getMapPiecePlacementLabel(placement: SanbornMapPieceGeoreference | null | undefined): string {
@@ -1956,12 +1955,15 @@ export function HistoricalMapStudio({
     }
 
     if (!selectedMapPieceHasGeographicFootprint) {
+      const validation = validateMapPieceGeographicCorners(selectedMapPieceGeoreference.corners);
       setSaveStatus("error");
-      setSaveMessage("Place the selected map piece before saving placement.");
+      setSaveMessage(validation.ok ? "Place the selected map piece before saving placement." : validation.error);
       return;
     }
 
-    if (!initialData.activeTownPackage || atlasReadOnly || saveInFlightRef.current) {
+    const activeTownPackage = initialData.activeTownPackage;
+
+    if (!activeTownPackage || atlasReadOnly || saveInFlightRef.current) {
       setSaveStatus("error");
       setSaveMessage("Map piece placement save failed: write access is unavailable.");
       return;
@@ -1971,23 +1973,39 @@ export function HistoricalMapStudio({
     setSaveStatus("saving");
     setSaveMessage("Saving map piece placement...");
     const mapCenterForSave = isOperationalMapCenter(mapCenter) ? mapCenter : getGpsTownCenterFromState(initialData);
-    const workspaceId = initialData.workspace?.workspaceId ?? `${initialData.activeTownPackage.packageId}-${initialData.activeMapYear ?? initialData.activeTownPackage.year}-historical-map-studio`;
-    const response = await fetch("/api/community/historical-map-studio/map-piece-georeferences", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        townPackageId: initialData.activeTownPackage.id,
-        mapYear: initialData.activeMapYear,
-        workspaceId,
-        workspaceName: initialData.workspace?.name ?? `${initialData.activeTownPackage.name} ${initialData.activeMapYear ?? initialData.activeTownPackage.year} Historical Map Studio`,
-        mapCenter: mapCenterForSave,
-        mapZoom: modernMapZoom,
-        pieceId: selectedMapPiece.pieceId,
-        placement: selectedMapPieceGeoreference,
-      }),
-    });
-    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string; placement?: SanbornMapPieceGeoreference } | null;
-    saveInFlightRef.current = false;
+    const workspaceId = initialData.workspace?.workspaceId ?? `${activeTownPackage.packageId}-${initialData.activeMapYear ?? activeTownPackage.year}-historical-map-studio`;
+    const saveResult = await runMapPiecePlacementNetworkRequest(
+      async () => {
+        const response = await fetch("/api/community/historical-map-studio/map-piece-georeferences", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            townPackageId: activeTownPackage.id,
+            mapYear: initialData.activeMapYear,
+            workspaceId,
+            workspaceName: initialData.workspace?.name ?? `${activeTownPackage.name} ${initialData.activeMapYear ?? activeTownPackage.year} Historical Map Studio`,
+            mapCenter: mapCenterForSave,
+            mapZoom: modernMapZoom,
+            pieceId: selectedMapPiece.pieceId,
+            placement: selectedMapPieceGeoreference,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string; placement?: SanbornMapPieceGeoreference } | null;
+
+        return { response, payload };
+      },
+      () => {
+        saveInFlightRef.current = false;
+      },
+    );
+
+    if (!saveResult.ok) {
+      setSaveStatus("error");
+      setSaveMessage(`Save failed: ${saveResult.message}`);
+      return;
+    }
+
+    const { response, payload } = saveResult.value;
 
     if (!response.ok || !payload?.ok || !payload.placement) {
       setSaveStatus("error");
@@ -2025,6 +2043,13 @@ export function HistoricalMapStudio({
       return;
     }
 
+    if (saveInFlightRef.current) {
+      setSaveStatus("error");
+      setSaveMessage("Map piece placement request is already in progress.");
+      return;
+    }
+
+    saveInFlightRef.current = true;
     setSaveStatus("saving");
     setSaveMessage("Reloading saved map piece placement...");
     const params = new URLSearchParams({
@@ -2032,15 +2057,32 @@ export function HistoricalMapStudio({
       mapYear: String(initialData.activeMapYear ?? initialData.activeTownPackage.year),
       pieceId: selectedMapPiece.pieceId,
     });
-    const response = await fetch(`/api/community/historical-map-studio/map-piece-georeferences?${params.toString()}`);
-    const payload = (await response.json().catch(() => null)) as {
-      ok?: boolean;
-      message?: string;
-      savedAt?: string;
-      mapCenter?: GeoCoordinate | null;
-      mapZoom?: number | null;
-      placement?: SanbornMapPieceGeoreference | null;
-    } | null;
+    const reloadResult = await runMapPiecePlacementNetworkRequest(
+      async () => {
+        const response = await fetch(`/api/community/historical-map-studio/map-piece-georeferences?${params.toString()}`);
+        const payload = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          message?: string;
+          savedAt?: string;
+          mapCenter?: GeoCoordinate | null;
+          mapZoom?: number | null;
+          placement?: SanbornMapPieceGeoreference | null;
+        } | null;
+
+        return { response, payload };
+      },
+      () => {
+        saveInFlightRef.current = false;
+      },
+    );
+
+    if (!reloadResult.ok) {
+      setSaveStatus("error");
+      setSaveMessage(`Reload failed: ${reloadResult.message}`);
+      return;
+    }
+
+    const { response, payload } = reloadResult.value;
 
     if (!response.ok || !payload?.ok || !payload.placement) {
       setSaveStatus("error");
