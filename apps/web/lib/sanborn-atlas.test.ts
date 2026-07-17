@@ -42,6 +42,12 @@ function readSqlFunction(sql: string, functionName: string): string {
   return sql.slice(start, end + 4);
 }
 
+function assertSqlIncludes(sql: string, statement: string): void {
+  const compactSql = sql.replace(/\s+/g, " ").toLowerCase();
+  const compactStatement = statement.replace(/\s+/g, " ").toLowerCase();
+  assert.ok(compactSql.includes(compactStatement), `Missing SQL statement: ${statement}`);
+}
+
 test("sanborn atlas page and piece type allowlists match the manual inventory workflow", () => {
   assert.deepEqual(sanbornPageTypes, [
     "title",
@@ -213,6 +219,43 @@ test("ordinary atlas, page, and piece saves preserve review and evidence metadat
   assert.doesNotMatch(savePieces, /review_status|evidence_classification/);
   assert.match(migration, /review_status review_status_enum not null default 'unknown'/);
   assert.match(migration, /evidence_classification review_status_enum not null default 'unknown'/);
+});
+
+test("migration restricts atlas page piece tables to service-role access", () => {
+  const migration = readMigration();
+  const tables = ["sanborn_atlases", "sanborn_atlas_pages", "sanborn_map_pieces"];
+
+  for (const table of tables) {
+    assertSqlIncludes(migration, `alter table public.${table} enable row level security;`);
+    assertSqlIncludes(migration, `revoke all on table public.${table} from PUBLIC;`);
+    assertSqlIncludes(migration, `revoke all on table public.${table} from anon;`);
+    assertSqlIncludes(migration, `revoke all on table public.${table} from authenticated;`);
+    assertSqlIncludes(migration, `grant select, insert, update, delete on table public.${table} to service_role;`);
+  }
+
+  assert.doesNotMatch(migration, /create\s+policy/i);
+});
+
+test("migration restricts atlas page piece functions to service-role execution", () => {
+  const migration = readMigration();
+  const functions = [
+    "sanborn_source_polygon_is_valid(jsonb)",
+    "save_sanborn_atlas_pages(uuid, text, jsonb)",
+    "save_sanborn_map_pieces(uuid, text, jsonb)",
+  ];
+
+  for (const signature of functions) {
+    assertSqlIncludes(migration, `revoke execute on function public.${signature} from PUBLIC;`);
+    assertSqlIncludes(migration, `revoke execute on function public.${signature} from anon;`);
+    assertSqlIncludes(migration, `revoke execute on function public.${signature} from authenticated;`);
+    assertSqlIncludes(migration, `grant execute on function public.${signature} to service_role;`);
+  }
+
+  assert.match(readSqlFunction(migration, "sanborn_source_polygon_is_valid"), /security invoker/i);
+  assert.match(readSqlFunction(migration, "save_sanborn_atlas_pages"), /security invoker/i);
+  assert.match(readSqlFunction(migration, "save_sanborn_map_pieces"), /security invoker/i);
+  assert.doesNotMatch(migration, /security definer/i);
+  assert.match(migration, /source_polygon jsonb not null check \(public\.sanborn_source_polygon_is_valid\(source_polygon\)\)/);
 });
 
 test("page and piece saves run through atomic RPCs with explicit empty-payload behavior", () => {

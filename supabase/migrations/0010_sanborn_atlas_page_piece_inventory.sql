@@ -76,6 +76,7 @@ create or replace function public.sanborn_source_polygon_is_valid(source_polygon
 returns boolean
 language plpgsql
 immutable
+security invoker
 as $$
 declare
   point_count integer;
@@ -204,6 +205,7 @@ create or replace function public.save_sanborn_atlas_pages(
 )
 returns jsonb
 language plpgsql
+security invoker
 set search_path = public
 as $$
 declare
@@ -424,6 +426,7 @@ create or replace function public.save_sanborn_map_pieces(
 )
 returns jsonb
 language plpgsql
+security invoker
 set search_path = public
 as $$
 declare
@@ -737,3 +740,37 @@ begin
   );
 end;
 $$;
+
+alter table public.sanborn_atlases enable row level security;
+alter table public.sanborn_atlas_pages enable row level security;
+alter table public.sanborn_map_pieces enable row level security;
+
+revoke all on table public.sanborn_atlases from PUBLIC;
+revoke all on table public.sanborn_atlases from anon;
+revoke all on table public.sanborn_atlases from authenticated;
+grant select, insert, update, delete on table public.sanborn_atlases to service_role;
+
+revoke all on table public.sanborn_atlas_pages from PUBLIC;
+revoke all on table public.sanborn_atlas_pages from anon;
+revoke all on table public.sanborn_atlas_pages from authenticated;
+grant select, insert, update, delete on table public.sanborn_atlas_pages to service_role;
+
+revoke all on table public.sanborn_map_pieces from PUBLIC;
+revoke all on table public.sanborn_map_pieces from anon;
+revoke all on table public.sanborn_map_pieces from authenticated;
+grant select, insert, update, delete on table public.sanborn_map_pieces to service_role;
+
+revoke execute on function public.sanborn_source_polygon_is_valid(jsonb) from PUBLIC;
+revoke execute on function public.sanborn_source_polygon_is_valid(jsonb) from anon;
+revoke execute on function public.sanborn_source_polygon_is_valid(jsonb) from authenticated;
+grant execute on function public.sanborn_source_polygon_is_valid(jsonb) to service_role;
+
+revoke execute on function public.save_sanborn_atlas_pages(uuid, text, jsonb) from PUBLIC;
+revoke execute on function public.save_sanborn_atlas_pages(uuid, text, jsonb) from anon;
+revoke execute on function public.save_sanborn_atlas_pages(uuid, text, jsonb) from authenticated;
+grant execute on function public.save_sanborn_atlas_pages(uuid, text, jsonb) to service_role;
+
+revoke execute on function public.save_sanborn_map_pieces(uuid, text, jsonb) from PUBLIC;
+revoke execute on function public.save_sanborn_map_pieces(uuid, text, jsonb) from anon;
+revoke execute on function public.save_sanborn_map_pieces(uuid, text, jsonb) from authenticated;
+grant execute on function public.save_sanborn_map_pieces(uuid, text, jsonb) to service_role;
