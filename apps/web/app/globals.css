@@ -253,6 +253,14 @@ textarea {
   grid-template-rows: auto minmax(0, 1fr);
   height: calc(100vh - 12px);
   border-radius: 16px;
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  box-shadow:
+    0 18px 44px rgba(12, 9, 6, 0.38),
+    inset 0 0 0 1px rgba(255, 244, 218, 0.05);
+}
+
+.community-shell--studio-focus .community-shell__frame::before {
+  display: none;
 }
 
 .community-shell--studio-focus .community-shell__topbar {
@@ -2484,6 +2492,32 @@ body:has(.minimal-sanborn-gps) {
 .minimal-sanborn-gps__toolbar-group {
   align-items: center;
   gap: 5px;
+}
+
+.minimal-sanborn-gps__gps-workflow,
+.minimal-sanborn-gps__workflow-select {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.minimal-sanborn-gps__workflow-select span {
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.minimal-sanborn-gps__workflow-select select {
+  height: 30px;
+  max-width: 100%;
+  border: 1px solid rgba(226, 190, 126, 0.28);
+  border-radius: 7px;
+  background: rgba(10, 9, 7, 0.92);
+  color: #f6e7cb;
+  font-size: 0.74rem;
+  padding: 0 0.48rem;
 }
 
 .minimal-sanborn-gps__status-row {
