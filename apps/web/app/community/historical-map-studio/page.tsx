@@ -16,6 +16,7 @@ type HistoricalMapStudioPageProps = {
     atlasPageId?: string;
     piece?: string;
     mapPieceId?: string;
+    indexRegionId?: string;
     sheet?: string;
     sheetAssetId?: string;
     town?: string;
@@ -42,6 +43,7 @@ export default async function HistoricalMapStudioPage({ searchParams }: Historic
         pageId: params.atlasPageId ?? params.page,
         pieceId: params.mapPieceId ?? params.piece,
         assetId: params.sheetAssetId ?? params.sheet,
+        indexRegionId: params.indexRegionId,
       }}
     />
   );

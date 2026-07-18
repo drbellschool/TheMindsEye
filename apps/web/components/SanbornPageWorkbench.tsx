@@ -28,6 +28,7 @@ type SanbornPageWorkbenchProps = {
   onSavePieces: () => void;
   onSavePagesAndContinue?: () => void;
   savePagesAndContinueDisabled?: boolean;
+  showPieceList?: boolean;
 };
 
 type EditorMode = "select" | "draw" | "add_vertex";
@@ -103,6 +104,7 @@ export function SanbornPageWorkbench({
   onSavePieces,
   onSavePagesAndContinue,
   savePagesAndContinueDisabled = false,
+  showPieceList = true,
 }: SanbornPageWorkbenchProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("select");
@@ -207,7 +209,7 @@ export function SanbornPageWorkbench({
   }
 
   return (
-    <section className="sanborn-page-workbench">
+    <section className={`sanborn-page-workbench${showPieceList ? "" : " sanborn-page-workbench--center-only"}`}>
       <div className="sanborn-page-workbench__source">
         <header className="sanborn-page-workbench__header">
           <div>
@@ -313,17 +315,19 @@ export function SanbornPageWorkbench({
         </div>
       </div>
 
-      <aside className="sanborn-page-workbench__pieces">
-        <SanbornPieceList
-          pieces={sortedPieces}
-          selectedPieceId={selectedPieceId}
-          readOnly={editorReadOnly}
-          onDeletePiece={onDeletePiece}
-          onPatchPiece={onPatchPiece}
-          onReorderPiece={onReorderPiece}
-          onSelectPiece={onSelectPiece}
-        />
-      </aside>
+      {showPieceList ? (
+        <aside className="sanborn-page-workbench__pieces">
+          <SanbornPieceList
+            pieces={sortedPieces}
+            selectedPieceId={selectedPieceId}
+            readOnly={editorReadOnly}
+            onDeletePiece={onDeletePiece}
+            onPatchPiece={onPatchPiece}
+            onReorderPiece={onReorderPiece}
+            onSelectPiece={onSelectPiece}
+          />
+        </aside>
+      ) : null}
     </section>
   );
 }

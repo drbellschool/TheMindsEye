@@ -3269,7 +3269,10 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-atlas-navigator__steps {
   display: grid;
+  align-content: start;
   gap: 5px;
+  min-height: 0;
+  overflow: auto;
   margin: 0;
   border-bottom: 1px solid rgba(226, 190, 126, 0.14);
   background: #15130f;
@@ -3730,6 +3733,547 @@ body:has(.minimal-sanborn-gps) {
   stroke-width: 8;
   stroke-dasharray: 20 14;
   vector-effect: non-scaling-stroke;
+}
+
+.minimal-sanborn-gps--station-shell {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.sanborn-atlas-workflow--stations {
+  grid-template-columns: clamp(190px, 16vw, 230px) minmax(0, 1fr) clamp(300px, 24vw, 360px);
+  height: 100%;
+}
+
+.sanborn-atlas-workflow--stations.is-left-collapsed {
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 360px);
+}
+
+.sanborn-atlas-workflow--stations.is-right-collapsed {
+  grid-template-columns: clamp(190px, 16vw, 230px) minmax(0, 1fr);
+}
+
+.sanborn-atlas-workflow--stations.is-left-collapsed.is-right-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sanborn-atlas-navigator__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.18);
+  background: #15130f;
+  color: #f6e7cb;
+  font-size: 0.76rem;
+  padding: 9px 10px;
+}
+
+.sanborn-atlas-navigator__header strong {
+  color: #dbeecf;
+}
+
+.sanborn-atlas-navigator__step {
+  grid-template-columns: 24px minmax(0, 1fr) auto 9px;
+  min-height: 42px;
+  padding: 6px 8px;
+}
+
+.sanborn-atlas-navigator__step span {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sanborn-atlas-navigator__step-number {
+  display: grid !important;
+  place-items: center;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 999px !important;
+  background: rgba(109, 159, 103, 0.22) !important;
+}
+
+.sanborn-atlas-navigator__step-label {
+  justify-items: start;
+  min-width: 0;
+  color: #f6e7cb;
+  font-weight: 800;
+}
+
+.sanborn-atlas-navigator__step-status {
+  justify-items: end;
+  color: rgba(246, 231, 203, 0.64);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.sanborn-atlas-navigator__step-indicator {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 999px !important;
+  background: rgba(246, 231, 203, 0.4) !important;
+}
+
+.sanborn-atlas-navigator__step.is-missing .sanborn-atlas-navigator__step-indicator,
+.sanborn-atlas-navigator__step.is-conflict .sanborn-atlas-navigator__step-indicator {
+  background: #e8755b !important;
+}
+
+.sanborn-atlas-navigator__step.is-started .sanborn-atlas-navigator__step-indicator,
+.sanborn-atlas-navigator__step.is-in_progress .sanborn-atlas-navigator__step-indicator {
+  background: #d1a045 !important;
+}
+
+.sanborn-atlas-navigator__step.is-placed .sanborn-atlas-navigator__step-indicator {
+  background: #5f93bf !important;
+}
+
+.sanborn-atlas-navigator__step.is-reviewed .sanborn-atlas-navigator__step-indicator {
+  background: #6d9f67 !important;
+}
+
+.sanborn-station-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #20211f;
+}
+
+.sanborn-map-placement-workspace {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sanborn-station-inspector {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid rgba(226, 190, 126, 0.18);
+  background: #141a19;
+}
+
+.sanborn-station-inspector__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.18);
+  background: rgba(18, 18, 16, 0.98);
+  padding: 8px 10px;
+}
+
+.sanborn-station-inspector__header div {
+  display: grid;
+  min-width: 0;
+}
+
+.sanborn-station-inspector__header span {
+  color: rgba(246, 231, 203, 0.64);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sanborn-station-inspector__header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #f6e7cb;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sanborn-station-inspector__close {
+  flex: 0 0 auto;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.62);
+  color: #f6e7cb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 5px 7px;
+}
+
+.sanborn-station-inspector__body {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.sanborn-station-inspector label,
+.sanborn-station-inspector input,
+.sanborn-station-inspector select,
+.sanborn-station-inspector textarea {
+  min-width: 0;
+  width: 100%;
+}
+
+.sanborn-station-inspector label {
+  display: grid;
+  gap: 4px;
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.sanborn-station-inspector input,
+.sanborn-station-inspector select,
+.sanborn-station-inspector textarea {
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.86);
+  color: #f6e7cb;
+  font-size: 0.76rem;
+  padding: 6px 7px;
+}
+
+.sanborn-station-inspector textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.sanborn-station-details {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+  gap: 5px 8px;
+  margin: 0;
+  color: rgba(246, 231, 203, 0.78);
+  font-size: 0.72rem;
+}
+
+.sanborn-station-details dt {
+  color: rgba(246, 231, 203, 0.52);
+  font-weight: 800;
+}
+
+.sanborn-station-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sanborn-station-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sanborn-station-subsection,
+.sanborn-station-panel,
+.sanborn-station-overview {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sanborn-station-panel {
+  margin: 10px;
+}
+
+.sanborn-station-panel header,
+.sanborn-station-overview__hero {
+  display: grid;
+  gap: 3px;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.16);
+  padding-bottom: 8px;
+}
+
+.sanborn-station-panel header span,
+.sanborn-station-overview__hero p {
+  color: rgba(246, 231, 203, 0.64);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.sanborn-station-overview {
+  padding: 14px;
+}
+
+.sanborn-station-overview__hero h2 {
+  margin: 0;
+}
+
+.sanborn-station-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.sanborn-station-metrics span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.34);
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.72rem;
+  padding: 8px;
+}
+
+.sanborn-station-metrics strong {
+  color: #f6e7cb;
+  font-size: 1.08rem;
+}
+
+.sanborn-source-preview {
+  align-content: start;
+}
+
+.sanborn-source-preview img {
+  width: min(100%, 980px);
+  max-height: 58vh;
+  object-fit: contain;
+  border: 1px solid rgba(226, 190, 126, 0.2);
+  background: #ede9dd;
+}
+
+.sanborn-station-citation {
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.32);
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+  padding: 8px;
+}
+
+.sanborn-page-workbench--center-only {
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+}
+
+.sanborn-sheet-inventory-workspace {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+}
+
+.sanborn-sheet-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(25, 25, 23, 0.82);
+  color: #f6e7cb;
+  font-size: 0.72rem;
+  text-align: left;
+  padding: 7px;
+}
+
+.sanborn-sheet-card.is-selected {
+  border-color: rgba(109, 159, 103, 0.76);
+}
+
+.sanborn-sheet-card img,
+.sanborn-sheet-card .map-studio-thumb-fallback {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  background: #ede9dd;
+}
+
+.sanborn-sheet-card span,
+.sanborn-sheet-card em {
+  color: rgba(246, 231, 203, 0.62);
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.town-index-mission-map {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  height: 100%;
+  background: #20211f;
+  color: #f6e7cb;
+}
+
+.town-index-mission-map__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.16);
+  background: rgba(12, 12, 11, 0.8);
+  padding: 6px 8px;
+}
+
+.town-index-mission-map__header div {
+  display: grid;
+  min-width: 0;
+}
+
+.town-index-mission-map__header span,
+.town-index-mission-map__mode,
+.town-index-mission-map__selection {
+  color: rgba(246, 231, 203, 0.64);
+  font-size: 0.72rem;
+}
+
+.town-index-mission-map__frame {
+  position: relative;
+  align-self: start;
+  width: min(100%, 1400px);
+  margin: 8px auto;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  background: #ede9dd;
+}
+
+.town-index-mission-map__frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.town-index-mission-map__missing-image,
+.town-index-mission-map__empty {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  color: #34291b;
+}
+
+.town-index-mission-map__empty {
+  margin: 10px;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  background: #ede9dd;
+}
+
+.town-index-mission-map__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.town-index-region__polygon {
+  fill: rgba(70, 111, 133, 0.22);
+  stroke: #5f93bf;
+  stroke-width: 7;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.town-index-region.is-selected .town-index-region__polygon {
+  fill: rgba(109, 159, 103, 0.3);
+  stroke: #dbeecf;
+}
+
+.town-index-region.is-missing .town-index-region__polygon,
+.town-index-region.is-conflict .town-index-region__polygon {
+  stroke: #e8755b;
+  stroke-dasharray: 16 10;
+}
+
+.town-index-region.is-not_started .town-index-region__polygon {
+  stroke: rgba(246, 231, 203, 0.78);
+}
+
+.town-index-region.is-started .town-index-region__polygon {
+  stroke: #d1a045;
+}
+
+.town-index-region.is-reviewed .town-index-region__polygon {
+  stroke: #6d9f67;
+}
+
+.town-index-region__label {
+  fill: #15130f;
+  paint-order: stroke;
+  stroke: rgba(246, 231, 203, 0.9);
+  stroke-width: 8;
+  font-size: 26px;
+  font-weight: 900;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.town-index-region__vertex,
+.town-index-region__draft-point {
+  fill: #f6e7cb;
+  stroke: #17201d;
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.town-index-region__draft {
+  fill: none;
+  stroke: #e8755b;
+  stroke-width: 8;
+  stroke-dasharray: 18 12;
+  vector-effect: non-scaling-stroke;
+}
+
+.town-index-mission-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid rgba(226, 190, 126, 0.16);
+  padding: 7px 8px;
+}
+
+.town-index-mission-map__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.68rem;
+}
+
+.town-index-mission-map__legend-item i {
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(246, 231, 203, 0.78);
+  border-radius: 999px;
+}
+
+.town-index-mission-map__legend-item.is-missing i,
+.town-index-mission-map__legend-item.is-conflict i {
+  border-color: #e8755b;
+  background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(232, 117, 91, 0.8) 3px 5px);
+}
+
+.town-index-mission-map__legend-item.is-started i {
+  border-color: #d1a045;
+}
+
+.town-index-mission-map__legend-item.is-placed i {
+  border-color: #5f93bf;
+}
+
+.town-index-mission-map__legend-item.is-reviewed i {
+  border-color: #6d9f67;
+}
+
+.town-index-mission-map__selection {
+  margin: 0;
+  padding: 0 8px 8px;
 }
 
 @media (max-width: 980px) {

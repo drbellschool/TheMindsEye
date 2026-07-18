@@ -97,7 +97,7 @@ Historical Map Studio participates in the shared Town Reconstruction workflow:
 Town Package -> Edition -> Sheet -> Map Piece / Block
 ```
 
-The visible sequence is `Town & Edition`, `Source Record`, `Town Index`, `Sheet Inventory`, `Map Pieces / Blocks`, `Map Placement`, `Building Reconstruction`, `People & Activity`, and `Evidence Review`. The first six steps are operational in Historical Map Studio. The later engine steps preserve the same context on the existing Building Auditor, People Auditor, and Source Provenance Inspector routes.
+The Historical Map Studio station rail is limited to `Town & Edition`, `Source Record`, `Town Index`, `Sheet Inventory`, `Map Pieces`, and `Map Placement`. Building Reconstruction, People & Activity, and Sources & Evidence remain separate Community routes reached from the shared reconstruction context bar.
 
 Core architecture:
 
@@ -114,6 +114,7 @@ Core architecture:
 - sheet-level georeferencing persists four authoritative corner coordinates, center coordinates, geographic spans, rotation, non-uniform scale, affine skew, pivot, projective warp metadata, flips, opacity, layer order, visibility, lock state, placement status, review status, and evidence classification;
 - saved Sanborn map pieces are the primary Map Placement work units, with the source sheet retained as archival evidence and whole-sheet georeferencing retained for backward compatibility and optional visual reference;
 - Map Placement renders saved visible placed pieces from all atlas pages, while saving remains scoped to the selected piece;
+- Town Index is the edition mission map: durable normalized index regions link index-image areas to non-sequential sheets/pages, and a right-side inspector handles region editing without moving forms below the center workspace;
 - the shared reconstruction context is URL-backed with town, edition, atlas, page, sheet, piece, block, and workflow parameters so Map, Buildings, People, and Sources routes can preserve the same working context;
 - Modern Overlay renders the saved independent sheet-level geographic arrangement rather than a flattened screenshot or composite;
 - current browser rendering uses a custom Leaflet projective overlay that maps the image rectangle into the stored four-corner geographic quadrilateral and falls back to a visible rectangular preview if the projective transform is invalid;

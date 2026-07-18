@@ -24,21 +24,20 @@ Historical Map Studio establishes where source-map regions belong. Building Reco
 - **Sources Engine**: the durable source identity, provenance, citation, and evidence-review surface.
 - **Story / Educational Game Engine**: a later consumer of reviewed reconstruction data, not part of this workflow PR.
 
-## Visible Workflow
+## Historical Map Studio Stations
 
-Historical Map Studio now presents the reconstruction sequence:
+Historical Map Studio contains only the map-reconstruction stations:
 
 1. Town & Edition
 2. Source Record
 3. Town Index
 4. Sheet Inventory
-5. Map Pieces / Blocks
+5. Map Pieces
 6. Map Placement
-7. Building Reconstruction
-8. People & Activity
-9. Evidence Review
 
-Steps 1-6 remain operational inside Historical Map Studio. Steps 7-9 preserve the current Community routes and carry the same URL context into the existing Building Auditor, People Auditor, and Source Provenance Inspector.
+These stations are free navigation, not a rigid wizard. The left rail is station navigation only. Editing for the active station lives in the right inspector so the center workspace can remain the dominant map, index image, sheet inventory, or polygon editor.
+
+Building Reconstruction, People & Activity, and Sources & Evidence remain separate Community routes reached from the shared context bar. They carry the same Town / Edition / Sheet / Map Piece context but do not appear as Historical Map Studio stations.
 
 ## Shared Context
 
@@ -53,8 +52,25 @@ town, year, atlas, page, sheet, piece, workflow
 Explicit aliases are also written:
 
 ```text
-townPackageId, mapYear, atlasId, atlasPageId, sheetAssetId, mapPieceId, blockId
+townPackageId, mapYear, atlasId, atlasPageId, sheetAssetId, mapPieceId, blockId, indexRegionId
 ```
+
+## Town Index Mission Map
+
+The Town Index station is the edition-level workload map. Reviewers designate an index atlas page, draw normalized regions over the original index image, label each region, and link it to the corresponding atlas page or Sanborn sheet asset when known. The original index image remains the evidence source; no derivative image becomes the source of truth.
+
+Durable index regions are stored in `public.sanborn_town_index_regions` by migration `0014_town_index_regions.sql`. Regions validate normalized `0..1` polygons with at least three points, finite coordinates, nonzero area, and no self-intersection where practical. Server routes save and delete regions through service-role-only RPCs that validate town, atlas, page, and sheet scope before writing.
+
+Region statuses are:
+
+- `missing`: the index references a sheet or area that is unavailable.
+- `not_started`: the region exists but linked sheet work has not begun.
+- `started`: linked sheet or piece work exists but placement/review is incomplete.
+- `placed`: required map pieces for the region are geographically placed.
+- `reviewed`: the linked region or sheet work has been reviewed.
+- `conflict`: links, geometry, duplicate references, or evidence need resolution.
+
+Clicking a linked index region selects the linked sheet/page, keeps the town and edition context, updates URL parameters, and moves the workspace to Sheet Inventory or Map Pieces. Returning to Town Index preserves the selected region through `indexRegionId`.
 
 ## Progress Formulas
 
@@ -87,6 +103,19 @@ Map pieces distinguish `not_started`, `in_progress`, `placed`, `reviewed`, `conf
 
 Edition progress aggregates child sheet progress. Town progress aggregates the active edition, linked source records, placed map pieces, and unresolved calculated tasks. Counts remain visible next to any percentages.
 
+### Town Index Region Progress
+
+Index-region progress uses milestones rather than false precision:
+
+- region polygon defined: 15%;
+- sheet or page linked: 30%;
+- source sheet available: 40%;
+- map-piece inventory created: 60%;
+- all linked page pieces placed: 90%;
+- reviewed: 100%.
+
+`missing` regions count as 0% and remain visible. `conflict` regions remain incomplete until the conflict is cleared. Edition-wide Town Index completion averages durable region progress across all regions, so reviewed regions cannot hide missing or conflicted work.
+
 ## Work Queue
 
 The Available Work panel is calculated from incomplete records. It is not an assignment or claiming system.
@@ -94,6 +123,8 @@ The Available Work panel is calculated from incomplete records. It is not an ass
 Example tasks:
 
 - designate the Town Index page;
+- draw missing Town Index regions;
+- link or resolve Town Index regions;
 - add source records for sheets missing provenance;
 - identify regions on a sheet;
 - place an unplaced map piece;
