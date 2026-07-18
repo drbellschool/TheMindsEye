@@ -19,10 +19,47 @@ type AtlasPageSaveBody = {
     pageSequence?: number | string | null;
     pageType?: string | null;
     sheetNumber?: number | string | null;
+    printedReference?: string | null;
     volumeLabel?: string | null;
     displayLabel?: string | null;
+    isPrimaryTownIndex?: boolean | null;
+    classificationNotes?: string | null;
   }>;
 };
+
+type LimitedTextResult = { ok: true; value: string | null } | { ok: false; error: string };
+
+function normalizeLimitedText(
+  value: string | null | undefined,
+  maxLength: number,
+  fieldName: string,
+  options: { allowLineBreaks?: boolean } = {},
+): LimitedTextResult {
+  if (value === null || value === undefined) {
+    return { ok: true, value: null };
+  }
+
+  if (typeof value !== "string") {
+    return { ok: false, error: `${fieldName} must be text.` };
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return { ok: true, value: null };
+  }
+
+  if (normalized.length > maxLength) {
+    return { ok: false, error: `${fieldName} must be ${maxLength} characters or fewer.` };
+  }
+
+  const invalidPattern = options.allowLineBreaks ? /[\u0000\u007f]/ : /[\u0000-\u001f\u007f]/;
+  if (invalidPattern.test(normalized)) {
+    return { ok: false, error: `${fieldName} contains unsupported control characters.` };
+  }
+
+  return { ok: true, value: normalized };
+}
 
 export async function PUT(request: NextRequest) {
   const access = await requireMapStudioWriteAccess();
@@ -48,6 +85,10 @@ export async function PUT(request: NextRequest) {
     const pageSequence = normalizePositiveInteger(page.pageSequence) ?? index + 1;
     const sheetNumber = normalizePositiveInteger(page.sheetNumber);
     const pageType = page.pageType;
+    const printedReference = normalizeLimitedText(page.printedReference, 80, "Printed reference");
+    const volumeLabel = normalizeLimitedText(page.volumeLabel, 80, "Volume label");
+    const displayLabel = normalizeLimitedText(page.displayLabel, 160, "Display title");
+    const classificationNotes = normalizeLimitedText(page.classificationNotes, 1000, "Classification notes", { allowLineBreaks: true });
 
     if (!assetId) {
       return { ok: false as const, error: "Each atlas page must reference a Sanborn sheet asset." };
@@ -55,6 +96,22 @@ export async function PUT(request: NextRequest) {
 
     if (!isSanbornPageType(pageType)) {
       return { ok: false as const, error: "Atlas page type is not allowed." };
+    }
+
+    if (!printedReference.ok) {
+      return { ok: false as const, error: printedReference.error };
+    }
+
+    if (!volumeLabel.ok) {
+      return { ok: false as const, error: volumeLabel.error };
+    }
+
+    if (!displayLabel.ok) {
+      return { ok: false as const, error: displayLabel.error };
+    }
+
+    if (!classificationNotes.ok) {
+      return { ok: false as const, error: classificationNotes.error };
     }
 
     return {
@@ -70,8 +127,11 @@ export async function PUT(request: NextRequest) {
         pageSequence,
         pageType,
         sheetNumber,
-        volumeLabel: normalizeOptionalSanbornText(page.volumeLabel, 80),
-        displayLabel: normalizeOptionalSanbornText(page.displayLabel, 160),
+        printedReference: printedReference.value,
+        volumeLabel: volumeLabel.value,
+        displayLabel: displayLabel.value,
+        isPrimaryTownIndex: page.isPrimaryTownIndex === true,
+        classificationNotes: classificationNotes.value,
       },
     };
   });
@@ -85,6 +145,7 @@ export async function PUT(request: NextRequest) {
   const sequenceCount = new Set(pages.map((page) => page.pageSequence)).size;
   const assetCount = new Set(pages.map((page) => page.assetId)).size;
   const pageIdCount = new Set(pages.map((page) => page.pageId)).size;
+  const primaryTownIndexPages = pages.filter((page) => page.isPrimaryTownIndex);
 
   if (sequenceCount !== pages.length) {
     return jsonError(400, "Atlas page sequences must be unique.");
@@ -96,6 +157,14 @@ export async function PUT(request: NextRequest) {
 
   if (pageIdCount !== pages.length) {
     return jsonError(400, "Atlas page IDs must be unique.");
+  }
+
+  if (primaryTownIndexPages.some((page) => page.pageType !== "graphic_index")) {
+    return jsonError(400, "Only Graphic Index pages can be the primary Town Index.");
+  }
+
+  if (primaryTownIndexPages.length > 1) {
+    return jsonError(400, "Only one primary Town Index page is allowed per Sanborn atlas.");
   }
 
   const saveResult = await supabase.rpc("save_sanborn_atlas_pages", {

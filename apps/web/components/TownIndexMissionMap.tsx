@@ -118,7 +118,7 @@ export function TownIndexMissionMap({
       <section className="town-index-mission-map">
         <div className="town-index-mission-map__empty">
           <strong>No Town Index page is designated.</strong>
-          <span>Mark an atlas page as graphic index, street index, or specials index before drawing index regions.</span>
+          <span>Classify an atlas page as Graphic Index and set it as the primary Town Index before drawing coverage regions.</span>
         </div>
       </section>
     );
@@ -180,7 +180,7 @@ export function TownIndexMissionMap({
           <span>{indexAsset.originalFilename}</span>
         </div>
         <div className="town-index-mission-map__mode" aria-live="polite">
-          {mode === "draw" ? "Add region: click points, then close from the inspector." : mode === "move" ? "Move region" : "Select region"}
+          {mode === "draw" ? "Outline sheet coverage: click points, then close from the inspector." : mode === "move" ? "Move coverage region" : "Select coverage region"}
         </div>
       </header>
 

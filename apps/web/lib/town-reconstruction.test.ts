@@ -9,6 +9,7 @@ import {
   buildTownIndexSummary,
   calculateEditionProgress,
   calculateMapPieceProgress,
+  calculatePageClassificationSummary,
   calculateSheetProgress,
   calculateTownProgress,
   buildReconstructionWorkQueue,
@@ -113,10 +114,13 @@ function page(pageId: string, overrides: Partial<SanbornAtlasPageRecord> = {}): 
     sanbornSheetAssetId: `${pageId}-asset`,
     sanbornSheetAssetRowId: `${pageId}-asset-row`,
     pageSequence: 1,
-    pageType: "numbered_sheet",
+    pageType: "sanborn_sheet",
     sheetNumber: 2,
+    printedReference: "2",
     volumeLabel: null,
     displayLabel: null,
+    isPrimaryTownIndex: false,
+    classificationNotes: null,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     updatedAt: null,
@@ -303,9 +307,57 @@ test("sheet and map-piece progress is based on explicit completed work", () => {
   assert.equal(sheetProgress.status, "placed");
 });
 
+test("page classification progress tracks unknown pages, geographic pages, primary index, and conflicts", () => {
+  const cover = page("cover-page", { pageType: "cover", printedReference: null });
+  const indexPage = page("index-page", { pageType: "graphic_index", printedReference: "Index", isPrimaryTownIndex: true });
+  const sheet = page("sheet-page", { pageType: "sanborn_sheet", printedReference: "2" });
+  const unknown = page("unknown-page", { pageType: "unknown", printedReference: null });
+  const invalidCoverPiece = piece("piece-on-cover", { atlasPageId: "cover-page" });
+  const summary = calculatePageClassificationSummary({
+    pages: [cover, indexPage, sheet, unknown],
+    pieces: [invalidCoverPiece],
+  });
+
+  assert.equal(summary.totalPages, 4);
+  assert.equal(summary.classifiedPages, 3);
+  assert.equal(summary.unknownPages, 1);
+  assert.equal(summary.geographicPages, 1);
+  assert.equal(summary.indexPages, 1);
+  assert.equal(summary.primaryIndexPages, 1);
+  assert.equal(summary.conflictPages, 1);
+  assert.equal(summary.status, "conflict");
+
+  const emptySummary = calculatePageClassificationSummary({ pages: [], pieces: [] });
+  assert.equal(emptySummary.completionPercent, 0);
+  assert.equal(emptySummary.status, "not_started");
+});
+
+test("sheet progress requires classification and flags invalid pieces on metadata-only pages", () => {
+  const cover = page("cover-page", { pageType: "cover", printedReference: null, sanbornSheetAssetId: "cover-asset" });
+  const unknown = page("unknown-page", { pageType: "unknown", printedReference: null, sanbornSheetAssetId: "unknown-asset" });
+  const coverProgress = calculateSheetProgress({
+    asset: asset("cover-asset"),
+    page: cover,
+    pieces: [piece("piece-on-cover", { atlasPageId: "cover-page" })],
+    placements: [],
+  });
+  const unknownProgress = calculateSheetProgress({
+    asset: asset("unknown-asset"),
+    page: unknown,
+    pieces: [],
+    placements: [],
+  });
+
+  assert.equal(coverProgress.classificationConflict, true);
+  assert.equal(coverProgress.status, "conflict");
+  assert.match(coverProgress.warning ?? "", /classification/i);
+  assert.equal(unknownProgress.pageClassified, false);
+  assert.equal(unknownProgress.warning, "Page type unknown");
+});
+
 test("non-sequential sheets aggregate without assuming a sheet-one sequence", () => {
-  const page2 = page("page-2", { sheetNumber: 2, pageSequence: 1, sanbornSheetAssetId: "asset-2" });
-  const page7 = page("page-7", { sheetNumber: 7, pageSequence: 2, sanbornSheetAssetId: "asset-7" });
+  const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", pageSequence: 1, sanbornSheetAssetId: "asset-2" });
+  const page7 = page("page-7", { sheetNumber: 7, printedReference: "7", pageSequence: 2, sanbornSheetAssetId: "asset-7" });
   const asset2 = asset("asset-2", { sheetNumber: 2 });
   const asset7 = asset("asset-7", { sheetNumber: 7, sourceRecordId: null });
   const piece68 = piece("piece-68", { atlasPageId: "page-2" });
@@ -338,9 +390,9 @@ test("non-sequential sheets aggregate without assuming a sheet-one sequence", ()
 });
 
 test("Town Index designation and region navigation summary use index page metadata", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, displayLabel: "Town Index", sanbornSheetAssetId: "index-asset" });
-  const page2 = page("page-2", { sheetNumber: 2, sanbornSheetAssetId: "asset-2" });
-  const page9 = page("page-9", { sheetNumber: 9, sanbornSheetAssetId: "asset-9" });
+  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
+  const page9 = page("page-9", { sheetNumber: 9, printedReference: "9", sanbornSheetAssetId: "asset-9" });
   const summary = buildTownIndexSummary({
     pages: [page9, indexPage, page2],
     assets: [asset("index-asset"), asset("asset-2"), asset("asset-9")],
@@ -384,10 +436,10 @@ test("Town Index region polygons reject invalid normalized geometry", () => {
 });
 
 test("durable Town Index regions sort non-sequential references and aggregate completion", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, displayLabel: "Town Index", sanbornSheetAssetId: "index-asset" });
-  const page2 = page("page-2", { sheetNumber: 2, sanbornSheetAssetId: "asset-2" });
-  const page2A = page("page-2a", { sheetNumber: null, displayLabel: "Sheet 2A", sanbornSheetAssetId: "asset-2a" });
-  const page10 = page("page-10", { sheetNumber: 10, sanbornSheetAssetId: "asset-10" });
+  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
+  const page2A = page("page-2a", { sheetNumber: null, printedReference: "2A", displayLabel: "Sheet 2A", sanbornSheetAssetId: "asset-2a" });
+  const page10 = page("page-10", { sheetNumber: 10, printedReference: "10", sanbornSheetAssetId: "asset-10" });
   const placedPiece = piece("piece-68", { atlasPageId: "page-2" });
   const reviewedPiece = piece("piece-2a", { atlasPageId: "page-2a", inventoryStatus: "reviewed", reviewStatus: "verified_fact" });
   const regions = [
@@ -414,8 +466,8 @@ test("durable Town Index regions sort non-sequential references and aggregate co
 });
 
 test("Town Index region progress treats missing and conflict states as unresolved work", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, sanbornSheetAssetId: "index-asset" });
-  const page2 = page("page-2", { sheetNumber: 2, sanbornSheetAssetId: "asset-2" });
+  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
   const good = calculateTownIndexRegionProgress({
     region: indexRegion("good", { linkedAtlasPageId: "page-2", linkedAtlasPageRowId: "page-2-row", linkedSheetAssetId: "asset-2", linkedSheetAssetRowId: "asset-2-row" }),
     pages: [indexPage, page2],
@@ -449,6 +501,9 @@ test("Town Index region progress treats missing and conflict states as unresolve
 });
 
 test("work queue is generated from incomplete records and removes completed placement tasks", () => {
+  const unknownPage = page("unknown-page", { pageType: "unknown", printedReference: null, sanbornSheetAssetId: "unknown-asset" });
+  const coverPage = page("cover-page", { pageType: "cover", printedReference: null, sanbornSheetAssetId: "cover-asset" });
+  const invalidCoverPiece = piece("piece-on-cover", { atlasPageId: "cover-page", titleText: "Cover decoration" });
   const missingSourceSheet = calculateSheetProgress({
     asset: asset("asset-2", { sourceRecordId: null }),
     page: page("page-2", { sanbornSheetAssetId: "asset-2" }),
@@ -461,8 +516,10 @@ test("work queue is generated from incomplete records and removes completed plac
     townPackageId: "town-1",
     mapYear: 1885,
     atlasId: "atlas-1",
+    pages: [unknownPage, coverPage, page("page-2", { sanbornSheetAssetId: "asset-2" })],
     sheets: [missingSourceSheet],
-    pieces: [unplacedPiece, placedPiece],
+    pieces: [unplacedPiece, placedPiece, calculateMapPieceProgress({ piece: invalidCoverPiece, placement: null })],
+    classification: calculatePageClassificationSummary({ pages: [unknownPage, coverPage, page("page-2")], pieces: [invalidCoverPiece] }),
     index: {
       indexPage: null,
       indexAsset: null,
@@ -474,10 +531,32 @@ test("work queue is generated from incomplete records and removes completed plac
     sourceRecordCount: 1,
   });
 
-  assert.equal(tasks.some((task) => task.label === "Designate the Town Index page"), true);
-  assert.equal(tasks.some((task) => task.label === "Add source record for Sheet 2"), true);
+  assert.equal(tasks.some((task) => task.label === "Select a primary graphic index"), true);
+  assert.equal(tasks.some((task) => /Classify uploaded page/.test(task.label)), true);
+  assert.equal(tasks.some((task) => /Resolve map pieces created on/.test(task.label)), true);
+  assert.equal(tasks.some((task) => /Add source record/.test(task.label)), true);
   assert.equal(tasks.some((task) => task.label === "Place Block 68"), true);
   assert.equal(tasks.some((task) => task.label === "Place Block 69"), false);
+  assert.equal(tasks.some((task) => task.label === "Place Cover decoration"), false);
+
+  const emptyTasks = buildReconstructionWorkQueue({
+    townPackageId: "town-1",
+    mapYear: 1885,
+    atlasId: "atlas-1",
+    pages: [],
+    sheets: [],
+    pieces: [],
+    index: {
+      indexPage: null,
+      indexAsset: null,
+      regions: [],
+      regionProgress: [],
+      completion: calculateTownIndexCompletion([]),
+      unresolvedRegionCount: 0,
+    },
+    sourceRecordCount: 0,
+  });
+  assert.equal(emptyTasks.some((task) => task.label === "Select a primary graphic index"), false);
 });
 
 test("work queue generates Town Index region tasks and removes reviewed regions", () => {
@@ -494,7 +573,7 @@ test("work queue generates Town Index region tasks and removes reviewed regions"
     sheets: [],
     pieces: [],
     index: {
-      indexPage: page("index-page", { pageType: "graphic_index" }),
+      indexPage: page("index-page", { pageType: "graphic_index", isPrimaryTownIndex: true }),
       indexAsset: asset("index-asset"),
       regions,
       regionProgress: [],
@@ -583,8 +662,14 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
     townReconstruction?: {
       demoLabel?: string;
       sourceIdentity?: Record<string, string>;
+      pageClassification?: {
+        totalPages?: number;
+        unknownPages?: number;
+        conflicts?: number;
+        pages?: Array<{ pageType: string; primaryTownIndex?: boolean; filename?: string }>;
+      };
       townIndex?: { regions?: Array<{ sheetReference: string; status: string }> };
-      sheetInventory?: Array<{ sheetNumber: number | null; sheetReference: string; sourceRecordId: string | null }>;
+      sheetInventory?: Array<{ sheetNumber: number | null; sheetReference: string; sourceRecordId: string | null; pageType?: string }>;
       nextTasks?: string[];
     };
   };
@@ -594,10 +679,21 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
   assert.equal(demo.townReconstruction?.sourceIdentity?.repository, "Library of Congress");
   assert.equal(demo.townReconstruction?.sourceIdentity?.collection, "Sanborn Fire Insurance Maps");
   assert.match(demo.townReconstruction?.sourceIdentity?.citation ?? "", /Standard historical citation|Sanborn Map Company/);
+  assert.equal(demo.townReconstruction?.pageClassification?.totalPages, 9);
+  assert.equal(demo.townReconstruction?.pageClassification?.unknownPages, 1);
+  assert.equal(demo.townReconstruction?.pageClassification?.conflicts, 1);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "cover"), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "graphic_index" && page.primaryTownIndex), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "street_index"), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "inset"), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "unknown"), true);
   assert.deepEqual(demo.townReconstruction?.townIndex?.regions?.map((region) => region.sheetReference), ["2", "3", "7", "2A", "10", "East inset"]);
   assert.deepEqual(new Set(demo.townReconstruction?.townIndex?.regions?.map((region) => region.status)), new Set(["missing", "not_started", "started", "placed", "reviewed", "conflict"]));
   assert.deepEqual(demo.townReconstruction?.sheetInventory?.map((sheet) => sheet.sheetReference), ["2", "2A", "3", "7", "10"]);
+  assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.pageType === "inset"), true);
   assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.sourceRecordId === null), true);
+  assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Classify uploaded page/.test(task)), true);
+  assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Resolve map pieces created on Cover/.test(task)), true);
   assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Place Block 68/.test(task)), true);
   assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Resolve duplicate link/.test(task)), true);
 });

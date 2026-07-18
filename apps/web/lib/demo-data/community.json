@@ -31,6 +31,80 @@
       "iiifManifestUrl": "https://www.loc.gov/item/sanborn-demo-texarkana-1885/?fo=json",
       "citation": "Sanborn Map Company. Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas. 1885. Sheet 2. Sanborn Fire Insurance Maps, Library of Congress. https://www.loc.gov/item/sanborn-demo-texarkana-1885/. Accessed 2026-07-18."
     },
+    "pageClassification": {
+      "totalPages": 9,
+      "classifiedPages": 8,
+      "unknownPages": 1,
+      "geographicPages": 5,
+      "indexPages": 1,
+      "conflicts": 1,
+      "pages": [
+        {
+          "displayTitle": "Cover",
+          "printedReference": null,
+          "pageType": "cover",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-cover.png",
+          "warning": "Demo conflict: one invalid map piece exists on this cover page for repair testing."
+        },
+        {
+          "displayTitle": "Town Index",
+          "printedReference": "Index",
+          "pageType": "graphic_index",
+          "primaryTownIndex": true,
+          "filename": "texarkana-1885-index.png"
+        },
+        {
+          "displayTitle": "Street Index",
+          "printedReference": "Street index",
+          "pageType": "street_index",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-street-index.png"
+        },
+        {
+          "displayTitle": "Sheet 2",
+          "printedReference": "2",
+          "pageType": "sanborn_sheet",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-sheet-02.png"
+        },
+        {
+          "displayTitle": "Sheet 3",
+          "printedReference": "3",
+          "pageType": "sanborn_sheet",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-sheet-03.png"
+        },
+        {
+          "displayTitle": "Sheet 7",
+          "printedReference": "7",
+          "pageType": "sanborn_sheet",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-sheet-07.png"
+        },
+        {
+          "displayTitle": "Sheet 10",
+          "printedReference": "10",
+          "pageType": "sanborn_sheet",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-sheet-10.png"
+        },
+        {
+          "displayTitle": "Sheet 2A",
+          "printedReference": "2A",
+          "pageType": "inset",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-sheet-02a.png"
+        },
+        {
+          "displayTitle": "Unclassified upload",
+          "printedReference": null,
+          "pageType": "unknown",
+          "primaryTownIndex": false,
+          "filename": "texarkana-1885-unclassified.png"
+        }
+      ]
+    },
     "townIndex": {
       "indexPage": "Town Index",
       "indexSheetNumber": null,
@@ -125,6 +199,7 @@
       {
         "sheetNumber": 2,
         "sheetReference": "2",
+        "pageType": "sanborn_sheet",
         "filename": "texarkana-1885-sheet-02.png",
         "sourceRecordId": "SRC-1234567890AB",
         "linkedIndexRegionCount": 1,
@@ -135,6 +210,7 @@
       {
         "sheetNumber": null,
         "sheetReference": "2A",
+        "pageType": "inset",
         "filename": "texarkana-1885-sheet-02a.png",
         "sourceRecordId": "SRC-1234567890AB",
         "linkedIndexRegionCount": 1,
@@ -145,6 +221,7 @@
       {
         "sheetNumber": 3,
         "sheetReference": "3",
+        "pageType": "sanborn_sheet",
         "filename": "texarkana-1885-sheet-03.png",
         "sourceRecordId": "SRC-1234567890AB",
         "linkedIndexRegionCount": 2,
@@ -155,6 +232,7 @@
       {
         "sheetNumber": 7,
         "sheetReference": "7",
+        "pageType": "unknown",
         "filename": "texarkana-1885-sheet-07.png",
         "sourceRecordId": null,
         "linkedIndexRegionCount": 0,
@@ -165,6 +243,7 @@
       {
         "sheetNumber": 10,
         "sheetReference": "10",
+        "pageType": "sanborn_sheet",
         "filename": "texarkana-1885-sheet-10.png",
         "sourceRecordId": "SRC-1234567890AB",
         "linkedIndexRegionCount": 2,
@@ -174,6 +253,8 @@
       }
     ],
     "nextTasks": [
+      "Classify uploaded page texarkana-1885-unclassified.png",
+      "Resolve map pieces created on Cover",
       "Draw missing region for Sheet 7",
       "Resolve duplicate link for East inset",
       "Link index region Sheet 2A inset",

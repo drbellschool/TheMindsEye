@@ -103,10 +103,20 @@ import {
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
+  compareSanbornAtlasPagesForWorkflow,
+  getPageTypeToolBlockMessage,
+  getSanbornPageDisplayLabel,
+  getSanbornPagePrintedReference,
+  getSanbornPageTypeDescription,
+  getSanbornPageTypeLabel,
   getUnassignedSanbornUploads,
+  hasSanbornPageClassificationConflict,
   normalizeOptionalSanbornText,
+  pageTypeSupportsMapPieces,
+  pageTypeSupportsMapPlacement,
   reorderAtlasPages,
   reorderMapPieces,
+  sanbornPageTypeLabels,
   sanbornPageTypes,
   type SanbornAtlasPageRecord,
   type SanbornAtlasRecord,
@@ -898,7 +908,7 @@ export function HistoricalMapStudio({
   const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
   const activeAtlasPages = atlasInventory.pages
     .filter((page) => page.atlasId === selectedAtlasId)
-    .sort((left, right) => left.pageSequence - right.pageSequence);
+    .sort(compareSanbornAtlasPagesForWorkflow);
   const selectedAtlasPage = activeAtlasPages.find((page) => page.pageId === selectedAtlasPageId) ?? activeAtlasPages[0] ?? null;
   const selectedAtlasPageAsset = selectedAtlasPage ? sheets.find((sheet) => sheet.assetId === selectedAtlasPage.sanbornSheetAssetId) ?? null : null;
   const selectedAtlasPagePieces = selectedAtlasPage
@@ -906,6 +916,14 @@ export function HistoricalMapStudio({
         .filter((piece) => piece.atlasPageId === selectedAtlasPage.pageId)
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
+  const selectedPageSupportsMapPieces = Boolean(selectedAtlasPage && pageTypeSupportsMapPieces(selectedAtlasPage.pageType));
+  const selectedPageSupportsMapPlacement = Boolean(selectedAtlasPage && pageTypeSupportsMapPlacement(selectedAtlasPage.pageType));
+  const selectedPageToolBlockMessage = selectedAtlasPage ? getPageTypeToolBlockMessage(selectedAtlasPage.pageType) : "";
+  const selectedPageHasClassificationConflict = hasSanbornPageClassificationConflict({
+    page: selectedAtlasPage,
+    mapPieceCount: selectedAtlasPagePieces.length,
+    isPrimaryTownIndex: selectedAtlasPage?.isPrimaryTownIndex,
+  });
   const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? selectedAtlasPagePieces[0] ?? null;
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
@@ -2114,6 +2132,13 @@ export function HistoricalMapStudio({
   }
 
   function placeSelectedMapPieceAt(center: GeoCoordinate) {
+    if (!selectedPageSupportsMapPlacement) {
+      setSaveStatus("error");
+      setSaveMessage(selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before using Map Placement.");
+      setPiecePlacementAnchorId("");
+      return;
+    }
+
     if (!selectedMapPiece || !selectedMapPieceGeoreference) {
       setSaveStatus("error");
       setSaveMessage("Select a saved map piece before placing it.");
@@ -2185,6 +2210,12 @@ export function HistoricalMapStudio({
     if (!selectedMapPiece || !selectedMapPieceGeoreference || !selectedAtlasPage || !activeAtlas) {
       setSaveStatus("error");
       setSaveMessage("Select a saved map piece before saving placement.");
+      return;
+    }
+
+    if (!selectedPageSupportsMapPlacement) {
+      setSaveStatus("error");
+      setSaveMessage(selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before saving placement.");
       return;
     }
 
@@ -3018,7 +3049,6 @@ export function HistoricalMapStudio({
     }
 
     const nextSequence = Math.max(0, ...activeAtlasPages.map((page) => page.pageSequence)) + 1;
-    const pageType = asset.sheetNumber ? "numbered_sheet" : "unknown";
     const nextPage: SanbornAtlasPageRecord = {
       rowId: "",
       pageId: buildDefaultSanbornPageId({ atlasId: activeAtlas.atlasId, assetId: asset.assetId }),
@@ -3027,10 +3057,13 @@ export function HistoricalMapStudio({
       sanbornSheetAssetId: asset.assetId,
       sanbornSheetAssetRowId: asset.rowId,
       pageSequence: nextSequence,
-      pageType,
+      pageType: "unknown",
       sheetNumber: asset.sheetNumber,
+      printedReference: asset.sheetNumber ? String(asset.sheetNumber) : null,
       volumeLabel: activeAtlas.volumeLabel,
-      displayLabel: asset.sheetNumber ? `Sheet ${asset.sheetNumber}` : asset.originalFilename,
+      displayLabel: asset.originalFilename,
+      isPrimaryTownIndex: false,
+      classificationNotes: null,
       reviewStatus: "unknown",
       evidenceClassification: "unknown",
       updatedAt: null,
@@ -3044,19 +3077,90 @@ export function HistoricalMapStudio({
     setSaveMessage("Assigned upload to atlas page draft. Save page order to persist it.");
   }
 
+  function buildPatchedAtlasPages(pageId: string, patch: Partial<SanbornAtlasPageRecord>) {
+    const nextPages = activeAtlasPages.map((page) => {
+      if (page.pageId !== pageId) {
+        return page;
+      }
+
+      const pageType = patch.pageType ?? page.pageType;
+      const nextPage = {
+        ...page,
+        ...patch,
+        pageType,
+        printedReference: patch.printedReference !== undefined ? normalizeOptionalSanbornText(patch.printedReference, 80) : page.printedReference,
+        displayLabel: patch.displayLabel !== undefined ? normalizeOptionalSanbornText(patch.displayLabel, 160) : page.displayLabel,
+        volumeLabel: patch.volumeLabel !== undefined ? normalizeOptionalSanbornText(patch.volumeLabel, 80) : page.volumeLabel,
+        classificationNotes: patch.classificationNotes !== undefined ? normalizeOptionalSanbornText(patch.classificationNotes, 1000) : page.classificationNotes,
+      };
+
+      return pageType === "graphic_index"
+        ? nextPage
+        : {
+            ...nextPage,
+            isPrimaryTownIndex: false,
+          };
+    });
+    const primaryPage = nextPages.find((page) => page.isPrimaryTownIndex && page.pageType === "graphic_index");
+    const graphicIndexPages = nextPages.filter((page) => page.pageType === "graphic_index");
+
+    if (primaryPage) {
+      return nextPages.map((page) => ({
+        ...page,
+        isPrimaryTownIndex: page.pageId === primaryPage.pageId,
+      }));
+    }
+
+    if (graphicIndexPages.length === 1) {
+      return nextPages.map((page) => ({
+        ...page,
+        isPrimaryTownIndex: page.pageId === graphicIndexPages[0].pageId,
+      }));
+    }
+
+    return nextPages;
+  }
+
   function patchAtlasPage(pageId: string, patch: Partial<SanbornAtlasPageRecord>) {
+    const nextPages = buildPatchedAtlasPages(pageId, patch);
+
+    replaceActiveAtlasPages(nextPages);
+    setSaveStatus("idle");
+    setSaveMessage("Page classification has unsaved changes.");
+  }
+
+  function setPrimaryTownIndexPage(pageId: string, options: { save?: boolean } = {}) {
+    const targetPage = activeAtlasPages.find((page) => page.pageId === pageId);
+
+    if (!targetPage) {
+      return;
+    }
+
+    const currentPrimary = activeAtlasPages.find((page) => page.isPrimaryTownIndex && page.pageId !== pageId);
+    if (currentPrimary && !window.confirm(`Replace ${getSanbornPageDisplayLabel(currentPrimary)} as the primary Town Index?`)) {
+      return;
+    }
+
     const nextPages = activeAtlasPages.map((page) =>
       page.pageId === pageId
-        ? {
-            ...page,
-            ...patch,
-            displayLabel: patch.displayLabel !== undefined ? normalizeOptionalSanbornText(patch.displayLabel, 160) : page.displayLabel,
-            volumeLabel: patch.volumeLabel !== undefined ? normalizeOptionalSanbornText(patch.volumeLabel, 80) : page.volumeLabel,
-          }
-        : page,
+        ? { ...page, pageType: "graphic_index" as SanbornPageType, isPrimaryTownIndex: true }
+        : { ...page, isPrimaryTownIndex: false },
     );
 
     replaceActiveAtlasPages(nextPages);
+    setSelectedAtlasPageId(pageId);
+    setSelectedAssetId(targetPage.sanbornSheetAssetId);
+    setSaveStatus("idle");
+    setSaveMessage("Primary Town Index designation has unsaved changes.");
+
+    if (options.save) {
+      void saveAtlasPages({
+        pagesOverride: nextPages,
+        workflowStepAfterSave: "town_index",
+        selectedPageIdOverride: pageId,
+        selectedAssetIdOverride: targetPage.sanbornSheetAssetId,
+      });
+    }
   }
 
   function reorderAtlasPage(pageId: string, direction: "up" | "down") {
@@ -3073,19 +3177,27 @@ export function HistoricalMapStudio({
     replaceActiveAtlasPages(reorderAtlasPages(sorted));
   }
 
-  async function saveAtlasPages(options: { continueToPieceInventory?: boolean } = {}) {
+  async function saveAtlasPages(
+    options: {
+      continueToPieceInventory?: boolean;
+      pagesOverride?: SanbornAtlasPageRecord[];
+      workflowStepAfterSave?: SanbornAtlasWorkflowStep;
+      selectedPageIdOverride?: string;
+      selectedAssetIdOverride?: string;
+    } = {},
+  ) {
     if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) {
       setSaveStatus("error");
       setSaveMessage("Atlas page save failed: active atlas or write access is unavailable.");
       return;
     }
 
-    const selectedPageIdBeforeSave = selectedAtlasPage?.pageId ?? selectedAtlasPageId;
-    const workflowStepAfterSave = options.continueToPieceInventory ? "piece_inventory" : atlasWorkflowStep;
+    const selectedPageIdBeforeSave = options.selectedPageIdOverride ?? selectedAtlasPage?.pageId ?? selectedAtlasPageId;
+    const workflowStepAfterSave = options.workflowStepAfterSave ?? (options.continueToPieceInventory ? "piece_inventory" : atlasWorkflowStep);
 
     setSaveStatus("saving");
     setSaveMessage("Saving atlas pages...");
-    const pagesToSave = reorderAtlasPages(activeAtlasPages);
+    const pagesToSave = reorderAtlasPages(options.pagesOverride ?? activeAtlasPages);
     const response = await fetch("/api/community/historical-map-studio/atlas-pages", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -3098,8 +3210,11 @@ export function HistoricalMapStudio({
           pageSequence: page.pageSequence,
           pageType: page.pageType,
           sheetNumber: page.sheetNumber,
+          printedReference: page.printedReference,
           volumeLabel: page.volumeLabel,
           displayLabel: page.displayLabel,
+          isPrimaryTownIndex: page.isPrimaryTownIndex,
+          classificationNotes: page.classificationNotes,
         })),
       }),
     });
@@ -3120,7 +3235,7 @@ export function HistoricalMapStudio({
       pendingStudioSelectionRef.current = {
         atlasId: activeAtlas.atlasId,
         pageId: selectedPageIdBeforeSave,
-        assetId: selectedPageBeforeSave?.sanbornSheetAssetId ?? selectedAssetId,
+        assetId: options.selectedAssetIdOverride ?? selectedPageBeforeSave?.sanbornSheetAssetId ?? selectedAssetId,
         workflowStep: workflowStepAfterSave,
       };
       setSelectedAtlasId(activeAtlas.atlasId);
@@ -3162,6 +3277,12 @@ export function HistoricalMapStudio({
     if (!selectedAtlasPage || !selectedAtlasPage.isPersisted) {
       setSaveStatus("error");
       setSaveMessage("Save atlas page assignments before saving map pieces.");
+      return;
+    }
+
+    if (!selectedPageSupportsMapPieces) {
+      setSaveStatus("error");
+      setSaveMessage(selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before saving map pieces.");
       return;
     }
 
@@ -3822,6 +3943,7 @@ export function HistoricalMapStudio({
     ? reconstructionModel.index.regionProgress.find((region) => region.regionId === selectedTownIndexRegion.regionId) ?? null
     : null;
   const selectedSourceOption =
+    initialData.sourceOptions.find((source) => source.sourceRecordId === selectedAtlasPageAsset?.sourceRecordId) ??
     initialData.sourceOptions.find((source) => source.sourceRecordId === selectedAsset?.sourceRecordId) ??
     initialData.sourceOptions.find((source) => source.sourceRecordId === activeAtlas?.sourceRecordId) ??
     null;
@@ -3897,6 +4019,7 @@ export function HistoricalMapStudio({
         <div className="sanborn-station-metrics" aria-label="Reconstruction progress metrics">
           <span><strong>{reconstructionModel.town.completionPercent}%</strong> overall</span>
           <span><strong>{reconstructionModel.edition.sheetCount}</strong> sheets</span>
+          <span><strong>{reconstructionModel.classification.classifiedPages}/{reconstructionModel.classification.totalPages}</strong> pages classified</span>
           <span><strong>{reconstructionModel.edition.placedMapPieceCount}</strong> pieces placed</span>
           <span><strong>{reconstructionModel.index.completion.totalRegions}</strong> index regions</span>
           <span><strong>{reconstructionModel.town.sourceRecordsLinked}</strong> sources linked</span>
@@ -3938,14 +4061,18 @@ export function HistoricalMapStudio({
   function renderSourceWorkspace() {
     return (
       <section className="sanborn-station-panel sanborn-source-preview" aria-label="Source Record preview">
-        {selectedAsset?.signedUrl ? <img alt={selectedAsset.originalFilename} src={selectedAsset.signedUrl} /> : <div className="sanborn-atlas-empty">Select a sheet with an available signed image.</div>}
+        {selectedAtlasPageAsset?.signedUrl ? <img alt={selectedAtlasPageAsset.originalFilename} src={selectedAtlasPageAsset.signedUrl} /> : <div className="sanborn-atlas-empty">Select a page with an available signed image.</div>}
         <dl className="sanborn-station-details">
+          <dt>Page type</dt>
+          <dd>{selectedAtlasPage ? getSanbornPageTypeLabel(selectedAtlasPage.pageType) : "Unavailable"}</dd>
+          <dt>Printed reference</dt>
+          <dd>{selectedAtlasPage ? getSanbornPagePrintedReference(selectedAtlasPage) ?? "Missing" : "Unavailable"}</dd>
           <dt>Source ID</dt>
           <dd>{selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "Missing source record"}</dd>
           <dt>Repository</dt>
           <dd>{selectedSourceRecord ? getSourceRepositoryLabel(selectedSourceRecord) : "Unavailable"}</dd>
-          <dt>Selected sheet</dt>
-          <dd>{selectedAsset?.originalFilename ?? "No sheet selected"}</dd>
+          <dt>Selected page</dt>
+          <dd>{selectedAtlasPageAsset?.originalFilename ?? "No page selected"}</dd>
           <dt>Citation</dt>
           <dd>{selectedSourceCitation || "Citation unavailable until a durable source record is linked."}</dd>
         </dl>
@@ -3954,6 +4081,36 @@ export function HistoricalMapStudio({
   }
 
   function renderTownIndexWorkspace() {
+    if (!reconstructionModel.index.indexPage) {
+      return (
+        <section className="town-index-mission-map">
+          <div className="town-index-mission-map__empty">
+            <strong>No graphic index is designated for this edition.</strong>
+            <span>Classify an uploaded page as Graphic Index and set it as the primary Town Index to enable coverage-region tools.</span>
+          </div>
+          <div className="sanborn-sheet-inventory-workspace" aria-label="Eligible pages for Town Index designation">
+            {activeAtlasPages.map((page) => {
+              const asset = sheets.find((candidate) => candidate.assetId === page.sanbornSheetAssetId) ?? null;
+
+              return (
+                <article className={`sanborn-sheet-card is-${page.pageType}${selectedAtlasPageId === page.pageId ? " is-selected" : ""}`} key={page.pageId}>
+                  {asset?.signedUrl ? <img alt="" src={asset.signedUrl} /> : <span className="map-studio-thumb-fallback">No image</span>}
+                  <strong>{getSanbornPageDisplayLabel(page)}</strong>
+                  <span>{asset?.originalFilename ?? "Missing asset"}</span>
+                  <span>{getSanbornPageTypeLabel(page.pageType)}</span>
+                  <div className="sanborn-station-actions">
+                    <button className="sanborn-button" onClick={() => selectAtlasPage(page.pageId, "page_classification")} type="button">Select page</button>
+                    <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => patchAtlasPage(page.pageId, { pageType: "graphic_index" })} type="button">Classify as Graphic Index</button>
+                    <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled} onClick={() => setPrimaryTownIndexPage(page.pageId, { save: true })} type="button">Set as Primary Town Index</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      );
+    }
+
     return (
       <TownIndexMissionMap
         draftPoints={townIndexDraftPoints}
@@ -3977,7 +4134,7 @@ export function HistoricalMapStudio({
         {reconstructionModel.sheetProgress.length === 0 ? <p className="sanborn-atlas-empty">No sheets are loaded for this edition.</p> : null}
         {reconstructionModel.sheetProgress
           .slice()
-          .sort((left, right) => compareSheetReferences(left.displayLabel, right.displayLabel))
+          .sort((left, right) => compareSheetReferences(left.printedReference ?? left.displayLabel, right.printedReference ?? right.displayLabel))
           .map((sheet) => {
             const asset = sheets.find((candidate) => candidate.assetId === sheet.sheetAssetId);
             const page = atlasInventory.pages.find((candidate) => candidate.pageId === sheet.pageId);
@@ -3994,10 +4151,14 @@ export function HistoricalMapStudio({
               >
                 {asset?.signedUrl ? <img alt="" src={asset.signedUrl} /> : <span className="map-studio-thumb-fallback">No image</span>}
                 <strong>{sheet.displayLabel}</strong>
+                <span>{sheet.printedReference ? `Printed ref ${sheet.printedReference}` : "No printed reference"}</span>
+                <span>{sheet.pageTypeLabel}{sheet.isPrimaryTownIndex ? " | Primary Town Index" : ""}</span>
                 <span>{asset?.originalFilename ?? "Missing asset"}</span>
+                <span>{sheet.sourceLinked ? "Source linked" : "Missing source"}</span>
                 <span>{sheet.mapPiecesIdentified} pieces | {sheet.mapPiecesPlaced} placed</span>
                 <span>{sheet.status.replaceAll("_", " ")} | {sheet.completionPercent}%</span>
                 {sheet.warning ? <em>{sheet.warning}</em> : null}
+                {sheet.classificationConflict ? <em>Classification conflict</em> : null}
               </button>
             );
           })}
@@ -4011,7 +4172,15 @@ export function HistoricalMapStudio({
         asset={selectedAtlasPageAsset}
         page={selectedAtlasPage}
         pieces={selectedAtlasPagePieces}
-        readOnly={atlasReadOnly || !selectedAtlasPage || !selectedAtlasPage.isPersisted}
+        readOnly={atlasReadOnly || !selectedAtlasPage || !selectedAtlasPage.isPersisted || !selectedPageSupportsMapPieces}
+        classificationBlockedMessage={selectedAtlasPage && !selectedPageSupportsMapPieces ? selectedPageToolBlockMessage : ""}
+        repairClassificationAction={
+          selectedAtlasPage && !selectedPageSupportsMapPieces ? (
+            <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep(selectedAtlasPage.pageType === "graphic_index" ? "town_index" : "page_classification")} type="button">
+              {selectedAtlasPage.pageType === "graphic_index" ? "Open Town Index" : "Review page classification"}
+            </button>
+          ) : null
+        }
         savePagesAndContinueDisabled={atlasReadOnly || atlasSaveActionsDisabled}
         selectedPieceId={selectedMapPieceId}
         showPieceList={false}
@@ -4030,6 +4199,7 @@ export function HistoricalMapStudio({
     return (
       <section className="sanborn-map-placement-workspace" ref={minimalMapRef}>
         {!selectedMapPiece ? <p className="minimal-sanborn-gps__notice is-warning">Select a saved map piece before using Map placement.</p> : null}
+        {selectedAtlasPage && !selectedPageSupportsMapPlacement ? <p className="minimal-sanborn-gps__notice is-warning">{selectedPageToolBlockMessage}</p> : null}
         {selectedMapPiece && !selectedMapPiece.isPersisted ? <p className="minimal-sanborn-gps__notice is-warning">Save map pieces before geographic placement.</p> : null}
         {selectedMapPiece && !selectedMapPieceHasGeographicFootprint ? <p className="minimal-sanborn-gps__notice">Selected map piece is not on the map yet. Click Place selected piece.</p> : null}
         {selectedMapPieceHasGeographicFootprint && !selectedAtlasPageAsset?.signedUrl ? <p className="minimal-sanborn-gps__notice">Selected piece source image is waiting for a signed URL.</p> : null}
@@ -4161,6 +4331,57 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "page_classification") {
       return (
         <>
+          <section className="sanborn-station-subsection">
+            <strong>Page Classification</strong>
+            <dl className="sanborn-station-details">
+              <dt>Selected uploaded page</dt>
+              <dd>{selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "No page selected"}</dd>
+              <dt>Original filename</dt>
+              <dd>{selectedAtlasPageAsset?.originalFilename ?? "Unavailable"}</dd>
+              <dt>Current page type</dt>
+              <dd>{selectedAtlasPage ? getSanbornPageTypeLabel(selectedAtlasPage.pageType) : "Unavailable"}</dd>
+              <dt>Primary Town Index</dt>
+              <dd>{selectedAtlasPage?.isPrimaryTownIndex ? "Yes" : "No"}</dd>
+            </dl>
+            {selectedAtlasPage ? (
+              <>
+                <label>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
+                <p className="sanborn-atlas-empty">{getSanbornPageTypeDescription(selectedAtlasPage.pageType)}</p>
+                <label>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} placeholder="2, 2A, East inset, Unnumbered" /></label>
+                <label>Display title<input disabled={atlasReadOnly} value={selectedAtlasPage.displayLabel ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { displayLabel: event.target.value })} placeholder="Cover, Town Index, Sheet 2" /></label>
+                <label>
+                  <input
+                    checked={selectedAtlasPage.isPrimaryTownIndex}
+                    disabled={atlasReadOnly || selectedAtlasPage.pageType !== "graphic_index"}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        setPrimaryTownIndexPage(selectedAtlasPage.pageId);
+                      } else {
+                        patchAtlasPage(selectedAtlasPage.pageId, { isPrimaryTownIndex: false });
+                      }
+                    }}
+                    type="checkbox"
+                  />
+                  Is primary Town Index
+                </label>
+                {selectedAtlasPage.pageType !== "graphic_index" ? <p className="sanborn-atlas-empty">Only Graphic Index pages can become the primary Town Index.</p> : null}
+                <label>Notes<textarea disabled={atlasReadOnly} value={selectedAtlasPage.classificationNotes ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { classificationNotes: event.target.value })} /></label>
+                {selectedPageHasClassificationConflict ? (
+                  <div className="sanborn-atlas-warning">
+                    <strong>Classification conflict</strong>
+                    <span>This page has map pieces but its page type does not allow Map Pieces. Reclassify page or archive invalid pieces.</span>
+                    <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => patchAtlasPage(selectedAtlasPage.pageId, { pageType: "sanborn_sheet" })} type="button">Reclassify as Sanborn Sheet</button>
+                  </div>
+                ) : null}
+                <div className="sanborn-station-actions">
+                  <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled || !activeAtlas} onClick={() => void saveAtlasPages()} type="button">Save page classification</button>
+                  {selectedAtlasPage.pageType === "graphic_index" ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
+                </div>
+              </>
+            ) : (
+              <p className="sanborn-atlas-empty">Select an uploaded page before classifying it.</p>
+            )}
+          </section>
           <dl className="sanborn-station-details">
             <dt>Internal source ID</dt>
             <dd>{selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "Missing source record"}</dd>
@@ -4170,6 +4391,10 @@ export function HistoricalMapStudio({
             <dd>{selectedSourceRecord?.collectionName ?? "Unavailable"}</dd>
             <dt>External record ID</dt>
             <dd>{selectedSourceRecord?.repositoryExternalId ?? "Unavailable"}</dd>
+            <dt>Persistent URL</dt>
+            <dd>{selectedSourceUrl ?? "Unavailable"}</dd>
+            <dt>IIIF manifest URL</dt>
+            <dd>{selectedSourceRecord?.iiifManifestUrl ?? "Unavailable"}</dd>
             <dt>Rights</dt>
             <dd>{selectedSourceRecord?.rightsStatement ?? selectedSourceRecord?.rightsNote ?? "Unavailable"}</dd>
             <dt>Source status</dt>
@@ -4193,17 +4418,9 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "town_index") {
       return (
         <>
-          <label>Designated index page<select value={reconstructionModel.index.indexPage?.pageId ?? ""} onChange={(event) => {
-            const nextIndexPageId = event.target.value;
-            activeAtlasPages.forEach((page) => {
-              if (page.pageId === nextIndexPageId) {
-                patchAtlasPage(page.pageId, { pageType: "graphic_index" });
-              } else if (page.pageType === "graphic_index" || page.pageType === "street_index" || page.pageType === "specials_index") {
-                patchAtlasPage(page.pageId, { pageType: "numbered_sheet" });
-              }
-            });
-          }}><option value="">No index page</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.displayLabel || `Page ${page.pageSequence}`}</option>)}</select></label>
           <dl className="sanborn-station-details">
+            <dt>Primary graphic index</dt>
+            <dd>{reconstructionModel.index.indexPage ? getSanbornPageDisplayLabel(reconstructionModel.index.indexPage) : "Not designated"}</dd>
             <dt>Index image</dt>
             <dd>{reconstructionModel.index.indexAsset?.signedUrl ? "Available" : reconstructionModel.index.indexAsset ? "Waiting for signed URL" : "Unavailable"}</dd>
             <dt>Region count</dt>
@@ -4217,8 +4434,10 @@ export function HistoricalMapStudio({
             <dt>Edition index completion</dt>
             <dd>{reconstructionModel.index.completion.completionPercent}%</dd>
           </dl>
+          {!reconstructionModel.index.indexPage ? <p className="sanborn-atlas-warning">No graphic index is designated for this edition. Use the Town Index workspace repair list or Source Record classification to set one.</p> : null}
+          <p className="sanborn-atlas-empty">Outline the colored or bounded area on the Sanborn index that points to a sheet or inset. Do not trace each numbered city block here.</p>
           <div className="sanborn-station-actions">
-            <button className={`sanborn-button${townIndexMapMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !reconstructionModel.index.indexPage} onClick={() => setTownIndexMapMode("draw")} type="button">Add region</button>
+            <button className={`sanborn-button${townIndexMapMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !reconstructionModel.index.indexPage} onClick={() => setTownIndexMapMode("draw")} type="button">Add coverage region</button>
             <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || townIndexDraftPoints.length < 3} onClick={finishTownIndexRegionDraft} type="button">Close polygon</button>
             <button className="sanborn-button" disabled={townIndexDraftPoints.length === 0} onClick={() => { setTownIndexDraftPoints([]); setTownIndexMapMode("select"); }} type="button">Cancel drawing</button>
             <button className={`sanborn-button${townIndexMapMode === "move" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !selectedTownIndexRegion} onClick={() => setTownIndexMapMode("move")} type="button">Move region</button>
@@ -4226,7 +4445,7 @@ export function HistoricalMapStudio({
           {selectedTownIndexRegion ? (
             <>
               <label>Region label<input disabled={atlasReadOnly} value={selectedTownIndexRegion.regionLabel} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionLabel: event.target.value })} /></label>
-              <label>Sheet reference<input disabled={atlasReadOnly} value={selectedTownIndexRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { sheetReference: event.target.value })} /></label>
+              <label>Printed sheet reference<input disabled={atlasReadOnly} value={selectedTownIndexRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { sheetReference: event.target.value })} /></label>
               <label>Region type<select disabled={atlasReadOnly} value={selectedTownIndexRegion.regionType} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionType: event.target.value as SanbornTownIndexRegionType })}>{sanbornTownIndexRegionTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
               <label>Linked sheet/page<select disabled={atlasReadOnly} value={selectedTownIndexRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
                 const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
@@ -4236,7 +4455,7 @@ export function HistoricalMapStudio({
                   linkedSheetAssetId: linkedPage?.sanbornSheetAssetId ?? null,
                   linkedSheetAssetRowId: linkedPage?.sanbornSheetAssetRowId ?? null,
                 });
-              }}><option value="">Unresolved / no link</option>{activeAtlasPages.filter((page) => page.pageType === "numbered_sheet").map((page) => <option key={page.pageId} value={page.pageId}>{page.displayLabel || `Sheet ${page.sheetNumber ?? page.pageSequence}`}</option>)}</select></label>
+              }}><option value="">Unresolved / no link</option>{activeAtlasPages.filter((page) => pageTypeSupportsMapPieces(page.pageType)).map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
               <label>Status<select disabled={atlasReadOnly} value={selectedTownIndexRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
               <label>Notes<textarea disabled={atlasReadOnly} value={selectedTownIndexRegion.notes ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { notes: event.target.value })} /></label>
               <dl className="sanborn-station-details">
@@ -4261,15 +4480,20 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "numbered_sheets") {
       return (
         <>
-          <label>Selected sheet<select value={selectedAtlasPage?.pageId ?? ""} onChange={(event) => selectAtlasPage(event.target.value)}><option value="">No sheet selected</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.displayLabel || `Page ${page.pageSequence}`}</option>)}</select></label>
+          <label>Selected sheet<select value={selectedAtlasPage?.pageId ?? ""} onChange={(event) => selectAtlasPage(event.target.value)}><option value="">No sheet selected</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
           {selectedAtlasPage ? (
             <>
-              <label>Sheet number/reference<input disabled={atlasReadOnly} value={selectedAtlasPage.sheetNumber ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { sheetNumber: event.target.value ? Number(event.target.value) : null })} /></label>
+              <label>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} /></label>
               <label>Display label<input disabled={atlasReadOnly} value={selectedAtlasPage.displayLabel ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { displayLabel: event.target.value })} /></label>
-              <label>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
+              <label>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
+              {selectedAtlasPage.pageType === "graphic_index" ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
               <dl className="sanborn-station-details">
                 <dt>Filename</dt>
                 <dd>{selectedAtlasPageAsset?.originalFilename ?? "Unavailable"}</dd>
+                <dt>Page type</dt>
+                <dd>{getSanbornPageTypeLabel(selectedAtlasPage.pageType)}</dd>
+                <dt>Primary index</dt>
+                <dd>{selectedAtlasPage.isPrimaryTownIndex ? "Yes" : "No"}</dd>
                 <dt>Source record</dt>
                 <dd>{selectedAtlasPageAsset?.sourceId ?? selectedAtlasPageAsset?.sourceRecordId ?? "Missing"}</dd>
                 <dt>Map pieces</dt>
@@ -4279,8 +4503,9 @@ export function HistoricalMapStudio({
                 <dt>Progress</dt>
                 <dd>{selectedSheetProgress?.completionPercent ?? 0}%</dd>
                 <dt>Warnings</dt>
-                <dd>{selectedSheetProgress?.warning ?? "None"}</dd>
+                <dd>{selectedSheetProgress?.warning ?? (selectedPageHasClassificationConflict ? "Classification conflict" : "None")}</dd>
               </dl>
+              {selectedPageHasClassificationConflict ? <p className="sanborn-atlas-warning">Reclassify page or archive invalid pieces. Existing pieces will not be deleted automatically.</p> : null}
             </>
           ) : null}
           <section className="sanborn-station-subsection">
@@ -4295,7 +4520,8 @@ export function HistoricalMapStudio({
             <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => selectedAtlasPage && reorderAtlasPage(selectedAtlasPage.pageId, "up")} type="button">Move page up</button>
             <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => selectedAtlasPage && reorderAtlasPage(selectedAtlasPage.pageId, "down")} type="button">Move page down</button>
             <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled || !activeAtlas} onClick={() => void saveAtlasPages()} type="button">Save page order</button>
-            <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => changeAtlasWorkflowStep("piece_inventory")} type="button">Open sheet</button>
+            <button className="sanborn-button" disabled={!selectedAtlasPage || !selectedPageSupportsMapPieces} onClick={() => changeAtlasWorkflowStep("piece_inventory")} type="button">Open in Map Pieces</button>
+            <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => changeAtlasWorkflowStep("page_classification")} type="button">Review classification</button>
           </div>
         </>
       );
@@ -4305,9 +4531,17 @@ export function HistoricalMapStudio({
       return (
         <>
           {pieceInventoryBlocked ? <p className="sanborn-atlas-warning">Save the atlas page assignments before drawing map pieces.</p> : null}
+          {selectedAtlasPage && !selectedPageSupportsMapPieces ? (
+            <div className="sanborn-atlas-warning">
+              <strong>{selectedPageToolBlockMessage}</strong>
+              {selectedAtlasPagePieces.length > 0 ? <span> Existing pieces are flagged as classification conflicts. Reclassify page or archive invalid pieces.</span> : null}
+            </div>
+          ) : null}
           <dl className="sanborn-station-details">
             <dt>Selected sheet</dt>
-            <dd>{selectedAtlasPage?.displayLabel || selectedAtlasPage?.sheetNumber || "Unavailable"}</dd>
+            <dd>{selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "Unavailable"}</dd>
+            <dt>Page type</dt>
+            <dd>{selectedAtlasPage ? getSanbornPageTypeLabel(selectedAtlasPage.pageType) : "Unavailable"}</dd>
             <dt>Selected map piece</dt>
             <dd>{selectedMapPiece ? getMapPieceDisplayLabel(selectedMapPiece) : "Unavailable"}</dd>
             <dt>Piece type</dt>
@@ -4329,11 +4563,11 @@ export function HistoricalMapStudio({
             <dt>Progress</dt>
             <dd>{selectedPieceProgress?.completionPercent ?? 0}%</dd>
             <dt>Warnings</dt>
-            <dd>{pieceInventoryBlocked ? "Draft sheet assignment" : selectedPieceProgress?.status === "conflict" ? "Piece progress conflict" : "None"}</dd>
+            <dd>{pieceInventoryBlocked ? "Draft sheet assignment" : selectedPageHasClassificationConflict ? "Classification conflict" : selectedPieceProgress?.status === "conflict" ? "Piece progress conflict" : "None"}</dd>
           </dl>
           <SanbornPieceList
             pieces={selectedAtlasPagePieces}
-            readOnly={atlasReadOnly || !selectedAtlasPage || !selectedAtlasPage.isPersisted}
+            readOnly={atlasReadOnly || !selectedAtlasPage || !selectedAtlasPage.isPersisted || !selectedPageSupportsMapPieces}
             selectedPieceId={selectedMapPieceId}
             onDeletePiece={deleteMapPiece}
             onPatchPiece={patchMapPiece}
@@ -4343,8 +4577,9 @@ export function HistoricalMapStudio({
           <div className="sanborn-station-actions">
             {selectedIndexRegionId ? <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep("town_index")} type="button">Back to Town Index</button> : null}
             {pieceInventoryBlocked ? <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled} onClick={() => void saveAtlasPages({ continueToPieceInventory: true })} type="button">Save pages and continue</button> : null}
-            <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || pieceInventoryBlocked || !selectedAtlasPage} onClick={() => void saveMapPieces()} type="button">Save pieces</button>
-            <button className="sanborn-button" disabled={!selectedMapPiece?.isPersisted} onClick={() => changeAtlasWorkflowStep("gps_alignment")} type="button">Open in Map Placement</button>
+            <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || pieceInventoryBlocked || !selectedAtlasPage || !selectedPageSupportsMapPieces} onClick={() => void saveMapPieces()} type="button">Save pieces</button>
+            <button className="sanborn-button" disabled={!selectedMapPiece?.isPersisted || !selectedPageSupportsMapPlacement} onClick={() => changeAtlasWorkflowStep("gps_alignment")} type="button">Open in Map Placement</button>
+            <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => changeAtlasWorkflowStep("page_classification")} type="button">Reclassify page</button>
           </div>
         </>
       );
@@ -4364,7 +4599,7 @@ export function HistoricalMapStudio({
           </select>
         </label>
         <div className="sanborn-station-actions">
-          <button className="sanborn-button sanborn-button--primary" disabled={!selectedMapPiece?.isPersisted || atlasReadOnly} onClick={() => {
+          <button className="sanborn-button sanborn-button--primary" disabled={!selectedMapPiece?.isPersisted || atlasReadOnly || !selectedPageSupportsMapPlacement} onClick={() => {
             if (!selectedMapPiece) return;
             setSelectedMapPieceId(selectedMapPiece.pieceId);
             setPiecePlacementAnchorId(selectedMapPiece.pieceId);
@@ -4381,7 +4616,7 @@ export function HistoricalMapStudio({
             setPiecePlacementAnchorId("");
             commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
           }} type="button">Pan modern map</button>
-          <button className={`sanborn-button${geoEditMode === "edit_historical_sheets" ? " sanborn-button--primary" : ""}`} disabled={!selectedMapPiecePlaced || selectedMapPieceGeoreference?.isLocked} onClick={() => {
+          <button className={`sanborn-button${geoEditMode === "edit_historical_sheets" ? " sanborn-button--primary" : ""}`} disabled={!selectedMapPiecePlaced || selectedMapPieceGeoreference?.isLocked || !selectedPageSupportsMapPlacement} onClick={() => {
             setGeoEditMode("edit_historical_sheets");
             setPiecePlacementAnchorId("");
             commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false);
@@ -4393,7 +4628,7 @@ export function HistoricalMapStudio({
           replaceMapPieceGeoreference(rotateMapPieceGeoreference(selectedMapPieceGeoreference, Number(event.target.value)));
         }} /><output>{Math.round(selectedMapPieceRotation)} deg</output></label>
         <div className="sanborn-station-actions">
-          <button className="sanborn-button sanborn-button--primary" disabled={!selectedMapPieceHasGeographicFootprint || saveStatus === "saving" || atlasReadOnly} onClick={() => void saveSelectedMapPiecePlacement()} type="button">Save placement</button>
+          <button className="sanborn-button sanborn-button--primary" disabled={!selectedMapPieceHasGeographicFootprint || saveStatus === "saving" || atlasReadOnly || !selectedPageSupportsMapPlacement} onClick={() => void saveSelectedMapPiecePlacement()} type="button">Save placement</button>
           <button className="sanborn-button" disabled={!selectedMapPiece || saveStatus === "saving"} onClick={() => void reloadSelectedMapPiecePlacement()} type="button">Reload saved placement</button>
           <button className="sanborn-button" disabled={!selectedMapPieceGeoreference || selectedMapPieceGeoreference?.isLocked === true} onClick={resetSelectedMapPiecePlacement} type="button">Reset piece</button>
           <button className="sanborn-button" disabled={!selectedMapPiecePlaced} onClick={fitSelectedMapPiece} type="button">Fit selected</button>
@@ -4435,7 +4670,7 @@ export function HistoricalMapStudio({
     atlasWorkflowStep === "town_index"
       ? selectedTownIndexRegion?.regionLabel || selectedTownIndexRegion?.sheetReference || "No region selected"
       : atlasWorkflowStep === "numbered_sheets"
-        ? selectedAtlasPage?.displayLabel || (selectedAtlasPage?.sheetNumber ? `Sheet ${selectedAtlasPage.sheetNumber}` : "No sheet selected")
+        ? selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "No sheet selected"
         : atlasWorkflowStep === "piece_inventory" || atlasWorkflowStep === "gps_alignment"
           ? selectedMapPieceDisplayLabel
           : atlasWorkflowStep === "page_classification"

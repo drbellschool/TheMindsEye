@@ -114,6 +114,8 @@ Core architecture:
 - sheet-level georeferencing persists four authoritative corner coordinates, center coordinates, geographic spans, rotation, non-uniform scale, affine skew, pivot, projective warp metadata, flips, opacity, layer order, visibility, lock state, placement status, review status, and evidence classification;
 - saved Sanborn map pieces are the primary Map Placement work units, with the source sheet retained as archival evidence and whole-sheet georeferencing retained for backward compatibility and optional visual reference;
 - Map Placement renders saved visible placed pieces from all atlas pages, while saving remains scoped to the selected piece;
+- Sanborn atlas pages carry a canonical page type, printed reference, display title, classification notes, and primary Town Index flag; Source Record is the authoritative place to classify pages, and page type controls whether Town Index, Map Pieces, or Map Placement tools are active;
+- cover, street-index, legend, advertisement, other, and unknown pages are metadata/provenance pages until reclassified; existing pieces on those pages are treated as conflicts and are not automatically deleted;
 - Town Index is the edition mission map: durable normalized index regions link index-image areas to non-sequential sheets/pages, and a right-side inspector handles region editing without moving forms below the center workspace;
 - the shared reconstruction context is URL-backed with town, edition, atlas, page, sheet, piece, block, and workflow parameters so Map, Buildings, People, and Sources routes can preserve the same working context;
 - Modern Overlay renders the saved independent sheet-level geographic arrangement rather than a flattened screenshot or composite;

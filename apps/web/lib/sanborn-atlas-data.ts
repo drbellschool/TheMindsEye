@@ -41,8 +41,11 @@ type SanbornAtlasPageRow = {
   page_sequence: number;
   page_type: string | null;
   sheet_number: number | null;
+  printed_reference?: string | null;
   volume_label: string | null;
   display_label: string | null;
+  is_primary_town_index?: boolean | null;
+  classification_notes?: string | null;
   review_status: string | null;
   evidence_classification: string | null;
   updated_at: string | null;
@@ -103,8 +106,11 @@ function mapPage(row: SanbornAtlasPageRow, atlasByRowId: Map<string, SanbornAtla
     pageSequence: row.page_sequence,
     pageType: normalizeSanbornPageType(row.page_type),
     sheetNumber: row.sheet_number,
+    printedReference: row.printed_reference ?? null,
     volumeLabel: row.volume_label,
     displayLabel: row.display_label,
+    isPrimaryTownIndex: row.is_primary_town_index === true,
+    classificationNotes: row.classification_notes ?? null,
     reviewStatus: normalizeSanbornReviewStatus(row.review_status),
     evidenceClassification: normalizeSanbornReviewStatus(row.evidence_classification),
     updatedAt: row.updated_at,
@@ -201,11 +207,28 @@ export async function loadSanbornAtlasInventory(input: {
   let pieces: SanbornMapPieceRecord[] = [];
 
   if (atlases.length > 0) {
-    const pageResult = await supabase
+    const pageSelectWithClassification =
+      "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, review_status, evidence_classification, updated_at";
+    const pageSelectBase = "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at";
+    let pageResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
       .from("sanborn_atlas_pages")
-      .select("id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at")
+      .select(pageSelectWithClassification)
       .in("atlas_id", atlases.map((atlas) => atlas.rowId))
       .order("page_sequence", { ascending: true });
+
+    if (
+      pageResult.error &&
+      /printed_reference|is_primary_town_index|classification_notes/i.test(pageResult.error.message)
+    ) {
+      console.warn("[HistoricalMapStudio] Page classification columns are unavailable; falling back to legacy atlas page select.", {
+        message: pageResult.error.message,
+      });
+      pageResult = await supabase
+        .from("sanborn_atlas_pages")
+        .select(pageSelectBase)
+        .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+        .order("page_sequence", { ascending: true });
+    }
 
     if (pageResult.error) {
       return unavailableState(`Sanborn atlas pages could not be loaded: ${pageResult.error.message}`, assets);

@@ -8,7 +8,7 @@ import {
   validateMapPiecePlacementForPersistence,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
-import { normalizeOptionalSanbornText } from "@/lib/sanborn-atlas";
+import { getPageTypeToolBlockMessage, normalizeOptionalSanbornText, normalizeSanbornPageType, pageTypeSupportsMapPlacement } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 import type { createAdminClient } from "@/lib/supabase/admin.ts";
 
@@ -37,6 +37,7 @@ type PageRow = {
   id: string;
   page_id: string;
   atlas_id: string;
+  page_type: string | null;
 };
 
 type AtlasRow = {
@@ -107,7 +108,7 @@ async function resolvePieceScope(supabase: SupabaseAdminClient, pieceId: string,
 
   const pageResult = await supabase
     .from("sanborn_atlas_pages")
-    .select("id, page_id, atlas_id")
+    .select("id, page_id, atlas_id, page_type")
     .eq("id", pieceResult.data.atlas_page_id)
     .maybeSingle<PageRow>();
 
@@ -278,6 +279,11 @@ export async function PUT(request: NextRequest) {
 
   if (scope.error || !scope.piece || !scope.page) {
     return jsonError(400, scope.error?.message ?? "Map piece placement scope could not be resolved.");
+  }
+
+  const pageType = normalizeSanbornPageType(scope.page.page_type);
+  if (!pageTypeSupportsMapPlacement(pageType)) {
+    return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or Inset before saving placement.");
   }
 
   const mapYear = Number.isInteger(body.mapYear) && body.mapYear! > 0 ? body.mapYear! : townPackage.year;

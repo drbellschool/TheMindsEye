@@ -8,6 +8,7 @@ import type { SanbornMapPieceGeoreference } from "@/lib/sanborn-map-piece-georef
 import type { SanbornTownIndexRegionRecord } from "@/lib/sanborn-town-index";
 import {
   buildTownIndexSummary,
+  calculatePageClassificationSummary,
   calculateMapPieceProgress,
   calculateSheetProgress,
   calculateTownProgress,
@@ -118,6 +119,10 @@ export function SanbornAtlasNavigator({
       }),
     [activeMapYear, activePages, activePieces, activeTownPackage, assets, mapPieceGeoreferences, sourceOptions],
   );
+  const classificationSummary = useMemo(
+    () => calculatePageClassificationSummary({ pages: activePages, pieces: activePieces }),
+    [activePages, activePieces],
+  );
   const sourceLinkedCount = sheetProgress.filter((sheet) => sheet.sourceLinked).length;
   const startedSheets = sheetProgress.filter((sheet) => sheet.status !== "not_started").length;
   const placedPieces = pieceProgress.filter((piece) => piece.geographicPlacementSaved).length;
@@ -129,14 +134,21 @@ export function SanbornAtlasNavigator({
       warning: activeAtlas ? undefined : "No atlas edition selected",
     },
     page_classification: {
-      summary: `${sourceLinkedCount}/${Math.max(1, sheetProgress.length)} linked`,
-      status: sourceLinkedCount === sheetProgress.length && sheetProgress.length > 0 ? "reviewed" : sourceLinkedCount > 0 ? "started" : "missing",
-      warning: sourceLinkedCount < sheetProgress.length ? "Missing source records" : undefined,
+      summary: `${classificationSummary.classifiedPages}/${Math.max(1, classificationSummary.totalPages)} classified`,
+      status: classificationSummary.conflictPages > 0 ? "conflict" : classificationSummary.status === "in_progress" ? "started" : classificationSummary.status,
+      warning:
+        classificationSummary.conflictPages > 0
+          ? "Classification conflicts"
+          : classificationSummary.unknownPages > 0
+            ? "Unknown page types"
+            : sourceLinkedCount < sheetProgress.length
+              ? "Missing source records"
+              : undefined,
     },
     town_index: {
       summary: `${townIndexSummary.completion.linkedRegions}/${Math.max(1, townIndexSummary.completion.totalRegions)} linked`,
-      status: townIndexSummary.completion.conflictRegions > 0 ? "conflict" : townIndexSummary.completion.reviewedRegions === townIndexSummary.completion.totalRegions && townIndexSummary.completion.totalRegions > 0 ? "reviewed" : townIndexSummary.completion.linkedRegions > 0 ? "started" : "not_started",
-      warning: townIndexSummary.completion.conflictRegions > 0 ? "Index conflicts" : townIndexSummary.completion.missingRegions > 0 ? "Missing regions" : undefined,
+      status: !townIndexSummary.indexPage ? "missing" : townIndexSummary.completion.conflictRegions > 0 ? "conflict" : townIndexSummary.completion.reviewedRegions === townIndexSummary.completion.totalRegions && townIndexSummary.completion.totalRegions > 0 ? "reviewed" : townIndexSummary.completion.linkedRegions > 0 ? "started" : "not_started",
+      warning: !townIndexSummary.indexPage ? "No primary Graphic Index" : townIndexSummary.completion.conflictRegions > 0 ? "Index conflicts" : townIndexSummary.completion.missingRegions > 0 ? "Missing regions" : undefined,
     },
     numbered_sheets: {
       summary: `${startedSheets}/${Math.max(1, sheetProgress.length)} started`,
