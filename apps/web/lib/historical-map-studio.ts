@@ -48,10 +48,35 @@ export type StudioTownPackage = {
 export type StudioSourceOption = {
   sourceRecordId: string;
   sourceId: string;
+  internalSourceId?: string | null;
   title: string;
   sourceUrl: string | null;
   archiveName: string | null;
   rightsNote: string | null;
+  repositoryName?: string | null;
+  collectionName?: string | null;
+  repositoryExternalId?: string | null;
+  persistentUrl?: string | null;
+  itemPageUrl?: string | null;
+  iiifManifestUrl?: string | null;
+  imageServiceUrl?: string | null;
+  itemResourceId?: string | null;
+  townName?: string | null;
+  countyName?: string | null;
+  stateName?: string | null;
+  editionYear?: number | null;
+  sheetNumber?: string | null;
+  mapPublisher?: string | null;
+  publicationDate?: string | null;
+  downloadedAt?: string | null;
+  importedAt?: string | null;
+  importedBy?: string | null;
+  rightsStatement?: string | null;
+  rightsUrl?: string | null;
+  accessNote?: string | null;
+  accessDate?: string | null;
+  citationNote?: string | null;
+  sourceStatus?: string | null;
 };
 
 export type StudioSheetAsset = {

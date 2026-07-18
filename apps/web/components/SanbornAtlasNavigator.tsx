@@ -9,7 +9,19 @@ import {
   type SanbornAtlasRecord,
   type SanbornPageType,
 } from "@/lib/sanborn-atlas";
-import type { StudioSheetAsset, StudioSourceOption } from "@/lib/historical-map-studio";
+import type { StudioSheetAsset, StudioSourceOption, StudioTownPackage } from "@/lib/historical-map-studio";
+import type { SanbornMapPieceGeoreference } from "@/lib/sanborn-map-piece-georeference";
+import {
+  buildReconstructionWorkQueue,
+  buildTownIndexSummary,
+  calculateMapPieceProgress,
+  calculateSheetProgress,
+  calculateTownProgress,
+  type ReconstructionWorkTask,
+  type SheetReconstructionProgress,
+  type TownIndexSummary,
+  type TownReconstructionProgress,
+} from "@/lib/town-reconstruction";
 
 export type SanbornAtlasWorkflowStep =
   | "source"
@@ -17,15 +29,21 @@ export type SanbornAtlasWorkflowStep =
   | "town_index"
   | "numbered_sheets"
   | "piece_inventory"
-  | "gps_alignment";
+  | "gps_alignment"
+  | "building_reconstruction"
+  | "people_activity"
+  | "evidence_review";
 
-export const sanbornAtlasWorkflowSteps: Array<{ id: SanbornAtlasWorkflowStep; label: string }> = [
-  { id: "source", label: "Source and edition" },
-  { id: "page_classification", label: "Page classification" },
-  { id: "town_index", label: "Town index / key map" },
-  { id: "numbered_sheets", label: "Numbered sheets" },
-  { id: "piece_inventory", label: "Piece inventory" },
-  { id: "gps_alignment", label: "Map placement" },
+export const sanbornAtlasWorkflowSteps: Array<{ id: SanbornAtlasWorkflowStep; label: string; operational: boolean }> = [
+  { id: "source", label: "Town & Edition", operational: true },
+  { id: "page_classification", label: "Source Record", operational: true },
+  { id: "town_index", label: "Town Index", operational: true },
+  { id: "numbered_sheets", label: "Sheet Inventory", operational: true },
+  { id: "piece_inventory", label: "Map Pieces / Blocks", operational: true },
+  { id: "gps_alignment", label: "Map Placement", operational: true },
+  { id: "building_reconstruction", label: "Building Reconstruction", operational: false },
+  { id: "people_activity", label: "People & Activity", operational: false },
+  { id: "evidence_review", label: "Evidence Review", operational: false },
 ];
 
 type AtlasDraft = {
@@ -42,13 +60,18 @@ type SanbornAtlasNavigatorProps = {
   inventory: SanbornAtlasInventoryState;
   assets: StudioSheetAsset[];
   sourceOptions: StudioSourceOption[];
+  activeTownPackage: StudioTownPackage | null;
+  activeMapYear: number | null;
+  mapPieceGeoreferences: SanbornMapPieceGeoreference[];
   fallbackYear: number | null;
   selectedAtlasId: string;
   selectedPageId: string;
+  selectedPieceId: string;
   workflowStep: SanbornAtlasWorkflowStep;
   readOnly: boolean;
   onSelectAtlas: (atlasId: string) => void;
   onSelectPage: (pageId: string) => void;
+  onSelectPiece: (pieceId: string) => void;
   onWorkflowStepChange: (step: SanbornAtlasWorkflowStep) => void;
   onSaveAtlas: (draft: AtlasDraft) => void;
   onAssignAsset: (assetId: string) => void;
@@ -76,17 +99,188 @@ function assetLabel(asset: StudioSheetAsset): string {
   return `Sheet ${asset.sheetNumber ?? "?"} - ${asset.originalFilename}`;
 }
 
+function statusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}
+
+function ProgressPill({ label, value }: { label: string; value: string | number }) {
+  return (
+    <span className="reconstruction-mini-pill">
+      <strong>{value}</strong>
+      {label}
+    </span>
+  );
+}
+
+function ReconstructionRailSummary({ progress }: { progress: TownReconstructionProgress }) {
+  return (
+    <section className="sanborn-atlas-navigator__section reconstruction-rail-summary" aria-label="Town package dashboard">
+      <h3>Town Package dashboard</h3>
+      <div className="reconstruction-rail-summary__progress">
+        <div className="reconstruction-progress" role="progressbar" aria-label="Town reconstruction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.completionPercent}>
+          <span style={{ width: `${progress.completionPercent}%` }} />
+        </div>
+        <strong>{progress.completionPercent}%</strong>
+      </div>
+      <div className="reconstruction-rail-summary__metrics">
+        <ProgressPill label="sheets" value={progress.sheetCount} />
+        <ProgressPill label="sheets aligned" value={progress.sheetsAligned} />
+        <ProgressPill label="pieces" value={progress.mapPiecesIdentified} />
+        <ProgressPill label="placed" value={progress.mapPiecesPlaced} />
+        <ProgressPill label="sources" value={progress.sourceRecordCount} />
+        <ProgressPill label="unresolved" value={progress.unresolvedWorkCount} />
+      </div>
+    </section>
+  );
+}
+
+function TownIndexPanel({
+  summary,
+  onSelectPage,
+}: {
+  summary: TownIndexSummary;
+  onSelectPage: (pageId: string) => void;
+}) {
+  return (
+    <section className="sanborn-atlas-navigator__section reconstruction-index-panel" aria-label="Town Index navigator">
+      <h3>Town Index</h3>
+      {summary.indexAsset?.signedUrl ? (
+        <img alt={summary.indexPage?.displayLabel || "Town Index page"} className="reconstruction-index-panel__thumbnail" src={summary.indexAsset.signedUrl} />
+      ) : (
+        <p className="sanborn-atlas-empty">No designated Town Index image is available yet.</p>
+      )}
+      <div className="reconstruction-index-panel__regions">
+        {summary.regions.length > 0 ? (
+          summary.regions.map((region) => (
+            <button
+              className={`reconstruction-region-button is-${region.status}`}
+              disabled={!region.atlasPageId}
+              key={region.id}
+              onClick={() => region.atlasPageId && onSelectPage(region.atlasPageId)}
+              type="button"
+            >
+              <strong>{region.label}</strong>
+              <span>{statusLabel(region.status)}</span>
+            </button>
+          ))
+        ) : (
+          <p className="sanborn-atlas-empty">Index regions are not linked to numbered sheets yet.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SheetInventoryPanel({
+  sheets,
+  onSelectPage,
+}: {
+  sheets: SheetReconstructionProgress[];
+  onSelectPage: (pageId: string) => void;
+}) {
+  return (
+    <section className="sanborn-atlas-navigator__section reconstruction-sheet-panel" aria-label="Sheet Inventory">
+      <h3>Sheet Inventory</h3>
+      <div className="reconstruction-sheet-list">
+        {sheets.map((sheet) => (
+          <button
+            className={`reconstruction-sheet-list__item is-${sheet.status}`}
+            disabled={!sheet.pageId}
+            key={sheet.sheetAssetId}
+            onClick={() => sheet.pageId && onSelectPage(sheet.pageId)}
+            type="button"
+          >
+            <strong>{sheet.displayLabel}</strong>
+            <span>{sheet.mapPiecesIdentified} pieces, {sheet.mapPiecesPlaced} placed</span>
+            <span>{sheet.sourceLinked ? "Source linked" : "Missing source"} | {statusLabel(sheet.status)}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PieceWorkloadPanel({
+  pieces,
+  selectedPieceId,
+  onSelectPiece,
+}: {
+  pieces: ReturnType<typeof calculateMapPieceProgress>[];
+  selectedPieceId: string;
+  onSelectPiece: (pieceId: string) => void;
+}) {
+  const placed = pieces.filter((piece) => piece.geographicPlacementSaved).length;
+  const hidden = pieces.filter((piece) => !piece.visibleAndOperational && piece.geographicPlacementSaved).length;
+  const reviewed = pieces.filter((piece) => piece.reviewed).length;
+
+  return (
+    <section className="sanborn-atlas-navigator__section reconstruction-piece-panel" aria-label="Map-piece and block workload">
+      <h3>Map Pieces / Blocks</h3>
+      <div className="reconstruction-rail-summary__metrics">
+        <ProgressPill label="total" value={pieces.length} />
+        <ProgressPill label="placed" value={placed} />
+        <ProgressPill label="unplaced" value={Math.max(0, pieces.length - placed)} />
+        <ProgressPill label="hidden" value={hidden} />
+        <ProgressPill label="reviewed" value={reviewed} />
+      </div>
+      <div className="reconstruction-piece-list">
+        {pieces.length > 0 ? (
+          pieces.map((piece) => (
+            <button
+              className={`reconstruction-piece-list__item${piece.pieceId === selectedPieceId ? " is-selected" : ""} is-${piece.status}`}
+              key={piece.pieceId}
+              onClick={() => onSelectPiece(piece.pieceId)}
+              type="button"
+            >
+              <strong>{piece.label}</strong>
+              <span>{piece.pieceType.replaceAll("_", " ")}</span>
+              <span>{statusLabel(piece.status)}</span>
+            </button>
+          ))
+        ) : (
+          <p className="sanborn-atlas-empty">No map pieces or blocks are identified on this edition yet.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function WorkQueuePanel({ tasks }: { tasks: ReconstructionWorkTask[] }) {
+  return (
+    <section className="sanborn-atlas-navigator__section reconstruction-work-queue" aria-label="Available Work">
+      <h3>Available Work</h3>
+      {tasks.length === 0 ? (
+        <p className="sanborn-atlas-empty">No calculated reconstruction tasks are currently open.</p>
+      ) : (
+        <div className="reconstruction-task-list">
+          {tasks.slice(0, 6).map((task) => (
+            <article className={`reconstruction-task-list__item is-${task.priority}`} key={task.id}>
+              <strong>{task.label}</strong>
+              <span>{task.detail}</span>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function SanbornAtlasNavigator({
   inventory,
   assets,
   sourceOptions,
+  activeTownPackage,
+  activeMapYear,
+  mapPieceGeoreferences,
   fallbackYear,
   selectedAtlasId,
   selectedPageId,
+  selectedPieceId,
   workflowStep,
   readOnly,
   onSelectAtlas,
   onSelectPage,
+  onSelectPiece,
   onWorkflowStepChange,
   onSaveAtlas,
   onAssignAsset,
@@ -102,11 +296,75 @@ export function SanbornAtlasNavigator({
     () => inventory.pages.filter((page) => page.atlasId === selectedAtlasId).sort((left, right) => left.pageSequence - right.pageSequence),
     [inventory.pages, selectedAtlasId],
   );
+  const activePageIds = useMemo(() => new Set(activePages.map((page) => page.pageId)), [activePages]);
+  const activePieces = useMemo(
+    () => inventory.pieces.filter((piece) => activePageIds.has(piece.atlasPageId)).sort((left, right) => left.pieceSequence - right.pieceSequence),
+    [activePageIds, inventory.pieces],
+  );
   const unassignedAssets = assets.filter((asset) => inventory.unassignedAssetIds.includes(asset.assetId));
+  const pageByAssetId = useMemo(() => new Map(activePages.map((page) => [page.sanbornSheetAssetId, page])), [activePages]);
+  const placementByPieceId = useMemo(() => new Map(mapPieceGeoreferences.map((placement) => [placement.pieceId, placement])), [mapPieceGeoreferences]);
+  const sheetProgress = useMemo(
+    () =>
+      assets.map((asset) =>
+        calculateSheetProgress({
+          asset,
+          page: pageByAssetId.get(asset.assetId) ?? null,
+          pieces: activePieces.filter((piece) => piece.atlasPageId === pageByAssetId.get(asset.assetId)?.pageId),
+          placements: mapPieceGeoreferences,
+        }),
+      ),
+    [activePieces, assets, mapPieceGeoreferences, pageByAssetId],
+  );
+  const pieceProgress = useMemo(
+    () => activePieces.map((piece) => calculateMapPieceProgress({ piece, placement: placementByPieceId.get(piece.pieceId) })),
+    [activePieces, placementByPieceId],
+  );
+  const townIndexSummary = useMemo<TownIndexSummary>(
+    () =>
+      buildTownIndexSummary({
+        pages: activePages,
+        assets,
+        pieces: activePieces,
+        placements: mapPieceGeoreferences,
+      }),
+    [activePages, activePieces, assets, mapPieceGeoreferences],
+  );
+  const townProgress = useMemo<TownReconstructionProgress>(
+    () =>
+      calculateTownProgress({
+        town: activeTownPackage,
+        activeMapYear,
+        sourceOptions,
+        sheets: assets,
+        pages: activePages,
+        pieces: activePieces,
+        placements: mapPieceGeoreferences,
+      }),
+    [activeMapYear, activePages, activePieces, activeTownPackage, assets, mapPieceGeoreferences, sourceOptions],
+  );
+  const workQueue = useMemo<ReconstructionWorkTask[]>(
+    () =>
+      buildReconstructionWorkQueue({
+        townPackageId: activeTownPackage?.id,
+        mapYear: activeMapYear,
+        atlasId: activeAtlas?.atlasId,
+        sheets: sheetProgress,
+        pieces: pieceProgress,
+        index: townIndexSummary,
+        sourceRecordCount: sourceOptions.length,
+      }),
+    [activeAtlas?.atlasId, activeMapYear, activeTownPackage?.id, pieceProgress, sheetProgress, sourceOptions.length, townIndexSummary],
+  );
   const [draft, setDraft] = useState<AtlasDraft>(createDraft(activeAtlas, fallbackYear));
-  const showSaveAtlas = workflowStep === "source";
+  const showSaveAtlas = workflowStep === "source" || workflowStep === "page_classification";
   const showSavePagesAndContinue = workflowStep === "piece_inventory" && pieceInventoryBlocked;
-  const showSavePageOrder = activePages.length > 0 && workflowStep !== "source" && !showSavePagesAndContinue;
+  const showSavePageOrder = activePages.length > 0 && !showSaveAtlas && !showSavePagesAndContinue;
+  const showAtlasEditor = workflowStep === "source";
+  const showSourceRecordStage = workflowStep === "page_classification";
+  const showTownIndexStage = workflowStep === "town_index";
+  const showSheetInventoryStage = workflowStep === "numbered_sheets";
+  const showPieceStage = workflowStep === "piece_inventory";
 
   useEffect(() => {
     setDraft(createDraft(activeAtlas, fallbackYear));
@@ -131,6 +389,37 @@ export function SanbornAtlasNavigator({
       <div className="sanborn-atlas-navigator__scroll">
         {inventory.warningMessage ? <p className="sanborn-atlas-warning">{inventory.warningMessage}</p> : null}
 
+        <ReconstructionRailSummary progress={townProgress} />
+
+        {showSourceRecordStage ? (
+          <section className="sanborn-atlas-navigator__section reconstruction-source-panel" aria-label="Source Record">
+            <h3>Source Record</h3>
+            <p className="sanborn-atlas-empty">
+              Source details are optional during upload, but every sheet should be linked before review. {sheetProgress.filter((sheet) => !sheet.sourceLinked).length} sheet(s) are missing durable provenance.
+            </p>
+            <label>
+              Atlas source
+              <select disabled={readOnly} value={draft.sourceRecordId} onChange={(event) => setDraft({ ...draft, sourceRecordId: event.target.value })}>
+                <option value="">No linked source record</option>
+                {sourceOptions.map((source) => (
+                  <option key={source.sourceRecordId} value={source.sourceRecordId}>
+                    {(source.internalSourceId ?? source.sourceId)} - {source.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : null}
+
+        {showTownIndexStage ? <TownIndexPanel summary={townIndexSummary} onSelectPage={onSelectPage} /> : null}
+
+        {showSheetInventoryStage ? <SheetInventoryPanel sheets={sheetProgress} onSelectPage={onSelectPage} /> : null}
+
+        {showPieceStage ? <PieceWorkloadPanel pieces={pieceProgress} selectedPieceId={selectedPieceId} onSelectPiece={onSelectPiece} /> : null}
+
+        <WorkQueuePanel tasks={workQueue} />
+
+        {showAtlasEditor ? (
         <section className="sanborn-atlas-navigator__section">
           <h3>Atlas / edition</h3>
           <label>
@@ -178,7 +467,9 @@ export function SanbornAtlasNavigator({
             </label>
           </div>
         </section>
+        ) : null}
 
+        {showAtlasEditor || showSheetInventoryStage ? (
         <section className="sanborn-atlas-navigator__section">
           <h3>Unassigned uploads</h3>
           {unassignedAssets.length === 0 ? (
@@ -196,7 +487,9 @@ export function SanbornAtlasNavigator({
             </div>
           )}
         </section>
+        ) : null}
 
+        {showSheetInventoryStage || showPieceStage || showTownIndexStage ? (
         <section className="sanborn-atlas-navigator__section">
           <h3>Atlas pages</h3>
           {activePages.length === 0 ? (
@@ -256,6 +549,7 @@ export function SanbornAtlasNavigator({
             </div>
           )}
         </section>
+        ) : null}
       </div>
 
       <footer className="sanborn-atlas-navigator__footer" aria-label="Atlas workflow actions">

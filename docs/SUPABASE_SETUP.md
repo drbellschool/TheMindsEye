@@ -41,6 +41,11 @@ Run these SQL files in order from the Supabase SQL Editor:
 6. `supabase/migrations/0006_historical_map_sheet_georeferences.sql`
 7. `supabase/migrations/0007_map_first_sheet_georeferencing.sql`
 8. `supabase/migrations/0008_fix_map_studio_center_and_draft_status.sql`
+9. `supabase/migrations/0009_town_package_location_metadata.sql`
+10. `supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql`
+11. `supabase/migrations/0011_sanborn_map_piece_geographic_placement.sql`
+12. `supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql`
+13. `supabase/migrations/0013_town_reconstruction_source_provenance.sql`
 
 The migrations create:
 
@@ -54,6 +59,10 @@ The migrations create:
 - Pivot, projective warp, transform-version, and placement-status fields for map-first four-corner sheet placement.
 - Town-package map center metadata (`center_latitude`, `center_longitude`, `default_zoom`) so the studio does not silently initialize at `0,0`.
 - Draft placement status and legacy repair logic for accidental all-zero sheet georeferences.
+- Sanborn atlas, atlas-page, and map-piece inventory tables plus service-role save RPCs.
+- Piece-specific geographic placement records for saved map pieces, including four-corner quadrilateral validation and service-role save RPCs.
+- The scoped RPC replacement that fixes map-piece placement save scope on databases that already applied `0011`.
+- Durable source identity and provenance fields on `source_records`, including `SRC-XXXXXXXXXXXX` display IDs, repository metadata, Library of Congress fields, persistent URLs, IIIF URLs, rights notes, source status, and source links from sheets, pages, map pieces, buildings, people, and businesses.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -102,8 +111,11 @@ The studio supports:
 - Konva-based stitching workspace with drag, scale, rotate, opacity, visibility, lock state, and layer order.
 - Manual save plus debounced autosave for layout transforms and viewport.
 - Metadata edits for source URL, archive, rights, notes, evidence classification, and review status.
+- Shared Town Reconstruction context across Map, Buildings, People, and Sources routes.
+- Source Record, Town Index, Sheet Inventory, Map Pieces / Blocks, and Map Placement workflow steps.
 - Image replacement and deletion through server routes that keep Supabase service-role credentials server-only.
-- GPS georeferencing mode with historical image points matched to modern latitude/longitude markers.
+- Piece-first Map Placement for saved Sanborn map pieces, with all visible placed pieces shown on a shared town canvas.
+- Optional advanced whole-sheet reference alignment for backward-compatible sheet-level georeferencing.
 - Authoritative sheet-level geographic placement in Georeferencing mode.
 - Modern Leaflet overlay mode using saved independent Sanborn sheet transforms.
 - Town-package map center recovery; Texarkana 1885 should open near `33.425, -94.047`.
@@ -124,7 +136,7 @@ Keep the required OpenStreetMap attribution visible. If a future tile provider i
 
 Location search runs through the server route at `/api/community/historical-map-studio/geocode`. It supports direct `latitude,longitude` input without an external request. Town, address, and ZIP searches use OpenStreetMap Nominatim server-side with an identifying User-Agent and cached successful responses; do not call Nominatim on every keystroke or expose geocoding logic from the browser. Set `GEOCODING_USER_AGENT` in Vercel if you want a project-specific contact string.
 
-Run `supabase/migrations/0009_town_package_location_metadata.sql` after `0008` to add:
+Migration `0009_town_package_location_metadata.sql` adds:
 
 - `location_query`
 - `location_display_name`
@@ -134,6 +146,8 @@ Run `supabase/migrations/0009_town_package_location_metadata.sql` after `0008` t
 - `location_west`
 
 The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for the active map center.
+
+Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Until it is applied, existing reads fall back to legacy source fields and source-record creation returns a visible database error rather than fabricating provenance.
 
 ## Georeferencing Accuracy
 
@@ -176,6 +190,11 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 13. Save, reload, and confirm every sheet-level geographic transform restores.
 14. Add paired historical/GPS control points, calculate alignment, and save.
 15. Switch to Modern Overlay mode, adjust opacity, fit the historical assembly, reload, and confirm the saved independent layers restore.
+16. Open the shared Town Reconstruction header and confirm the active town, edition, sheet, and block/piece stay visible.
+17. Open Source Info and confirm the durable source ID, repository, citation, and persistent record link are shown when a source is linked.
+18. Create a Library of Congress source record from the Source Info drawer after applying `0013`; confirm the row receives a `SRC-XXXXXXXXXXXX` internal source ID.
+19. Use the Town Index, Sheet Inventory, and Map Pieces / Blocks steps to navigate without exposing raw database IDs in visible labels.
+20. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
 
 ## Local Validation
 

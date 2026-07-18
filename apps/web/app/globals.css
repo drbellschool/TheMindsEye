@@ -664,6 +664,215 @@ textarea {
   grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr) minmax(240px, 0.9fr);
 }
 
+.reconstruction-route-shell {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.reconstruction-context {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(88, 68, 44, 0.2);
+  border-radius: 10px;
+  background: rgba(238, 226, 199, 0.78);
+  color: var(--ink);
+  padding: 10px;
+}
+
+.reconstruction-context--compact {
+  border-color: rgba(226, 190, 126, 0.18);
+  background: rgba(15, 13, 10, 0.54);
+  color: #f6e7cb;
+  padding: 7px;
+}
+
+.reconstruction-context__selectors,
+.reconstruction-context__tabs,
+.reconstruction-context__progress,
+.reconstruction-context__recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.reconstruction-context__identity {
+  display: grid;
+  gap: 1px;
+  min-width: 150px;
+}
+
+.reconstruction-context__identity span,
+.reconstruction-context label span,
+.reconstruction-context__progress,
+.reconstruction-context__recent span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(52, 41, 27, 0.68);
+}
+
+.reconstruction-context--compact .reconstruction-context__identity span,
+.reconstruction-context--compact label span,
+.reconstruction-context--compact .reconstruction-context__progress,
+.reconstruction-context--compact .reconstruction-context__recent span {
+  color: rgba(246, 231, 203, 0.68);
+}
+
+.reconstruction-context__identity strong {
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.reconstruction-context label {
+  display: grid;
+  gap: 3px;
+  min-width: clamp(130px, 16vw, 230px);
+}
+
+.reconstruction-context input,
+.reconstruction-context select {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(88, 68, 44, 0.28);
+  border-radius: 7px;
+  background: rgba(255, 250, 238, 0.84);
+  color: var(--ink);
+  font-size: 0.75rem;
+  padding: 0 0.48rem;
+}
+
+.reconstruction-context--compact input,
+.reconstruction-context--compact select {
+  border-color: rgba(226, 190, 126, 0.26);
+  background: rgba(10, 9, 7, 0.92);
+  color: #f6e7cb;
+}
+
+.reconstruction-progress {
+  position: relative;
+  width: 112px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(54, 43, 32, 0.22);
+}
+
+.reconstruction-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6d9f67, #d1a045);
+}
+
+.reconstruction-context__tab,
+.reconstruction-context__source summary,
+.reconstruction-context__recent button,
+.reconstruction-source-drawer__actions button,
+.reconstruction-source-drawer__actions a,
+.reconstruction-source-drawer__create button {
+  border: 1px solid rgba(88, 68, 44, 0.28);
+  border-radius: 7px;
+  background: rgba(255, 250, 238, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.74rem;
+  line-height: 1;
+  padding: 0.48rem 0.62rem;
+}
+
+.reconstruction-context--compact .reconstruction-context__tab,
+.reconstruction-context--compact .reconstruction-context__source summary,
+.reconstruction-context--compact .reconstruction-context__recent button,
+.reconstruction-context--compact .reconstruction-source-drawer__actions button,
+.reconstruction-context--compact .reconstruction-source-drawer__actions a,
+.reconstruction-context--compact .reconstruction-source-drawer__create button {
+  border-color: rgba(226, 190, 126, 0.24);
+  background: rgba(10, 9, 7, 0.74);
+  color: #f6e7cb;
+}
+
+.reconstruction-context__tab.is-active {
+  border-color: rgba(109, 159, 103, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(109, 159, 103, 0.24);
+}
+
+.reconstruction-context__source {
+  position: relative;
+}
+
+.reconstruction-context__source summary {
+  list-style: none;
+}
+
+.reconstruction-source-drawer {
+  position: absolute;
+  right: 0;
+  z-index: 820;
+  display: grid;
+  gap: 10px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  border: 1px solid rgba(226, 190, 126, 0.3);
+  border-radius: 10px;
+  background: #17130f;
+  color: #f6e7cb;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  padding: 12px;
+}
+
+.reconstruction-source-drawer dl,
+.reconstruction-source-drawer__create {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+}
+
+.reconstruction-source-drawer dt,
+.reconstruction-source-drawer__create span {
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reconstruction-source-drawer dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.reconstruction-source-drawer__citation,
+.reconstruction-source-drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+}
+
+.reconstruction-source-drawer__citation span {
+  line-height: 1.35;
+}
+
+.reconstruction-source-drawer__create {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid rgba(226, 190, 126, 0.16);
+  padding-top: 10px;
+}
+
+.reconstruction-source-drawer__create strong,
+.reconstruction-source-drawer__create p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .map-workspace {
   min-height: 380px;
   border-radius: var(--radius-lg);
@@ -3125,6 +3334,111 @@ body:has(.minimal-sanborn-gps) {
   background: rgba(30, 57, 51, 0.92);
 }
 
+.sanborn-atlas-navigator__step:not(.is-active) {
+  cursor: pointer;
+}
+
+.reconstruction-rail-summary__progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #f6e7cb;
+}
+
+.reconstruction-rail-summary__progress .reconstruction-progress {
+  width: 100%;
+}
+
+.reconstruction-rail-summary__metrics,
+.reconstruction-index-panel__regions,
+.reconstruction-sheet-list,
+.reconstruction-piece-list,
+.reconstruction-task-list {
+  display: grid;
+  gap: 6px;
+}
+
+.reconstruction-rail-summary__metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reconstruction-mini-pill {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.44);
+  color: rgba(246, 231, 203, 0.7);
+  font-size: 0.66rem;
+  line-height: 1.15;
+  padding: 6px;
+}
+
+.reconstruction-mini-pill strong {
+  color: #f6e7cb;
+  font-size: 0.88rem;
+}
+
+.reconstruction-index-panel__thumbnail {
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  border-radius: 7px;
+  background: #ece6d8;
+}
+
+.reconstruction-region-button,
+.reconstruction-sheet-list__item,
+.reconstruction-piece-list__item,
+.reconstruction-task-list__item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(25, 25, 23, 0.82);
+  color: #f6e7cb;
+  font-size: 0.72rem;
+  text-align: left;
+  padding: 7px;
+}
+
+.reconstruction-region-button span,
+.reconstruction-sheet-list__item span,
+.reconstruction-piece-list__item span,
+.reconstruction-task-list__item span {
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+}
+
+.reconstruction-region-button.is-placed,
+.reconstruction-region-button.is-reviewed,
+.reconstruction-sheet-list__item.is-placed,
+.reconstruction-sheet-list__item.is-reviewed,
+.reconstruction-piece-list__item.is-placed,
+.reconstruction-piece-list__item.is-reviewed {
+  border-color: rgba(109, 159, 103, 0.48);
+}
+
+.reconstruction-region-button.is-conflict,
+.reconstruction-region-button.is-missing,
+.reconstruction-sheet-list__item.is-conflict,
+.reconstruction-sheet-list__item.is-missing,
+.reconstruction-piece-list__item.is-conflict,
+.reconstruction-piece-list__item.is-missing,
+.reconstruction-task-list__item.is-high {
+  border-color: rgba(232, 117, 91, 0.46);
+}
+
+.reconstruction-piece-list__item.is-selected {
+  border-color: rgba(109, 159, 103, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(109, 159, 103, 0.24);
+}
+
 .sanborn-atlas-warning,
 .sanborn-atlas-empty {
   border: 1px solid rgba(226, 190, 126, 0.24);
@@ -3419,6 +3733,20 @@ body:has(.minimal-sanborn-gps) {
 }
 
 @media (max-width: 980px) {
+  .reconstruction-context label,
+  .reconstruction-context__identity {
+    flex: 1 1 180px;
+  }
+
+  .reconstruction-source-drawer {
+    left: 0;
+    right: auto;
+  }
+
+  .reconstruction-source-drawer__create {
+    grid-template-columns: 1fr;
+  }
+
   .sanborn-atlas-workflow,
   .sanborn-page-workbench {
     grid-template-columns: 1fr;

@@ -40,6 +40,7 @@ Purpose: preserve the evidence base and make every derived record traceable.
 Core responsibilities:
 
 - source records;
+- durable internal source IDs such as `SRC-XXXXXXXXXXXX`;
 - archive and rights metadata;
 - URLs and stable identifiers;
 - page, issue, sheet, date, and excerpt references;
@@ -53,6 +54,8 @@ Core responsibilities:
 - uncertainty and conflict preservation.
 
 Raw source records must remain separate from normalized and derived records.
+
+`source_records` is the canonical durable source table. Children such as Sanborn sheets, atlas pages, map pieces, buildings, people, businesses, claims, and review events should reference the source row rather than duplicate citation text. Library of Congress is represented as one supported repository with repository name, collection, external record ID, persistent URL, optional IIIF manifest URL, rights, access notes, and citation metadata; it is not a hard-coded dependency.
 
 ## Layer 2 — Community Verification Engine
 
@@ -88,6 +91,14 @@ This layer is the first real product and must stabilize before teacher, student,
 
 Historical Map Studio is the write-enabled Sanborn workspace inside the Community Verification layer. In the current app it does not use an owner-login screen or broad user authentication; write routes keep Supabase service-role credentials server-only.
 
+Historical Map Studio participates in the shared Town Reconstruction workflow:
+
+```text
+Town Package -> Edition -> Sheet -> Map Piece / Block
+```
+
+The visible sequence is `Town & Edition`, `Source Record`, `Town Index`, `Sheet Inventory`, `Map Pieces / Blocks`, `Map Placement`, `Building Reconstruction`, `People & Activity`, and `Evidence Review`. The first six steps are operational in Historical Map Studio. The later engine steps preserve the same context on the existing Building Auditor, People Auditor, and Source Provenance Inspector routes.
+
 Core architecture:
 
 - original Sanborn images live in private Supabase Storage, not Git or database blobs;
@@ -101,6 +112,9 @@ Core architecture:
 - Georeference Sheets mode is the default and authoritative stitching workspace;
 - each Sanborn sheet remains an independent geographic layer over the modern basemap;
 - sheet-level georeferencing persists four authoritative corner coordinates, center coordinates, geographic spans, rotation, non-uniform scale, affine skew, pivot, projective warp metadata, flips, opacity, layer order, visibility, lock state, placement status, review status, and evidence classification;
+- saved Sanborn map pieces are the primary Map Placement work units, with the source sheet retained as archival evidence and whole-sheet georeferencing retained for backward compatibility and optional visual reference;
+- Map Placement renders saved visible placed pieces from all atlas pages, while saving remains scoped to the selected piece;
+- the shared reconstruction context is URL-backed with town, edition, atlas, page, sheet, piece, block, and workflow parameters so Map, Buildings, People, and Sources routes can preserve the same working context;
 - Modern Overlay renders the saved independent sheet-level geographic arrangement rather than a flattened screenshot or composite;
 - current browser rendering uses a custom Leaflet projective overlay that maps the image rectangle into the stored four-corner geographic quadrilateral and falls back to a visible rectangular preview if the projective transform is invalid;
 - GeoTIFF export, MBTiles, and GDAL processing remain deferred;

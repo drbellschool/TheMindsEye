@@ -19,6 +19,7 @@ import {
   sanbornAtlasWorkflowSteps,
   type SanbornAtlasWorkflowStep,
 } from "@/components/SanbornAtlasNavigator";
+import { ReconstructionContextBar } from "@/components/ReconstructionContextBar";
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
@@ -125,6 +126,7 @@ import {
   type HistoricalMapGeoreference,
 } from "@/lib/historical-map-georeference";
 import { formatBytes } from "@/lib/sanborn-intake";
+import { buildReconstructionModelFromStudioState, buildReconstructionUrl } from "@/lib/town-reconstruction";
 
 type UploadStatus = {
   filename: string;
@@ -892,6 +894,21 @@ export function HistoricalMapStudio({
   const mapPieceLayerSourceAssetIds = useMemo(() => getMapPieceLayerSourceAssetIds(allOperationalMapPieceLayers), [allOperationalMapPieceLayers]);
   const allMapPieceBounds = useMemo(() => getMapPieceLayerBounds(allOperationalMapPieceLayers), [allOperationalMapPieceLayers]);
   const savedVisibleMapPieceLayerCount = allOperationalMapPieceLayers.filter((layer) => layer.isPersisted).length;
+  const reconstructionModel = useMemo(
+    () =>
+      buildReconstructionModelFromStudioState({
+        state: {
+          ...initialData,
+          sheets,
+          atlasInventory,
+          mapPieceGeoreferences,
+        },
+        selectedAtlasId,
+        selectedPageId: selectedAtlasPageId,
+        selectedPieceId: selectedMapPieceId,
+      }),
+    [atlasInventory, initialData, mapPieceGeoreferences, selectedAtlasId, selectedAtlasPageId, selectedMapPieceId, sheets],
+  );
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1324,14 +1341,21 @@ export function HistoricalMapStudio({
 
     const params = new URLSearchParams(window.location.search);
     params.set("town", initialData.activeTownPackage.id);
+    params.set("townPackageId", initialData.activeTownPackage.id);
     params.set("year", String(initialData.activeMapYear ?? initialData.activeTownPackage.year));
+    params.set("mapYear", String(initialData.activeMapYear ?? initialData.activeTownPackage.year));
     params.set("workflow", atlasWorkflowStep);
 
     const selectionParams = {
       atlas: selectedAtlasId,
+      atlasId: selectedAtlasId,
       page: selectedAtlasPageId,
+      atlasPageId: selectedAtlasPageId,
       piece: selectedMapPieceId,
+      mapPieceId: selectedMapPieceId,
       sheet: selectedAssetId,
+      sheetAssetId: selectedAssetId,
+      blockId: selectedMapPiece?.blockNumberText ?? "",
     };
 
     Object.entries(selectionParams).forEach(([key, value]) => {
@@ -1355,6 +1379,7 @@ export function HistoricalMapStudio({
     selectedAtlasId,
     selectedAtlasPageId,
     selectedMapPieceId,
+    selectedMapPiece?.blockNumberText,
   ]);
 
   useEffect(() => {
@@ -1698,6 +1723,19 @@ export function HistoricalMapStudio({
     requestExternalMapView(center, zoom, "town_package", path);
   }
 
+  function getCurrentReconstructionContext(workflowStep: SanbornAtlasWorkflowStep = atlasWorkflowStep) {
+    return {
+      townPackageId: initialData.activeTownPackage?.id ?? null,
+      mapYear: initialData.activeMapYear ?? initialData.activeTownPackage?.year ?? null,
+      atlasId: activeAtlas?.atlasId ?? selectedAtlasId,
+      atlasPageId: selectedAtlasPage?.pageId ?? selectedAtlasPageId,
+      sheetAssetId: selectedAtlasPage?.sanbornSheetAssetId ?? selectedAssetId,
+      mapPieceId: selectedMapPiece?.pieceId ?? selectedMapPieceId,
+      blockId: selectedMapPiece?.blockNumberText ?? null,
+      workflow: workflowStep,
+    };
+  }
+
   function enterGpsAlignment() {
     if (atlasWorkflowStep !== "gps_alignment") {
       setLastNonGpsWorkflowStep(atlasWorkflowStep);
@@ -1724,6 +1762,21 @@ export function HistoricalMapStudio({
   function changeAtlasWorkflowStep(step: SanbornAtlasWorkflowStep) {
     if (step === "gps_alignment") {
       enterGpsAlignment();
+      return;
+    }
+
+    if (step === "building_reconstruction") {
+      router.push(buildReconstructionUrl("/community/building-auditor", getCurrentReconstructionContext("piece_inventory")));
+      return;
+    }
+
+    if (step === "people_activity") {
+      router.push(buildReconstructionUrl("/community/people-auditor", getCurrentReconstructionContext("piece_inventory")));
+      return;
+    }
+
+    if (step === "evidence_review") {
+      router.push(buildReconstructionUrl("/community/source-provenance-inspector", getCurrentReconstructionContext("piece_inventory")));
       return;
     }
 
@@ -3477,30 +3530,44 @@ export function HistoricalMapStudio({
   return (
     <section className="minimal-sanborn-gps" aria-label="Historical Map Studio map placement tool">
       <header className="minimal-sanborn-gps__toolbar">
+        <ReconstructionContextBar
+          compact
+          context={getCurrentReconstructionContext()}
+          currentRoute="map"
+          editionProgress={reconstructionModel.edition}
+          pieces={reconstructionModel.pieceProgress}
+          sheets={reconstructionModel.sheetProgress}
+          sourceOptions={initialData.sourceOptions}
+          activeSourceRecordId={selectedAsset?.sourceRecordId ?? activeAtlas?.sourceRecordId ?? null}
+          townProgress={reconstructionModel.town}
+          towns={initialData.townPackages}
+          years={initialData.availableMapYears}
+          onPieceChange={(pieceId) => {
+            if (isGpsAlignmentStep) {
+              selectMapPieceForPlacement(pieceId);
+              return;
+            }
+
+            const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === pieceId);
+            const page = piece ? atlasInventory.pages.find((candidate) => candidate.pageId === piece.atlasPageId) : null;
+            if (page) {
+              setSelectedAtlasPageId(page.pageId);
+              setSelectedAssetId(page.sanbornSheetAssetId);
+            }
+            setSelectedMapPieceId(pieceId);
+          }}
+          onSheetChange={(sheetAssetId) => {
+            const page = atlasInventory.pages.find((candidate) => candidate.sanbornSheetAssetId === sheetAssetId);
+            if (page) {
+              setSelectedAtlasPageId(page.pageId);
+            }
+            selectAndCenter(sheetAssetId);
+          }}
+          onTownChange={(townPackageId) => router.push(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}&year=${initialData.activeMapYear ?? ""}&mapYear=${initialData.activeMapYear ?? ""}`)}
+          onYearChange={(mapYear) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`)}
+        />
         <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--primary" aria-label="Primary navigation">
           <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
-          <div className="minimal-sanborn-gps__toolbar-group" aria-label="Town and year selectors">
-            <select
-              aria-label="Town package"
-              className="minimal-sanborn-gps__select"
-              value={initialData.activeTownPackage?.id ?? ""}
-              onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}
-            >
-              {initialData.townPackages.map((town) => (
-                <option key={town.id} value={town.id}>{town.name}</option>
-              ))}
-            </select>
-            <select
-              aria-label="Map year"
-              className="minimal-sanborn-gps__year"
-              value={initialData.activeMapYear ?? ""}
-              onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}
-            >
-              {initialData.availableMapYears.map((year) => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
-          </div>
           {isGpsAlignmentStep ? (
             <div className="minimal-sanborn-gps__gps-workflow" aria-label="Map placement workflow navigation">
               <button className="sanborn-button sanborn-button--primary" onClick={backToLastNonGpsWorkflowStep} type="button">
@@ -3979,12 +4046,16 @@ export function HistoricalMapStudio({
         ) : (
           <div className="sanborn-atlas-workflow">
             <SanbornAtlasNavigator
+              activeMapYear={initialData.activeMapYear}
+              activeTownPackage={initialData.activeTownPackage}
               assets={sheets}
               fallbackYear={initialData.activeMapYear}
               inventory={atlasInventory}
+              mapPieceGeoreferences={mapPieceGeoreferences}
               readOnly={atlasReadOnly}
               selectedAtlasId={selectedAtlasId}
               selectedPageId={selectedAtlasPage?.pageId ?? selectedAtlasPageId}
+              selectedPieceId={selectedMapPieceId}
               sourceOptions={initialData.sourceOptions}
               workflowStep={atlasWorkflowStep}
               pieceInventoryBlocked={pieceInventoryBlocked}
@@ -4014,6 +4085,15 @@ export function HistoricalMapStudio({
                 }
                 changeAtlasWorkflowStep("piece_inventory");
                 setSelectedMapPieceId("");
+              }}
+              onSelectPiece={(pieceId) => {
+                const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === pieceId);
+                const page = piece ? atlasInventory.pages.find((candidate) => candidate.pageId === piece.atlasPageId) : null;
+                if (page) {
+                  setSelectedAtlasPageId(page.pageId);
+                  setSelectedAssetId(page.sanbornSheetAssetId);
+                }
+                setSelectedMapPieceId(pieceId);
               }}
               onWorkflowStepChange={(step) => {
                 changeAtlasWorkflowStep(step);

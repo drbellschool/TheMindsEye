@@ -11,20 +11,26 @@ export const metadata = {
 type HistoricalMapStudioPageProps = {
   searchParams?: Promise<{
     atlas?: string;
+    atlasId?: string;
     page?: string;
+    atlasPageId?: string;
     piece?: string;
+    mapPieceId?: string;
     sheet?: string;
+    sheetAssetId?: string;
     town?: string;
+    townPackageId?: string;
     workflow?: string;
     year?: string;
+    mapYear?: string;
   }>;
 };
 
 export default async function HistoricalMapStudioPage({ searchParams }: HistoricalMapStudioPageProps) {
   const params = (await searchParams) ?? {};
   const studioState = await loadHistoricalMapStudioData({
-    townPackageId: params.town,
-    mapYear: params.year,
+    townPackageId: params.townPackageId ?? params.town,
+    mapYear: params.mapYear ?? params.year,
   });
 
   return (
@@ -32,10 +38,10 @@ export default async function HistoricalMapStudioPage({ searchParams }: Historic
       initialData={studioState}
       initialSelection={{
         workflowStep: params.workflow,
-        atlasId: params.atlas,
-        pageId: params.page,
-        pieceId: params.piece,
-        assetId: params.sheet,
+        atlasId: params.atlasId ?? params.atlas,
+        pageId: params.atlasPageId ?? params.page,
+        pieceId: params.mapPieceId ?? params.piece,
+        assetId: params.sheetAssetId ?? params.sheet,
       }}
     />
   );
