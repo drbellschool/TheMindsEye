@@ -10,7 +10,6 @@ import {
   HistoricalMapLeaflet,
   PlainLeafletMapTest,
   basemaps,
-  type HistoricalPieceMapLayer,
   type HistoricalSheetMapLayer,
   type LeafletTileRuntimeDebug,
   type SheetImageLoadState,
@@ -83,13 +82,19 @@ import {
 } from "@/lib/historical-map-sheet-georeference";
 import {
   hasOperationalMapPiecePlacement,
+  buildOperationalMapPieceLayers,
+  getMapPieceLayerBounds,
+  getMapPieceLayerSourceAssetIds,
   mergeSavedAndDefaultMapPieceGeoreferences,
   normalizeSanbornMapPieceGeoreference,
   piecePlacementMatchesForPersistence,
   placeMapPieceAtCenter,
+  resolveMapPiecePlacementSelection,
   rotateMapPieceGeoreference,
   runMapPiecePlacementNetworkRequest,
+  shouldAutoFitMapPieceOverview,
   validateMapPieceGeographicCorners,
+  type MapPieceDisplayScope,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import { reviewStatuses } from "@/lib/community-status";
@@ -784,6 +789,8 @@ export function HistoricalMapStudio({
   const [placementAnchorAssetId, setPlacementAnchorAssetId] = useState("");
   const [piecePlacementAnchorId, setPiecePlacementAnchorId] = useState("");
   const [showReferenceSheetAlignment, setShowReferenceSheetAlignment] = useState(false);
+  const [pieceDisplayScope, setPieceDisplayScope] = useState<MapPieceDisplayScope>("all_placed_pieces");
+  const [mapPlacementFitTarget, setMapPlacementFitTarget] = useState<"selected_piece" | "all_placed_pieces" | "reference_sheets">("selected_piece");
   const [georeferenceDraft, setGeoreferenceDraft] = useState<GeoreferenceDraft>(createGeoreferenceDraft(initialData, initialData.sheets[0]?.assetId ?? null));
   const [historicalClickMode, setHistoricalClickMode] = useState<"idle" | "adding_point">("idle");
   const [mapCursor, setMapCursor] = useState<any>(null);
@@ -820,6 +827,9 @@ export function HistoricalMapStudio({
   const mapViewSaveInFlightRef = useRef(false);
   const mapViewSaveTimeoutRef = useRef<number | null>(null);
   const mapViewSavedStatusTimeoutRef = useRef<number | null>(null);
+  const previousWorkflowStepRef = useRef<SanbornAtlasWorkflowStep>(atlasWorkflowStep);
+  const mapPlacementAutoFitAppliedRef = useRef(false);
+  const mapPlacementUserMovedRef = useRef(false);
   const [mapContainerSize, setMapContainerSize] = useState({ width: 0, height: 0 });
   const [autoFallbackNotice, setAutoFallbackNotice] = useState("");
   const present = history.present;
@@ -856,6 +866,32 @@ export function HistoricalMapStudio({
   const atlasReadOnly = initialData.mode === "read_only" || atlasInventory.mode === "read_only";
   const pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean(selectedAtlasPage && !selectedAtlasPage.isPersisted);
   const atlasSaveActionsDisabled = saveStatus === "saving";
+  const isGpsAlignmentStep = atlasWorkflowStep === "gps_alignment";
+  const allOperationalMapPieceLayers = useMemo(
+    () =>
+      buildOperationalMapPieceLayers({
+        atlasId: activeAtlas?.atlasId ?? selectedAtlasId,
+        pages: atlasInventory.pages,
+        pieces: atlasInventory.pieces,
+        placements: mapPieceGeoreferences,
+        assets: sheets,
+        displayScope: "all_placed_pieces",
+        showHistoricalLayers,
+        comparisonMode,
+        getPieceLabel: getMapPieceDisplayLabel,
+      }),
+    [activeAtlas?.atlasId, selectedAtlasId, atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, sheets, showHistoricalLayers, comparisonMode],
+  );
+  const mapPieceLayers = useMemo(
+    () =>
+      pieceDisplayScope === "current_page_only" && selectedAtlasPage
+        ? allOperationalMapPieceLayers.filter((layer) => layer.atlasPageId === selectedAtlasPage.pageId)
+        : allOperationalMapPieceLayers,
+    [allOperationalMapPieceLayers, pieceDisplayScope, selectedAtlasPage],
+  );
+  const mapPieceLayerSourceAssetIds = useMemo(() => getMapPieceLayerSourceAssetIds(allOperationalMapPieceLayers), [allOperationalMapPieceLayers]);
+  const allMapPieceBounds = useMemo(() => getMapPieceLayerBounds(allOperationalMapPieceLayers), [allOperationalMapPieceLayers]);
+  const savedVisibleMapPieceLayerCount = allOperationalMapPieceLayers.filter((layer) => layer.isPersisted).length;
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1009,6 +1045,9 @@ export function HistoricalMapStudio({
         window.clearTimeout(mapViewSaveTimeoutRef.current);
         mapViewSaveTimeoutRef.current = null;
       }
+      if (atlasWorkflowStep === "gps_alignment") {
+        mapPlacementUserMovedRef.current = true;
+      }
       isUserPanningRef.current = true;
       clearActiveExternalViewRequest();
       setMapInteractionStatus("panning");
@@ -1020,6 +1059,9 @@ export function HistoricalMapStudio({
       if (mapViewSaveTimeoutRef.current) {
         window.clearTimeout(mapViewSaveTimeoutRef.current);
         mapViewSaveTimeoutRef.current = null;
+      }
+      if (atlasWorkflowStep === "gps_alignment") {
+        mapPlacementUserMovedRef.current = true;
       }
       isUserZoomingRef.current = true;
       clearActiveExternalViewRequest();
@@ -1034,7 +1076,7 @@ export function HistoricalMapStudio({
       setMapInteractionStatus("idle");
     }
     setLastCenterChangePath(source);
-  }, [clearActiveExternalViewRequest, mapInteractionStatus]);
+  }, [atlasWorkflowStep, clearActiveExternalViewRequest, mapInteractionStatus]);
 
   const handleLeafletViewChange = useCallback((center: LatLngTuple, zoom: number, source: string = "leaflet_moveend") => {
     const nextCenter = { latitude: center[0], longitude: center[1] };
@@ -1316,6 +1358,42 @@ export function HistoricalMapStudio({
   ]);
 
   useEffect(() => {
+    const previousWorkflowStep = previousWorkflowStepRef.current;
+
+    if (previousWorkflowStep !== "gps_alignment" && atlasWorkflowStep === "gps_alignment") {
+      mapPlacementAutoFitAppliedRef.current = false;
+    }
+
+    previousWorkflowStepRef.current = atlasWorkflowStep;
+  }, [atlasWorkflowStep]);
+
+  useEffect(() => {
+    if (!isGpsAlignmentStep || mapPlacementAutoFitAppliedRef.current || mapPlacementUserMovedRef.current) {
+      return;
+    }
+
+    mapPlacementAutoFitAppliedRef.current = true;
+
+    if (
+      !shouldAutoFitMapPieceOverview({
+        isMapPlacementActive: isGpsAlignmentStep,
+        savedVisiblePieceCount: savedVisibleMapPieceLayerCount,
+        hasFitBounds: Boolean(allMapPieceBounds),
+        autoFitAlreadyApplied: false,
+        userMovedMap: false,
+      })
+    ) {
+      return;
+    }
+
+    setMapPlacementFitTarget("all_placed_pieces");
+    setLastViewChangeSource("fit_sheet");
+    setLastCenterChangePath("autoFitAllPlacedMapPieces");
+    setFitBoundsActive(true);
+    setFitOverlayRequest((current) => current + 1);
+  }, [allMapPieceBounds, isGpsAlignmentStep, savedVisibleMapPieceLayerCount]);
+
+  useEffect(() => {
     setMetadataDraft(createMetadataDraft(selectedAsset));
     if (studioMode !== "stitching") {
       setGeoreferenceDraft(createGeoreferenceDraft(initialData, selectedAsset?.assetId ?? null));
@@ -1366,6 +1444,9 @@ export function HistoricalMapStudio({
 
     const refreshExpiringUrls = () => {
       const visibleAssetIds = new Set(geoHistory.present.sheets.filter((sheet) => sheet.isVisible).map((sheet) => sheet.assetId));
+      for (const assetId of mapPieceLayerSourceAssetIds) {
+        visibleAssetIds.add(assetId);
+      }
 
       for (const sheet of sheets) {
         if (visibleAssetIds.has(sheet.assetId) && shouldRefreshSignedUrl(sheet.signedUrlExpiresAt)) {
@@ -1378,7 +1459,7 @@ export function HistoricalMapStudio({
     const interval = window.setInterval(refreshExpiringUrls, 60_000);
 
     return () => window.clearInterval(interval);
-  }, [sheets, geoHistory.present.sheets, initialData.mode]);
+  }, [sheets, geoHistory.present.sheets, mapPieceLayerSourceAssetIds, initialData.mode]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -1567,6 +1648,7 @@ export function HistoricalMapStudio({
       },
       true,
     );
+    setMapPlacementFitTarget("reference_sheets");
     setFitOverlayRequest((current) => current + 1);
   }
 
@@ -1892,6 +1974,25 @@ export function HistoricalMapStudio({
     );
   }
 
+  function selectMapPieceForPlacement(pieceId: string) {
+    const selection = resolveMapPiecePlacementSelection({
+      atlasId: activeAtlas?.atlasId ?? selectedAtlasId,
+      pieceId,
+      pages: atlasInventory.pages,
+      pieces: atlasInventory.pieces,
+    });
+
+    if (!selection) {
+      return;
+    }
+
+    setSelectedAtlasPageId(selection.page.pageId);
+    setSelectedMapPieceId(selection.piece.pieceId);
+    setSelectedAssetId(selection.sourceAssetId);
+    setPiecePlacementAnchorId("");
+    setPlacementAnchorAssetId("");
+  }
+
   function placeSelectedMapPieceAt(center: GeoCoordinate) {
     if (!selectedMapPiece || !selectedMapPieceGeoreference) {
       setSaveStatus("error");
@@ -1943,8 +2044,21 @@ export function HistoricalMapStudio({
       latitude: selectedMapPieceGeoreference.centerLatitude,
       longitude: selectedMapPieceGeoreference.centerLongitude,
     };
+    setMapPlacementFitTarget("selected_piece");
     requestExternalMapView(nextCenter, Math.max(modernMapZoom, 17), "fit_sheet", "fitSelectedMapPiece");
     commitGeographicMapSettings({ center: nextCenter, zoom: Math.max(modernMapZoom, 17), editMode: geoEditMode, globalHistoricalOpacity: 1 }, false);
+  }
+
+  function fitAllPlacedMapPieces() {
+    if (!allMapPieceBounds) {
+      return;
+    }
+
+    setMapPlacementFitTarget("all_placed_pieces");
+    setLastViewChangeSource("fit_sheet");
+    setLastCenterChangePath("fitAllPlacedMapPieces");
+    setFitBoundsActive(true);
+    setFitOverlayRequest((current) => current + 1);
   }
 
   async function saveSelectedMapPiecePlacement() {
@@ -2142,6 +2256,7 @@ export function HistoricalMapStudio({
       setLastViewChangeSource("fit_sheet");
       setLastCenterChangePath("fitAllSheets");
       setFitBoundsActive(true);
+      setMapPlacementFitTarget("reference_sheets");
       setFitOverlayRequest((current) => current + 1);
       return;
     }
@@ -2259,6 +2374,7 @@ export function HistoricalMapStudio({
       },
       true,
     );
+    setMapPlacementFitTarget("reference_sheets");
     setFitOverlayRequest((current) => current + 1);
   }
 
@@ -2310,6 +2426,7 @@ export function HistoricalMapStudio({
       },
       true,
     );
+    setMapPlacementFitTarget("reference_sheets");
     setSaveMessage(selectedWasPlaced ? "Invalid sheet placements were reset. Save placement to persist the repair." : "No selected sheet was available to place.");
   }
 
@@ -2413,6 +2530,7 @@ export function HistoricalMapStudio({
     setLastCenterChangePath("fitSelectedSheet");
     setFitBoundsActive(true);
     commitGeographicMapSettings({ center: nextCenter, zoom: nextZoom }, true);
+    setMapPlacementFitTarget("reference_sheets");
     setFitOverlayRequest((current) => current + 1);
   }
 
@@ -3253,23 +3371,15 @@ export function HistoricalMapStudio({
         opacity: Math.min(layer.opacity, 0.28),
       }))
     : [];
-  const selectedMapPieceLayer: HistoricalPieceMapLayer | null =
-    selectedMapPiece && selectedMapPieceGeoreference && selectedAtlasPageAsset
-      ? {
-          ...selectedMapPieceGeoreference,
-          imageUrl: showHistoricalLayers && comparisonMode !== "modern_only" ? selectedAtlasPageAsset.signedUrl : null,
-          signedUrlError: selectedAtlasPageAsset.signedUrlError,
-          sourcePolygon: selectedMapPiece.sourcePolygon,
-          sourceBBox: selectedMapPiece.sourceBBox,
-          sourceImageWidth: selectedAtlasPageAsset.width,
-          sourceImageHeight: selectedAtlasPageAsset.height,
-          pieceLabel: getMapPieceDisplayLabel(selectedMapPiece),
-        }
-      : null;
-  const mapPieceLayers = selectedMapPieceLayer && hasOperationalMapPiecePlacement(selectedMapPieceLayer) ? [selectedMapPieceLayer] : [];
   const selectedMapPieceBounds = selectedMapPieceGeoreference && hasOperationalMapPiecePlacement(selectedMapPieceGeoreference)
     ? boundsFromCorners(selectedMapPieceGeoreference.corners)
     : null;
+  const mapPlacementFitBounds =
+    mapPlacementFitTarget === "all_placed_pieces"
+      ? allMapPieceBounds
+      : mapPlacementFitTarget === "reference_sheets"
+        ? sheetAssemblyBounds
+        : selectedMapPieceBounds;
   const visibleGeographicSheets = historicalSheetLayers.filter((layer) => layer.isVisible).length;
   const unplacedGeographicSheets = geoPresent.sheets.filter((sheet) => sheet.placementStatus === "unplaced").length;
   const workspaceComposite = useMemo(() => buildWorkspaceCompositeImage(sheets, present.placements), [sheets, present.placements]);
@@ -3362,7 +3472,6 @@ export function HistoricalMapStudio({
     typeof initialData.activeTownPackage?.centerLatitude === "number" && typeof initialData.activeTownPackage.centerLongitude === "number"
       ? `${formatCoordinate(initialData.activeTownPackage.centerLatitude)}, ${formatCoordinate(initialData.activeTownPackage.centerLongitude)}`
       : "unavailable";
-  const isGpsAlignmentStep = atlasWorkflowStep === "gps_alignment";
   const toolbarSaveMessage = saveMessage ? `${saveMessage} Last saved: ${lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.` : "";
 
   return (
@@ -3492,6 +3601,20 @@ export function HistoricalMapStudio({
             <button className="sanborn-button" onClick={() => centerGpsOnActiveTown()} type="button">
               Center on {initialData.activeTownPackage?.name ?? "town"}
             </button>
+            <button className="sanborn-button sanborn-button--primary" disabled={!allMapPieceBounds} onClick={fitAllPlacedMapPieces} type="button">
+              Fit all placed pieces
+            </button>
+            <label className="minimal-sanborn-gps__display-scope">
+              <span>Display</span>
+              <select
+                aria-label="Map piece display scope"
+                value={pieceDisplayScope}
+                onChange={(event) => setPieceDisplayScope(event.target.value as MapPieceDisplayScope)}
+              >
+                <option value="all_placed_pieces">All placed pieces</option>
+                <option value="current_page_only">Current page only</option>
+              </select>
+            </label>
             <div className="minimal-sanborn-gps__mode" role="group" aria-label="Map interaction mode">
               <button
                 className={`sanborn-button${geoEditMode === "pan_modern_map" ? " sanborn-button--primary" : ""}`}
@@ -3658,7 +3781,7 @@ export function HistoricalMapStudio({
         ) : (
           <HistoricalMapLeaflet
             basemapKey={georeferenceDraft.selectedBasemap}
-            bounds={selectedMapPieceBounds ?? (showReferenceSheetAlignment && hasPlacedHistoricalSheets ? sheetAssemblyBounds : null)}
+            bounds={mapPlacementFitBounds ?? (showReferenceSheetAlignment && hasPlacedHistoricalSheets ? sheetAssemblyBounds : null)}
             center={[mapCenter.latitude, mapCenter.longitude]}
             controlPoints={[]}
             corners={selectedMapPieceGeoreference?.corners ?? selectedSheetGeoreference?.corners ?? createDefaultGeoCorners(mapCenter)}
@@ -3681,7 +3804,7 @@ export function HistoricalMapStudio({
             onMarkerDrag={() => undefined}
             onPieceTransformCommit={(pieceId, patch) => commitMapPieceGeoreference(pieceId, patch)}
             onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
-            onSelectPiece={(pieceId) => setSelectedMapPieceId(pieceId)}
+            onSelectPiece={selectMapPieceForPlacement}
             onSelectSheet={(assetId) => {
               setSelectedAssetId(assetId);
               setGeoEditMode("edit_historical_sheets");
@@ -3695,7 +3818,7 @@ export function HistoricalMapStudio({
             overlayOpacity={0.5}
             overlayVisible={false}
             pieceLayers={mapPieceLayers}
-            plainTileOnly={!selectedMapPiecePlaced && !(showReferenceSheetAlignment && hasPlacedHistoricalSheets)}
+            plainTileOnly={mapPieceLayers.length === 0 && !(showReferenceSheetAlignment && hasPlacedHistoricalSheets)}
             requestedViewSource={requestedViewSource}
             selectedControlPointId=""
             selectedPieceId={selectedMapPiece?.pieceId ?? selectedMapPieceId}
@@ -3761,11 +3884,7 @@ export function HistoricalMapStudio({
                     className={`sanborn-piece-placement-list__item ${piece.pieceId === selectedMapPiece?.pieceId ? "is-selected" : ""} ${getMapPiecePlacementClass(placement)}`}
                     key={piece.pieceId}
                     onClick={() => {
-                      setSelectedMapPieceId(piece.pieceId);
-                      setPiecePlacementAnchorId("");
-                      if (selectedAtlasPage?.sanbornSheetAssetId) {
-                        setSelectedAssetId(selectedAtlasPage.sanbornSheetAssetId);
-                      }
+                      selectMapPieceForPlacement(piece.pieceId);
                     }}
                     type="button"
                   >
@@ -4044,7 +4163,10 @@ export function HistoricalMapStudio({
               <button className="sanborn-button" onClick={() => setHistoricalClickMode("adding_point")} type="button">Add control point</button>
               <button className="sanborn-button" onClick={clearDraftPoints} type="button">Clear draft points</button>
               <button className="sanborn-button" onClick={resetGeographicAlignment} type="button">Reset geographic alignment</button>
-              <button className="sanborn-button" onClick={() => setFitOverlayRequest((current) => current + 1)} type="button">Fit overlay bounds</button>
+              <button className="sanborn-button" onClick={() => {
+                setMapPlacementFitTarget("reference_sheets");
+                setFitOverlayRequest((current) => current + 1);
+              }} type="button">Fit overlay bounds</button>
               <p className="small-muted">Manual placement is map-first. Control points can refine the four-corner warp but do not block visual alignment.</p>
             </div>
           ) : null}

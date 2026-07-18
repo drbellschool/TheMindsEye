@@ -1,7 +1,7 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
-import { isOperationalMapCenter, isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoCoordinate, type GeoCorners } from "./historical-map-georeference.ts";
-import { clampHistoricalOpacity, clampNumber, defaultHistoricalSheetOpacity, normalizeReviewClassification, normalizeRotation } from "./historical-map-studio.ts";
-import { calculateSourceBoundingBox, type SanbornMapPieceRecord, type SanbornSourceBBox } from "./sanborn-atlas.ts";
+import { isOperationalMapCenter, isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoBounds, type GeoCoordinate, type GeoCorners } from "./historical-map-georeference.ts";
+import { clampHistoricalOpacity, clampNumber, defaultHistoricalSheetOpacity, normalizeReviewClassification, normalizeRotation, type StudioSheetAsset } from "./historical-map-studio.ts";
+import { calculateSourceBoundingBox, type SanbornAtlasPageRecord, type SanbornMapPieceRecord, type SanbornNormalizedPoint, type SanbornSourceBBox } from "./sanborn-atlas.ts";
 
 export const mapPiecePlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed"] as const;
 export const mapPlacementTargetGeometries = ["polygon", "line", "point"] as const;
@@ -32,6 +32,27 @@ export type SanbornMapPieceGeoreference = {
   notes: string | null;
   updatedAt: string | null;
   isPersisted: boolean;
+};
+
+export type MapPieceDisplayScope = "all_placed_pieces" | "current_page_only";
+
+export type SanbornMapPieceMapLayer = SanbornMapPieceGeoreference & {
+  imageUrl: string | null;
+  signedUrlError?: string;
+  sourceAssetId: string;
+  sourcePolygon: SanbornNormalizedPoint[];
+  sourceBBox: SanbornSourceBBox;
+  sourceImageWidth: number;
+  sourceImageHeight: number;
+  pieceLabel: string;
+  sheetNumber: number | null;
+  pageSequence: number;
+};
+
+export type MapPiecePlacementSelection = {
+  piece: SanbornMapPieceRecord;
+  page: SanbornAtlasPageRecord;
+  sourceAssetId: string;
 };
 
 export type CompleteGeoCorners = {
@@ -493,6 +514,148 @@ export function hasOperationalMapPiecePlacement(placement: SanbornMapPieceGeoref
   }
 
   return orderedCornerCoordinates(validation.corners).some((coordinate) => isOperationalMapCenter(coordinate));
+}
+
+function defaultMapPieceLayerLabel(piece: SanbornMapPieceRecord): string {
+  if (piece.blockNumberText) {
+    return `Block ${piece.blockNumberText}`;
+  }
+
+  if (piece.titleText) {
+    return piece.titleText;
+  }
+
+  return piece.pieceType.replaceAll("_", " ");
+}
+
+export function buildOperationalMapPieceLayers(input: {
+  atlasId: string | null | undefined;
+  pages: SanbornAtlasPageRecord[];
+  pieces: SanbornMapPieceRecord[];
+  placements: SanbornMapPieceGeoreference[];
+  assets: StudioSheetAsset[];
+  selectedPageId?: string | null;
+  displayScope?: MapPieceDisplayScope;
+  showHistoricalLayers?: boolean;
+  comparisonMode?: "both" | "modern_only" | "historical_only";
+  getPieceLabel?: (piece: SanbornMapPieceRecord) => string;
+}): SanbornMapPieceMapLayer[] {
+  if (!input.atlasId) {
+    return [];
+  }
+
+  const displayScope = input.displayScope ?? "all_placed_pieces";
+  const shouldShowImages = input.showHistoricalLayers !== false && input.comparisonMode !== "modern_only";
+  const pagesById = new Map(
+    input.pages
+      .filter((page) => page.atlasId === input.atlasId)
+      .filter((page) => displayScope !== "current_page_only" || !input.selectedPageId || page.pageId === input.selectedPageId)
+      .map((page) => [page.pageId, page]),
+  );
+  const piecesById = new Map(input.pieces.filter((piece) => piece.isPersisted).map((piece) => [piece.pieceId, piece]));
+  const assetsById = new Map(input.assets.map((asset) => [asset.assetId, asset]));
+  const getPieceLabel = input.getPieceLabel ?? defaultMapPieceLayerLabel;
+
+  return input.placements
+    .reduce<SanbornMapPieceMapLayer[]>((layers, placement) => {
+      const piece = piecesById.get(placement.pieceId);
+      if (!piece || !hasOperationalMapPiecePlacement(placement)) {
+        return layers;
+      }
+
+      const page = pagesById.get(piece.atlasPageId);
+      if (!page) {
+        return layers;
+      }
+
+      const asset = assetsById.get(page.sanbornSheetAssetId);
+      if (!asset) {
+        return layers;
+      }
+
+      layers.push({
+        ...placement,
+        atlasPageId: page.pageId,
+        imageUrl: shouldShowImages ? asset.signedUrl : null,
+        signedUrlError: asset.signedUrlError,
+        sourceAssetId: asset.assetId,
+        sourcePolygon: piece.sourcePolygon,
+        sourceBBox: piece.sourceBBox ?? calculateSourceBoundingBox(piece.sourcePolygon),
+        sourceImageWidth: asset.width,
+        sourceImageHeight: asset.height,
+        pieceLabel: getPieceLabel(piece),
+        sheetNumber: page.sheetNumber,
+        pageSequence: page.pageSequence,
+      });
+
+      return layers;
+    }, [])
+    .sort((left, right) => left.layerOrder - right.layerOrder || left.pageSequence - right.pageSequence || left.pieceId.localeCompare(right.pieceId));
+}
+
+export function getMapPieceLayerBounds(layers: SanbornMapPieceMapLayer[]): GeoBounds | null {
+  const coordinates = layers
+    .filter((layer) => layer.isVisible && hasOperationalMapPiecePlacement(layer))
+    .flatMap((layer) => [layer.corners.northwest, layer.corners.northeast, layer.corners.southeast, layer.corners.southwest])
+    .filter((coordinate): coordinate is GeoCoordinate => Boolean(coordinate) && isOperationalMapCenter(coordinate));
+
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  return {
+    northLatitude: Number(Math.max(...coordinates.map((coordinate) => coordinate.latitude)).toFixed(8)),
+    southLatitude: Number(Math.min(...coordinates.map((coordinate) => coordinate.latitude)).toFixed(8)),
+    eastLongitude: Number(Math.max(...coordinates.map((coordinate) => coordinate.longitude)).toFixed(8)),
+    westLongitude: Number(Math.min(...coordinates.map((coordinate) => coordinate.longitude)).toFixed(8)),
+  };
+}
+
+export function getMapPieceLayerSourceAssetIds(layers: SanbornMapPieceMapLayer[]): string[] {
+  return [...new Set(layers.map((layer) => layer.sourceAssetId).filter(Boolean))];
+}
+
+export function resolveMapPiecePlacementSelection(input: {
+  atlasId: string | null | undefined;
+  pieceId: string;
+  pages: SanbornAtlasPageRecord[];
+  pieces: SanbornMapPieceRecord[];
+}): MapPiecePlacementSelection | null {
+  if (!input.atlasId || !input.pieceId) {
+    return null;
+  }
+
+  const piece = input.pieces.find((candidate) => candidate.pieceId === input.pieceId) ?? null;
+  if (!piece) {
+    return null;
+  }
+
+  const page = input.pages.find((candidate) => candidate.pageId === piece.atlasPageId && candidate.atlasId === input.atlasId) ?? null;
+  if (!page) {
+    return null;
+  }
+
+  return {
+    piece,
+    page,
+    sourceAssetId: page.sanbornSheetAssetId,
+  };
+}
+
+export function shouldAutoFitMapPieceOverview(input: {
+  isMapPlacementActive: boolean;
+  savedVisiblePieceCount: number;
+  hasFitBounds: boolean;
+  autoFitAlreadyApplied: boolean;
+  userMovedMap: boolean;
+}): boolean {
+  return (
+    input.isMapPlacementActive &&
+    input.savedVisiblePieceCount >= 2 &&
+    input.hasFitBounds &&
+    !input.autoFitAlreadyApplied &&
+    !input.userMovedMap
+  );
 }
 
 export function piecePlacementMatchesForPersistence(

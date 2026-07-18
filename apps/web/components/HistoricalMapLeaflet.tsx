@@ -1463,6 +1463,8 @@ function TransformedPieceLayer({
       const imageSize = getImageSize();
       const projectiveTransform = getProjectiveTransform(imageSize.width, imageSize.height, points, offset);
       const centerPoint = getPointCenter(points);
+      const hasImageDiagnostic = Boolean(maskError || latestRef.current.layer.signedUrlError);
+      const hasAnyDiagnostic = Boolean(hasImageDiagnostic || geometryError || !projectiveTransform.valid);
       const handlePositions: Record<string, L.Point> = {
         "top-left": points.northwest,
         "top-right": points.northeast,
@@ -1478,9 +1480,9 @@ function TransformedPieceLayer({
       element.style.height = `${bounds.height}px`;
       L.DomUtil.setPosition(element, offset);
       element.style.opacity = String(Math.max(0.05, Math.min(1, piece.opacity)));
-      element.style.pointerEvents = editMode ? "auto" : "none";
+      element.style.pointerEvents = "auto";
       element.style.zIndex = String(580 + piece.layerOrder + (selected ? 1000 : 0));
-      element.style.cursor = piece.isLocked ? "not-allowed" : editMode ? "grab" : "default";
+      element.style.cursor = piece.isLocked ? "not-allowed" : selected && editMode ? "grab" : "pointer";
       element.classList.toggle("is-selected", selected);
       element.classList.toggle("is-locked", piece.isLocked);
       element.classList.toggle("is-hidden", !piece.isVisible);
@@ -1491,13 +1493,13 @@ function TransformedPieceLayer({
       image.style.display = maskedImage?.url ? "block" : "none";
       image.style.width = `${imageSize.width}px`;
       image.style.height = `${imageSize.height}px`;
-      image.style.pointerEvents = editMode ? "auto" : "none";
+      image.style.pointerEvents = "auto";
       image.style.transform = projectiveTransform.transform;
       boundary.style.clipPath = `polygon(${points.northwest.x - offset.x}px ${points.northwest.y - offset.y}px, ${points.northeast.x - offset.x}px ${points.northeast.y - offset.y}px, ${points.southeast.x - offset.x}px ${points.southeast.y - offset.y}px, ${points.southwest.x - offset.x}px ${points.southwest.y - offset.y}px)`;
-      boundary.style.display = selected ? "block" : "none";
+      boundary.style.display = selected || hasImageDiagnostic ? "block" : "none";
       label.textContent = latestRef.current.layer.pieceLabel;
       label.style.display = selected ? "block" : "none";
-      diagnostics.style.display = selected && Boolean(maskError || geometryError || latestRef.current.layer.signedUrlError || !projectiveTransform.valid) ? "block" : "none";
+      diagnostics.style.display = (selected || hasImageDiagnostic) && hasAnyDiagnostic ? "block" : "none";
       diagnostics.textContent = latestRef.current.layer.signedUrlError
         ? `Image: signed URL failed (${latestRef.current.layer.signedUrlError})`
         : maskError
@@ -1566,7 +1568,11 @@ function TransformedPieceLayer({
       const target = event.target as HTMLElement;
       const action = target.dataset.action ?? "drag";
 
-      if (current.mode !== "edit_historical_sheets") {
+      if (current.mode !== "edit_historical_sheets" || !current.isSelected) {
+        current.onSelect?.(piece.pieceId);
+        L.DomEvent.stop(event);
+        event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -1784,7 +1790,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       <FitBounds bounds={derivedBounds} enabled={props.fitBoundsEnabled ?? true} onViewMutation={props.onMapViewMutation} request={props.fitBoundsRequest} />
 
       {pieceLayers
-        .filter((piece) => piece.imageUrl && piece.isVisible)
+        .filter((piece) => piece.isVisible && Boolean(piece.imageUrl || piece.signedUrlError))
         .sort((a, b) => a.layerOrder - b.layerOrder)
         .map((piece) => (
           <TransformedPieceLayer

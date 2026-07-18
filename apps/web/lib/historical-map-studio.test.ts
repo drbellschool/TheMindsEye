@@ -59,21 +59,29 @@ import {
   updatePlacement,
   validateStudioMetadataInput,
   type StudioPlacement,
+  type StudioSheetAsset,
 } from "./historical-map-studio.ts";
 import { resolveInitialGeographicMapView, selectActiveTownPackage } from "./historical-map-studio-data.ts";
 import {
+  buildOperationalMapPieceLayers,
   createMapPieceInteractiveDraft,
   createDefaultMapPieceGeoreference,
   finishMapPieceInteractiveDraft,
+  getMapPieceLayerBounds,
+  getMapPieceLayerSourceAssetIds,
   hasOperationalMapPiecePlacement,
   mergeSavedAndDefaultMapPieceGeoreferences,
+  normalizeSanbornMapPieceGeoreference,
   piecePlacementMatchesForPersistence,
   placeMapPieceAtCenter,
+  resolveMapPiecePlacementSelection,
   rotateMapPieceGeoreference,
   runMapPiecePlacementNetworkRequest,
+  shouldAutoFitMapPieceOverview,
   updateMapPieceGeographicCorner,
   validateMapPieceGeographicCorners,
   validateMapPiecePlacementForPersistence,
+  type SanbornMapPieceGeoreference,
 } from "./sanborn-map-piece-georeference.ts";
 import {
   calculateMapPieceMaskRasterPlan,
@@ -81,7 +89,7 @@ import {
   clientPointToContainerPoint,
   maxMapPieceMaskRasterDimension,
 } from "./sanborn-map-piece-rendering.ts";
-import type { SanbornMapPieceRecord } from "./sanborn-atlas.ts";
+import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
   return normalizePlacement({
@@ -120,6 +128,86 @@ function mapPiece(pieceId: string, overrides: Partial<SanbornMapPieceRecord> = {
     isPersisted: true,
     ...overrides,
   };
+}
+
+function atlasPage(pageId: string, overrides: Partial<SanbornAtlasPageRecord> = {}): SanbornAtlasPageRecord {
+  return {
+    rowId: `${pageId}-row`,
+    pageId,
+    atlasRowId: "atlas-row-1",
+    atlasId: "atlas-1",
+    sanbornSheetAssetId: `${pageId}-asset`,
+    sanbornSheetAssetRowId: `${pageId}-asset-row`,
+    pageSequence: 1,
+    pageType: "numbered_sheet",
+    sheetNumber: 1,
+    volumeLabel: null,
+    displayLabel: null,
+    reviewStatus: "unknown",
+    evidenceClassification: "unknown",
+    updatedAt: null,
+    isPersisted: true,
+    ...overrides,
+  };
+}
+
+function sheetAsset(assetId: string, overrides: Partial<StudioSheetAsset> = {}): StudioSheetAsset {
+  return {
+    assetId,
+    rowId: `${assetId}-row`,
+    townPackageId: "town-1",
+    sourceRecordId: null,
+    sourceId: null,
+    sourceTitle: null,
+    mapLayerId: null,
+    sheetNumber: 1,
+    originalFilename: `${assetId}.png`,
+    storageBucket: "sanborn-sheets",
+    storagePath: `town-1/sanborn-sheets/${assetId}.png`,
+    signedUrl: `https://example.supabase.co/${assetId}.png`,
+    signedUrlExpiresAt: "2099-01-01T00:00:00.000Z",
+    mimeType: "image/png",
+    byteSize: 100,
+    width: 4000,
+    height: 3000,
+    checksum: `${assetId}-checksum`,
+    sourceUrl: null,
+    archiveName: null,
+    rightsNote: null,
+    evidenceClassification: "unknown",
+    reviewStatus: "unknown",
+    intakeNotes: null,
+    uploadedAt: null,
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
+function placedMapPieceGeoreference(
+  pieceId: string,
+  atlasPageId: string,
+  centerLatitude: number,
+  centerLongitude: number,
+  overrides: Partial<SanbornMapPieceGeoreference> = {},
+): SanbornMapPieceGeoreference {
+  return normalizeSanbornMapPieceGeoreference({
+    pieceId,
+    atlasPageId,
+    centerLatitude,
+    centerLongitude,
+    corners: {
+      northwest: { latitude: centerLatitude + 0.001, longitude: centerLongitude - 0.001 },
+      northeast: { latitude: centerLatitude + 0.001, longitude: centerLongitude + 0.001 },
+      southeast: { latitude: centerLatitude - 0.001, longitude: centerLongitude + 0.001 },
+      southwest: { latitude: centerLatitude - 0.001, longitude: centerLongitude - 0.001 },
+    },
+    placementStatus: "placed",
+    isVisible: true,
+    isPersisted: true,
+    opacity: 0.72,
+    layerOrder: 0,
+    ...overrides,
+  });
 }
 
 test("normalizes placement boundaries and rotation", () => {
@@ -561,6 +649,132 @@ test("map piece placement helpers keep piece placement independent from source s
   assert.equal(merged.find((placement) => placement.pieceId === "piece-69")?.placementStatus, secondPieceDefault.placementStatus);
 });
 
+test("map piece layer construction spans active atlas pages and resolves each source sheet", () => {
+  const page2 = atlasPage("page-2", { sanbornSheetAssetId: "asset-2", pageSequence: 2, sheetNumber: 2 });
+  const page3 = atlasPage("page-3", { sanbornSheetAssetId: "asset-3", pageSequence: 3, sheetNumber: 3 });
+  const otherAtlasPage = atlasPage("page-other", { atlasId: "atlas-2", sanbornSheetAssetId: "asset-other", sheetNumber: 4 });
+  const block68 = mapPiece("piece-68", { atlasPageId: page2.pageId, blockNumberText: "68" });
+  const sheet3Inset = mapPiece("piece-3a", { atlasPageId: page3.pageId, blockNumberText: "3A", sourceBBox: { minX: 0.2, minY: 0.2, maxX: 0.4, maxY: 0.46 } });
+  const sheet3Block = mapPiece("piece-3b", { atlasPageId: page3.pageId, blockNumberText: "3B" });
+  const hiddenPiece = mapPiece("piece-hidden", { atlasPageId: page2.pageId, blockNumberText: "hidden" });
+  const unplacedPiece = mapPiece("piece-unplaced", { atlasPageId: page3.pageId, blockNumberText: "unplaced" });
+  const otherAtlasPiece = mapPiece("piece-other", { atlasPageId: otherAtlasPage.pageId, blockNumberText: "other" });
+  const layers = buildOperationalMapPieceLayers({
+    atlasId: "atlas-1",
+    pages: [page2, page3, otherAtlasPage],
+    pieces: [block68, sheet3Inset, sheet3Block, hiddenPiece, unplacedPiece, otherAtlasPiece],
+    placements: [
+      placedMapPieceGeoreference(block68.pieceId, page2.pageId, 33.425, -94.047, { layerOrder: 2 }),
+      placedMapPieceGeoreference(sheet3Inset.pieceId, page3.pageId, 33.426, -94.044, { layerOrder: 1 }),
+      placedMapPieceGeoreference(sheet3Block.pieceId, page3.pageId, 33.423, -94.043, { layerOrder: 3 }),
+      placedMapPieceGeoreference(hiddenPiece.pieceId, page2.pageId, 33.421, -94.041, { isVisible: false }),
+      createDefaultMapPieceGeoreference(unplacedPiece),
+      placedMapPieceGeoreference(otherAtlasPiece.pieceId, otherAtlasPage.pageId, 33.43, -94.04),
+    ],
+    assets: [
+      sheetAsset("asset-2", { width: 5000, height: 4200, signedUrl: "https://example.test/sheet-2.png" }),
+      sheetAsset("asset-3", { width: 6000, height: 4600, signedUrl: "https://example.test/sheet-3.png" }),
+      sheetAsset("asset-other"),
+    ],
+    displayScope: "all_placed_pieces",
+    getPieceLabel: (piece) => `Piece ${piece.blockNumberText}`,
+  });
+
+  assert.deepEqual(layers.map((layer) => layer.pieceId), ["piece-3a", "piece-68", "piece-3b"]);
+  assert.equal(layers.find((layer) => layer.pieceId === "piece-68")?.sourceAssetId, "asset-2");
+  assert.equal(layers.find((layer) => layer.pieceId === "piece-68")?.imageUrl, "https://example.test/sheet-2.png");
+  assert.equal(layers.find((layer) => layer.pieceId === "piece-3a")?.sourceAssetId, "asset-3");
+  assert.equal(layers.find((layer) => layer.pieceId === "piece-3a")?.sourceImageWidth, 6000);
+  assert.equal(layers.find((layer) => layer.pieceId === "piece-3b")?.atlasPageId, "page-3");
+  assert.equal(layers.some((layer) => layer.pieceId === "piece-hidden"), false);
+  assert.equal(layers.some((layer) => layer.pieceId === "piece-unplaced"), false);
+  assert.equal(layers.some((layer) => layer.pieceId === "piece-other"), false);
+
+  const currentPageOnly = buildOperationalMapPieceLayers({
+    atlasId: "atlas-1",
+    pages: [page2, page3],
+    pieces: [block68, sheet3Inset, sheet3Block],
+    placements: [
+      placedMapPieceGeoreference(block68.pieceId, page2.pageId, 33.425, -94.047, { layerOrder: 2 }),
+      placedMapPieceGeoreference(sheet3Inset.pieceId, page3.pageId, 33.426, -94.044, { layerOrder: 1 }),
+      placedMapPieceGeoreference(sheet3Block.pieceId, page3.pageId, 33.423, -94.043, { layerOrder: 3 }),
+    ],
+    assets: [sheetAsset("asset-2"), sheetAsset("asset-3")],
+    selectedPageId: "page-3",
+    displayScope: "current_page_only",
+  });
+
+  assert.deepEqual(currentPageOnly.map((layer) => layer.pieceId), ["piece-3a", "piece-3b"]);
+});
+
+test("map piece layer helpers support cross-page selection, fit-all bounds, auto-fit gating, and signed URL dedupe", () => {
+  const page2 = atlasPage("page-2", { sanbornSheetAssetId: "asset-2", pageSequence: 2, sheetNumber: 2 });
+  const page3 = atlasPage("page-3", { sanbornSheetAssetId: "asset-3", pageSequence: 3, sheetNumber: 3 });
+  const block68 = mapPiece("piece-68", { atlasPageId: page2.pageId, blockNumberText: "68" });
+  const sheet3Inset = mapPiece("piece-3a", { atlasPageId: page3.pageId, blockNumberText: "3A" });
+  const sheet3Block = mapPiece("piece-3b", { atlasPageId: page3.pageId, blockNumberText: "3B" });
+  const layers = buildOperationalMapPieceLayers({
+    atlasId: "atlas-1",
+    pages: [page2, page3],
+    pieces: [block68, sheet3Inset, sheet3Block],
+    placements: [
+      placedMapPieceGeoreference(block68.pieceId, page2.pageId, 33.425, -94.047, { layerOrder: 1 }),
+      placedMapPieceGeoreference(sheet3Inset.pieceId, page3.pageId, 33.43, -94.04, { layerOrder: 2 }),
+      placedMapPieceGeoreference(sheet3Block.pieceId, page3.pageId, 33.42, -94.05, { layerOrder: 3 }),
+    ],
+    assets: [sheetAsset("asset-2"), sheetAsset("asset-3")],
+  });
+
+  const selection = resolveMapPiecePlacementSelection({
+    atlasId: "atlas-1",
+    pieceId: "piece-3a",
+    pages: [page2, page3],
+    pieces: [block68, sheet3Inset, sheet3Block],
+  });
+  const bounds = getMapPieceLayerBounds(layers);
+
+  assert.equal(selection?.page.pageId, "page-3");
+  assert.equal(selection?.sourceAssetId, "asset-3");
+  assert.equal(resolveMapPiecePlacementSelection({ atlasId: "atlas-2", pieceId: "piece-3a", pages: [page2, page3], pieces: [sheet3Inset] }), null);
+  assert.deepEqual(getMapPieceLayerSourceAssetIds(layers), ["asset-2", "asset-3"]);
+  assert.deepEqual(bounds, {
+    northLatitude: 33.431,
+    southLatitude: 33.419,
+    eastLongitude: -94.039,
+    westLongitude: -94.051,
+  });
+  assert.equal(
+    shouldAutoFitMapPieceOverview({
+      isMapPlacementActive: true,
+      savedVisiblePieceCount: layers.length,
+      hasFitBounds: Boolean(bounds),
+      autoFitAlreadyApplied: false,
+      userMovedMap: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldAutoFitMapPieceOverview({
+      isMapPlacementActive: true,
+      savedVisiblePieceCount: layers.length,
+      hasFitBounds: Boolean(bounds),
+      autoFitAlreadyApplied: true,
+      userMovedMap: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAutoFitMapPieceOverview({
+      isMapPlacementActive: true,
+      savedVisiblePieceCount: layers.length,
+      hasFitBounds: Boolean(bounds),
+      autoFitAlreadyApplied: false,
+      userMovedMap: true,
+    }),
+    false,
+  );
+});
+
 test("map piece geographic corner validation rejects unusable quadrilaterals", () => {
   const validSkewed = {
     northwest: { latitude: 33.43, longitude: -94.055 },
@@ -879,9 +1093,13 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(pageComponent, /workflow\?: string/);
   assert.match(pageComponent, /initialSelection=\{\{[\s\S]*workflowStep: params\.workflow[\s\S]*pieceId: params\.piece[\s\S]*assetId: params\.sheet/s);
   assert.match(studioComponent, /pieceLayers=\{mapPieceLayers\}/);
-  assert.match(studioComponent, /mapPieceLayers = selectedMapPieceLayer && hasOperationalMapPiecePlacement\(selectedMapPieceLayer\) \? \[selectedMapPieceLayer\] : \[\]/);
+  assert.match(studioComponent, /buildOperationalMapPieceLayers\(\{/);
+  assert.match(studioComponent, /displayScope: "all_placed_pieces"/);
+  assert.match(studioComponent, /pieceDisplayScope === "current_page_only"/);
+  assert.match(studioComponent, /Fit all placed pieces/);
   assert.match(studioComponent, /showReferenceSheetAlignment && hasPlacedHistoricalSheets/);
   assert.match(studioComponent, /onPieceTransformCommit=\{\(pieceId, patch\) => commitMapPieceGeoreference\(pieceId, patch\)\}/);
+  assert.match(studioComponent, /onSelectPiece=\{selectMapPieceForPlacement\}/);
   assert.match(leafletComponent, /function createMaskedPieceImageUrl/);
   assert.match(leafletComponent, /calculateMapPieceMaskRasterPlan/);
   assert.match(leafletComponent, /document\.createElement\("canvas"\)/);
@@ -891,6 +1109,8 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(leafletComponent, /URL\.revokeObjectURL/);
   assert.match(leafletComponent, /createMapPieceInteractiveDraft\(start\.piece/);
   assert.match(leafletComponent, /finishMapPieceInteractiveDraft\(latestRef\.current\.layer, nextDraft, invalidDragDiagnostic\)/);
+  assert.match(leafletComponent, /current\.mode !== "edit_historical_sheets" \|\| !current\.isSelected/);
+  assert.match(leafletComponent, /element\.style\.pointerEvents = "auto"/);
   assert.doesNotMatch(leafletComponent, /draft = normalizeSanbornMapPieceGeoreference/);
   assert.doesNotMatch(leafletComponent, /supabase|upload/i);
 });
@@ -1210,8 +1430,8 @@ test("unplaced map placement uses a plain TileLayer path until piece or referenc
 
   assert.match(studioComponent, /const hasPlacedHistoricalSheets = historicalSheetLayers\.some/);
   assert.match(studioComponent, /const mapSheetLayers = showReferenceSheetAlignment && hasPlacedHistoricalSheets/);
-  assert.match(studioComponent, /const mapPieceLayers = selectedMapPieceLayer && hasOperationalMapPiecePlacement\(selectedMapPieceLayer\) \? \[selectedMapPieceLayer\] : \[\]/);
-  assert.match(studioComponent, /plainTileOnly=\{!selectedMapPiecePlaced && !\(showReferenceSheetAlignment && hasPlacedHistoricalSheets\)\}/);
+  assert.match(studioComponent, /const mapPieceLayers = useMemo/);
+  assert.match(studioComponent, /plainTileOnly=\{mapPieceLayers\.length === 0 && !\(showReferenceSheetAlignment && hasPlacedHistoricalSheets\)\}/);
   assert.match(studioComponent, /pieceLayers=\{mapPieceLayers\}/);
   assert.match(studioComponent, /sheetLayers=\{mapSheetLayers\}/);
   assert.match(leafletComponent, /const sheetLayers = props\.plainTileOnly \? \[\] : props\.sheetLayers \?\? \[\]/);

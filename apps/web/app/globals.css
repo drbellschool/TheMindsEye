@@ -2495,7 +2495,8 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__gps-workflow,
-.minimal-sanborn-gps__workflow-select {
+.minimal-sanborn-gps__workflow-select,
+.minimal-sanborn-gps__display-scope {
   display: flex;
   flex-wrap: wrap;
   min-width: 0;
@@ -2503,13 +2504,15 @@ body:has(.minimal-sanborn-gps) {
   gap: 5px;
 }
 
-.minimal-sanborn-gps__workflow-select span {
+.minimal-sanborn-gps__workflow-select span,
+.minimal-sanborn-gps__display-scope span {
   color: rgba(246, 231, 203, 0.72);
   font-size: 0.68rem;
   white-space: nowrap;
 }
 
-.minimal-sanborn-gps__workflow-select select {
+.minimal-sanborn-gps__workflow-select select,
+.minimal-sanborn-gps__display-scope select {
   height: 30px;
   max-width: 100%;
   border: 1px solid rgba(226, 190, 126, 0.28);
