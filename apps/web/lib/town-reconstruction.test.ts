@@ -19,6 +19,13 @@ import {
 } from "./town-reconstruction.ts";
 import type { StudioSheetAsset, StudioSourceOption, StudioTownPackage } from "./historical-map-studio.ts";
 import type { SanbornAtlasPageRecord, SanbornAtlasRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
+import {
+  calculateTownIndexCompletion,
+  calculateTownIndexRegionProgress,
+  compareSheetReferences,
+  validateTownIndexRegionPolygon,
+  type SanbornTownIndexRegionRecord,
+} from "./sanborn-town-index.ts";
 
 function town(overrides: Partial<StudioTownPackage> = {}): StudioTownPackage {
   return {
@@ -169,6 +176,39 @@ function placement(pieceId: string, overrides: Partial<SanbornMapPieceGeoreferen
   });
 }
 
+function indexRegion(regionId: string, overrides: Partial<SanbornTownIndexRegionRecord> = {}): SanbornTownIndexRegionRecord {
+  return {
+    rowId: `${regionId}-row`,
+    regionId,
+    townPackageId: "town-1",
+    atlasRowId: "atlas-row-1",
+    atlasId: "atlas-1",
+    indexAtlasPageRowId: "index-page-row",
+    indexAtlasPageId: "index-page",
+    linkedAtlasPageRowId: null,
+    linkedAtlasPageId: null,
+    linkedSheetAssetRowId: null,
+    linkedSheetAssetId: null,
+    regionLabel: regionId,
+    sheetReference: null,
+    regionType: "sheet_region",
+    sourcePolygon: [
+      { x: 0.1, y: 0.1 },
+      { x: 0.4, y: 0.1 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.1, y: 0.4 },
+    ],
+    workflowStatus: "not_started",
+    progressStatus: "not_started",
+    reviewStatus: "unknown",
+    evidenceClassification: "unknown",
+    notes: null,
+    updatedAt: null,
+    isPersisted: true,
+    ...overrides,
+  };
+}
+
 test("reconstruction workflow exposes the ordered town-edition-sheet-block stages", () => {
   assert.deepEqual(
     reconstructionWorkflowSteps.map((step) => step.label),
@@ -177,7 +217,7 @@ test("reconstruction workflow exposes the ordered town-edition-sheet-block stage
       "Source Record",
       "Town Index",
       "Sheet Inventory",
-      "Map Pieces / Blocks",
+      "Map Pieces",
       "Map Placement",
       "Building Reconstruction",
       "People & Activity",
@@ -222,6 +262,7 @@ test("URL context preserves town, edition, sheet, page, piece, and workflow alia
     atlasPageId: "page-2",
     sheetAssetId: "asset-2",
     mapPieceId: "piece-68",
+    indexRegionId: "index-region-2",
     blockId: "68",
     workflow: "piece_inventory",
   });
@@ -235,6 +276,7 @@ test("URL context preserves town, edition, sheet, page, piece, and workflow alia
   assert.match(href, /sheetAssetId=asset-2/);
   assert.match(href, /piece=piece-68/);
   assert.match(href, /mapPieceId=piece-68/);
+  assert.match(href, /indexRegionId=index-region-2/);
 });
 
 test("sheet and map-piece progress is based on explicit completed work", () => {
@@ -312,6 +354,100 @@ test("Town Index designation and region navigation summary use index page metada
   assert.equal(summary.regions[0]?.atlasPageId, "page-2");
 });
 
+test("Town Index region polygons reject invalid normalized geometry", () => {
+  assert.equal(
+    validateTownIndexRegionPolygon([
+      { x: 0.1, y: 0.1 },
+      { x: 0.4, y: 0.1 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.1, y: 0.4 },
+    ]).ok,
+    true,
+  );
+  assert.equal(
+    validateTownIndexRegionPolygon([
+      { x: 0.1, y: 0.1 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.4, y: 0.1 },
+      { x: 0.1, y: 0.4 },
+    ]).ok,
+    false,
+  );
+  assert.equal(
+    validateTownIndexRegionPolygon([
+      { x: 0.1, y: 0.1 },
+      { x: 1.4, y: 0.1 },
+      { x: 0.4, y: 0.4 },
+    ]).ok,
+    false,
+  );
+});
+
+test("durable Town Index regions sort non-sequential references and aggregate completion", () => {
+  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, displayLabel: "Town Index", sanbornSheetAssetId: "index-asset" });
+  const page2 = page("page-2", { sheetNumber: 2, sanbornSheetAssetId: "asset-2" });
+  const page2A = page("page-2a", { sheetNumber: null, displayLabel: "Sheet 2A", sanbornSheetAssetId: "asset-2a" });
+  const page10 = page("page-10", { sheetNumber: 10, sanbornSheetAssetId: "asset-10" });
+  const placedPiece = piece("piece-68", { atlasPageId: "page-2" });
+  const reviewedPiece = piece("piece-2a", { atlasPageId: "page-2a", inventoryStatus: "reviewed", reviewStatus: "verified_fact" });
+  const regions = [
+    indexRegion("east", { regionLabel: "East inset", sheetReference: "East inset", workflowStatus: "missing", progressStatus: "missing" }),
+    indexRegion("ten", { regionLabel: "Sheet 10", sheetReference: "10", linkedAtlasPageId: "page-10", linkedAtlasPageRowId: "page-10-row", linkedSheetAssetId: "asset-10", linkedSheetAssetRowId: "asset-10-row" }),
+    indexRegion("two-a", { regionLabel: "Sheet 2A", sheetReference: "2A", linkedAtlasPageId: "page-2a", linkedAtlasPageRowId: "page-2a-row", linkedSheetAssetId: "asset-2a", linkedSheetAssetRowId: "asset-2a-row", workflowStatus: "reviewed", progressStatus: "reviewed" }),
+    indexRegion("two", { regionLabel: "Sheet 2", sheetReference: "2", linkedAtlasPageId: "page-2", linkedAtlasPageRowId: "page-2-row", linkedSheetAssetId: "asset-2", linkedSheetAssetRowId: "asset-2-row" }),
+  ];
+  const summary = buildTownIndexSummary({
+    pages: [indexPage, page10, page2A, page2],
+    assets: [asset("index-asset"), asset("asset-10"), asset("asset-2a"), asset("asset-2")],
+    pieces: [placedPiece, reviewedPiece],
+    placements: [placement("piece-68", { atlasPageId: "page-2" }), placement("piece-2a", { atlasPageId: "page-2a", placementStatus: "reviewed" })],
+    indexRegions: regions,
+  });
+
+  assert.deepEqual(summary.regions.map((region) => region.sheetReference), ["2", "2A", "10", "East inset"]);
+  assert.equal(compareSheetReferences("2", "10") < 0, true);
+  assert.equal(summary.completion.totalRegions, 4);
+  assert.equal(summary.completion.linkedRegions, 3);
+  assert.equal(summary.completion.missingRegions, 1);
+  assert.equal(summary.completion.reviewedRegions, 1);
+  assert.equal(summary.completion.completionPercent < 100, true);
+});
+
+test("Town Index region progress treats missing and conflict states as unresolved work", () => {
+  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, sanbornSheetAssetId: "index-asset" });
+  const page2 = page("page-2", { sheetNumber: 2, sanbornSheetAssetId: "asset-2" });
+  const good = calculateTownIndexRegionProgress({
+    region: indexRegion("good", { linkedAtlasPageId: "page-2", linkedAtlasPageRowId: "page-2-row", linkedSheetAssetId: "asset-2", linkedSheetAssetRowId: "asset-2-row" }),
+    pages: [indexPage, page2],
+    assets: [asset("index-asset"), asset("asset-2")],
+    pieces: [piece("piece-68", { atlasPageId: "page-2" })],
+    placements: [placement("piece-68", { atlasPageId: "page-2" })],
+  });
+  const missing = calculateTownIndexRegionProgress({
+    region: indexRegion("missing", { workflowStatus: "missing", progressStatus: "missing" }),
+    pages: [indexPage, page2],
+    assets: [asset("index-asset"), asset("asset-2")],
+    pieces: [],
+    placements: [],
+  });
+  const conflict = calculateTownIndexRegionProgress({
+    region: indexRegion("conflict", { workflowStatus: "conflict", progressStatus: "conflict", linkedAtlasPageId: "page-2", linkedSheetAssetId: "wrong-asset" }),
+    pages: [indexPage, page2],
+    assets: [asset("index-asset"), asset("asset-2")],
+    pieces: [],
+    placements: [],
+  });
+  const completion = calculateTownIndexCompletion([good, missing, conflict]);
+
+  assert.equal(good.status, "placed");
+  assert.equal(missing.status, "missing");
+  assert.equal(missing.completionPercent, 0);
+  assert.equal(conflict.status, "conflict");
+  assert.equal(completion.conflictRegions, 1);
+  assert.equal(completion.missingRegions, 1);
+  assert.equal(completion.completionPercent < good.completionPercent, true);
+});
+
 test("work queue is generated from incomplete records and removes completed placement tasks", () => {
   const missingSourceSheet = calculateSheetProgress({
     asset: asset("asset-2", { sourceRecordId: null }),
@@ -327,7 +463,14 @@ test("work queue is generated from incomplete records and removes completed plac
     atlasId: "atlas-1",
     sheets: [missingSourceSheet],
     pieces: [unplacedPiece, placedPiece],
-    index: { indexPage: null, indexAsset: null, regions: [], unresolvedRegionCount: 0 },
+    index: {
+      indexPage: null,
+      indexAsset: null,
+      regions: [],
+      regionProgress: [],
+      completion: calculateTownIndexCompletion([]),
+      unresolvedRegionCount: 0,
+    },
     sourceRecordCount: 1,
   });
 
@@ -335,6 +478,36 @@ test("work queue is generated from incomplete records and removes completed plac
   assert.equal(tasks.some((task) => task.label === "Add source record for Sheet 2"), true);
   assert.equal(tasks.some((task) => task.label === "Place Block 68"), true);
   assert.equal(tasks.some((task) => task.label === "Place Block 69"), false);
+});
+
+test("work queue generates Town Index region tasks and removes reviewed regions", () => {
+  const regions = [
+    { id: "conflict", label: "Sheet 2", sheetReference: "2", sheetNumber: 2, atlasPageId: "page-2", sheetAssetId: "asset-2", status: "conflict" as const, completionPercent: 30, warnings: ["Linked page and sheet conflict"] },
+    { id: "missing", label: "Sheet 4", sheetReference: "4", sheetNumber: 4, atlasPageId: null, sheetAssetId: null, status: "missing" as const, completionPercent: 0, warnings: ["Marked missing"] },
+    { id: "unlinked", label: "East inset", sheetReference: "East inset", sheetNumber: null, atlasPageId: null, sheetAssetId: null, status: "not_started" as const, completionPercent: 15, warnings: ["No linked sheet or page"] },
+    { id: "reviewed", label: "Business District", sheetReference: "Business District", sheetNumber: null, atlasPageId: "page-7", sheetAssetId: "asset-7", status: "reviewed" as const, completionPercent: 100, warnings: [] },
+  ];
+  const tasks = buildReconstructionWorkQueue({
+    townPackageId: "town-1",
+    mapYear: 1885,
+    atlasId: "atlas-1",
+    sheets: [],
+    pieces: [],
+    index: {
+      indexPage: page("index-page", { pageType: "graphic_index" }),
+      indexAsset: asset("index-asset"),
+      regions,
+      regionProgress: [],
+      completion: calculateTownIndexCompletion([]),
+      unresolvedRegionCount: 3,
+    },
+    sourceRecordCount: 1,
+  });
+
+  assert.equal(tasks.some((task) => task.label === "Resolve index conflict for Sheet 2"), true);
+  assert.equal(tasks.some((task) => task.label === "Upload source for missing region Sheet 4"), true);
+  assert.equal(tasks.some((task) => task.label === "Link index region East inset"), true);
+  assert.equal(tasks.some((task) => task.label.includes("Business District")), false);
 });
 
 test("migration 0013 extends source_records and child source linkage without creating a competing source table", () => {
@@ -362,12 +535,56 @@ test("migration 0013 extends source_records and child source linkage without cre
   assert.match(migration, /grant execute on function public\.set_source_record_internal_source_id\(\) to service_role/);
 });
 
+test("migration 0014 stores durable Town Index regions with service-role-only security", () => {
+  const migration = readFileSync("../../supabase/migrations/0014_town_index_regions.sql", "utf8");
+
+  assert.match(migration, /create table if not exists public\.sanborn_town_index_regions/);
+  assert.match(migration, /region_id text not null unique/);
+  assert.match(migration, /source_polygon jsonb not null/);
+  assert.match(migration, /constraint sanborn_town_index_regions_polygon_valid/);
+  assert.match(migration, /public\.sanborn_index_region_polygon_is_valid\(source_polygon\)/);
+  assert.match(migration, /references public\.town_packages\(id\) on delete cascade/);
+  assert.match(migration, /references public\.sanborn_atlases\(id\) on delete cascade/);
+  assert.match(migration, /references public\.sanborn_atlas_pages\(id\) on delete set null/);
+  assert.match(migration, /security invoker/i);
+  assert.doesNotMatch(migration, /security definer/i);
+  assert.match(migration, /alter table public\.sanborn_town_index_regions enable row level security/);
+  assert.match(migration, /revoke all on table public\.sanborn_town_index_regions from PUBLIC, anon, authenticated/);
+  assert.match(migration, /grant select, insert, update, delete on table public\.sanborn_town_index_regions to service_role/);
+  assert.match(migration, /revoke execute on function public\.save_sanborn_town_index_region\(uuid, text, jsonb\) from PUBLIC, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.save_sanborn_town_index_region\(uuid, text, jsonb\) to service_role/);
+  assert.match(migration, /revoke execute on function public\.delete_sanborn_town_index_region\(uuid, text, text\) from PUBLIC, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.delete_sanborn_town_index_region\(uuid, text, text\) to service_role/);
+  assert.match(migration, /p_town_package_id/);
+  assert.match(migration, /where atlas_row\.atlas_id = p_atlas_id\s+and atlas_row\.town_package_id = p_town_package_id/);
+  assert.match(migration, /where page_row\.page_id = v_linked_page_id\s+and page_row\.atlas_id = atlas_scope\.id/);
+  assert.match(migration, /asset_page_row\.atlas_id = atlas_scope\.id/);
+  assert.match(migration, /Linked Sanborn sheet asset must be assigned to the selected atlas/);
+  assert.match(migration, /Linked atlas page must belong to the selected atlas/);
+});
+
+test("Town Index region API validates polygons and keeps the service-role key server-side", () => {
+  const route = readFileSync("./app/api/community/historical-map-studio/town-index-regions/route.ts", "utf8");
+
+  assert.match(route, /requireMapStudioWriteAccess/);
+  assert.match(route, /validateTownIndexRegionPolygon/);
+  assert.match(route, /Town Index region type is not allowed/);
+  assert.match(route, /Town Index region status is not allowed/);
+  assert.match(route, /save_sanborn_town_index_region/);
+  assert.match(route, /delete_sanborn_town_index_region/);
+  assert.match(route, /townPackageId/);
+  assert.match(route, /atlasId/);
+  assert.doesNotMatch(route, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+});
+
 test("demo fallback includes reconstruction overview and durable LOC provenance", () => {
   const demo = JSON.parse(readFileSync("./lib/demo-data/community.json", "utf8")) as {
     townReconstruction?: {
       demoLabel?: string;
       sourceIdentity?: Record<string, string>;
-      sheetInventory?: Array<{ sheetNumber: number; sourceRecordId: string | null }>;
+      townIndex?: { regions?: Array<{ sheetReference: string; status: string }> };
+      sheetInventory?: Array<{ sheetNumber: number | null; sheetReference: string; sourceRecordId: string | null }>;
       nextTasks?: string[];
     };
   };
@@ -377,9 +594,12 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
   assert.equal(demo.townReconstruction?.sourceIdentity?.repository, "Library of Congress");
   assert.equal(demo.townReconstruction?.sourceIdentity?.collection, "Sanborn Fire Insurance Maps");
   assert.match(demo.townReconstruction?.sourceIdentity?.citation ?? "", /Standard historical citation|Sanborn Map Company/);
-  assert.deepEqual(demo.townReconstruction?.sheetInventory?.map((sheet) => sheet.sheetNumber), [2, 3, 7]);
+  assert.deepEqual(demo.townReconstruction?.townIndex?.regions?.map((region) => region.sheetReference), ["2", "3", "7", "2A", "10", "East inset"]);
+  assert.deepEqual(new Set(demo.townReconstruction?.townIndex?.regions?.map((region) => region.status)), new Set(["missing", "not_started", "started", "placed", "reviewed", "conflict"]));
+  assert.deepEqual(demo.townReconstruction?.sheetInventory?.map((sheet) => sheet.sheetReference), ["2", "2A", "3", "7", "10"]);
   assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.sourceRecordId === null), true);
   assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Place Block 68/.test(task)), true);
+  assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Resolve duplicate link/.test(task)), true);
 });
 
 test("source-record creation route uses service-role access and existing source_records storage", () => {
@@ -422,24 +642,27 @@ test("shared ReconstructionContextBar is wired across Map, Buildings, People, an
 
 test("Historical Map Studio navigator uses reconstruction workflow labels", () => {
   const navigator = readFileSync("./components/SanbornAtlasNavigator.tsx", "utf8");
+  const studio = readFileSync("./components/HistoricalMapStudio.tsx", "utf8");
+  const activeShell = studio.slice(studio.indexOf("minimal-sanborn-gps--station-shell"), studio.indexOf("Legacy pre-station"));
 
   for (const label of [
     "Town & Edition",
     "Source Record",
     "Town Index",
     "Sheet Inventory",
-    "Map Pieces / Blocks",
+    "Map Pieces",
     "Map Placement",
-    "Building Reconstruction",
-    "People & Activity",
-    "Evidence Review",
   ]) {
     assert.match(navigator, new RegExp(label.replace(/[&/]/g, (match) => `\\${match}`)));
   }
 
-  assert.match(navigator, /ReconstructionRailSummary/);
-  assert.match(navigator, /TownIndexPanel/);
-  assert.match(navigator, /SheetInventoryPanel/);
-  assert.match(navigator, /PieceWorkloadPanel/);
-  assert.match(navigator, /WorkQueuePanel/);
+  assert.match(navigator, /Town Reconstruction station rail/);
+  assert.match(navigator, /sanbornAtlasWorkflowSteps/);
+  assert.doesNotMatch(navigator, /Building Reconstruction/);
+  assert.doesNotMatch(navigator, /People & Activity/);
+  assert.doesNotMatch(navigator, /Evidence Review/);
+  assert.match(activeShell, /sanborn-atlas-workflow--stations/);
+  assert.match(activeShell, /sanborn-station-inspector/);
+  assert.match(activeShell, /renderStationWorkspace\(\)/);
+  assert.match(activeShell, /renderInspectorBody\(\)/);
 });

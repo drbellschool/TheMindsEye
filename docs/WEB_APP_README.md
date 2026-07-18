@@ -78,7 +78,7 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 
 ## Deployment Checklist
 
-- Supabase migrations `0001` through `0013` have been applied.
+- Supabase migrations `0001` through `0014` have been applied.
 - `supabase/seed.sql` has been run if seed review data is desired.
 - Private Storage bucket `sanborn-sheets` exists.
 - Vercel has the public Supabase URL and publishable key.
@@ -90,7 +90,9 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - Georeference Sheets opens as the default Historical Map Studio workflow.
 - Historical Map Studio shows the Town Reconstruction context header with town, edition, sheet, block/piece, progress, Source Info, and Map/Buildings/People/Sources tabs.
 - Source Info shows durable source identity and can create a Library of Congress source record when migration `0013` is present.
-- The Town Index, Sheet Inventory, Map Pieces / Blocks, and Map Placement steps preserve atlas/page/piece selection through URL context.
+- The Historical Map Studio station rail contains only Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, and Map Placement.
+- The Town Index mission map can save, reload, relink, and delete durable regions when migration `0014` is present.
+- The Town Index, Sheet Inventory, Map Pieces, and Map Placement stations preserve atlas/page/piece/index-region selection through URL context.
 - Unplaced Sanborn sheets can be added directly to the modern map without using the optional prep canvas.
 - Georeference Sheets `Edit historical sheets` mode can move, corner-warp, rotate, scale, skew, flip, hide, lock, reorder, save, and reload individual sheets over the modern basemap.
 - Modern Overlay renders the saved independent geographic sheet layers.

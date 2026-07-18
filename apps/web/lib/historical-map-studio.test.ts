@@ -535,8 +535,8 @@ test("minimal Map placement workflow renders upload controls inside the early-re
 test("minimal Map placement toolbar uses grouped wrapping rows and gates placement controls", () => {
   const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
-  const minimalStart = component.indexOf('className="minimal-sanborn-gps"');
-  const legacyStart = component.indexOf('className="historical-map-studio"');
+  const minimalStart = component.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyStart = component.indexOf("Legacy pre-station");
   const minimalInterface = component.slice(minimalStart, legacyStart);
   const toolbarCssStart = css.indexOf(".minimal-sanborn-gps__toolbar {");
   const toolbarCssEnd = css.indexOf(".minimal-sanborn-gps__toolbar-row,", toolbarCssStart);
@@ -544,17 +544,18 @@ test("minimal Map placement toolbar uses grouped wrapping rows and gates placeme
 
   assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--primary/);
   assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps/);
   assert.match(minimalInterface, /minimal-sanborn-gps__status-row/);
   assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__workflow-switch/);
   assert.match(minimalInterface, /minimal-sanborn-gps__gps-workflow/);
   assert.match(minimalInterface, /Back to \{sanbornAtlasWorkflowSteps\.find/);
   assert.match(minimalInterface, /aria-label="Atlas workflow step"/);
-  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--gps"/s);
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Place selected piece/);
-  assert.match(minimalInterface, /Advanced whole-sheet reference[\s\S]*Place sheet/s);
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--gps[\s\S]*Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
-  assert.match(minimalInterface, /\{isGpsAlignmentStep \? \(\s*<>\s*\{!selectedMapPiece/s);
+  assert.match(minimalInterface, /sanborn-station-inspector/);
+  assert.match(minimalInterface, /renderInspectorBody\(\)/);
+  assert.match(component, /Place selected piece/);
+  assert.match(component, /Advanced whole-sheet reference[\s\S]*Place sheet/s);
+  assert.match(component, /Center on \{initialData\.activeTownPackage\?\.name \?\? "town"\}/);
+  assert.match(minimalInterface, /renderStationWorkspace\(\)/);
+  assert.match(component, /renderMapPlacementWorkspace/);
   assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
   assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
   assert.doesNotMatch(toolbarCss, /grid-auto-flow/);
@@ -577,7 +578,6 @@ test("missing Supabase warning names preview admin configuration without exposin
 test("draft atlas pages block piece inventory until page assignments are saved", () => {
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const workbenchComponent = readFileSync("components/SanbornPageWorkbench.tsx", "utf8");
-  const navigatorComponent = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
 
   assert.match(studioComponent, /pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean\(selectedAtlasPage && !selectedAtlasPage\.isPersisted\)/);
   assert.match(studioComponent, /if \(!selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\) \{\s*setSaveStatus\("error"\);\s*setSaveMessage\("Save atlas page assignments before saving map pieces\."\);/s);
@@ -593,9 +593,8 @@ test("draft atlas pages block piece inventory until page assignments are saved",
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < 3\}[\s\S]*Finish polygon/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length === 0\}[\s\S]*Clear draft/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !page\}[\s\S]*Save pieces/);
-  assert.match(navigatorComponent, /Draft assignment/);
-  assert.match(navigatorComponent, /Saved page/);
-  assert.match(navigatorComponent, /Save pages and continue/);
+  assert.match(studioComponent, /Save pages and continue/);
+  assert.match(studioComponent, /sanborn-station-inspector/);
 });
 
 test("historical map studio uses compact chrome and sticky atlas actions", () => {
@@ -608,13 +607,45 @@ test("historical map studio uses compact chrome and sticky atlas actions", () =>
   assert.match(css, /\.community-shell--studio-focus \.community-shell__frame\s*\{[\s\S]*height: calc\(100vh - 12px\);/);
   assert.match(css, /\.community-shell--studio-focus \.community-shell__frame::before\s*\{\s*display: none;\s*\}/);
   assert.match(css, /\.community-shell--studio-focus \.community-shell__main\s*\{[\s\S]*overflow: hidden;/);
-  assert.match(navigator, /sanborn-atlas-navigator__scroll/);
-  assert.match(navigator, /sanborn-atlas-navigator__footer/);
+  assert.match(navigator, /Town Reconstruction station rail/);
+  assert.match(navigator, /sanborn-atlas-navigator__steps/);
   assert.match(css, /\.sanborn-atlas-navigator\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto;/);
-  assert.match(css, /\.sanborn-atlas-navigator__scroll\s*\{[\s\S]*overflow: auto;/);
-  assert.match(css, /\.sanborn-atlas-navigator__footer\s*\{[\s\S]*border-top:/);
-  assert.match(css, /\.sanborn-atlas-workflow\s*\{[\s\S]*grid-template-columns: clamp\(320px, 28vw, 380px\) minmax\(0, 1fr\);/);
-  assert.match(css, /\.sanborn-page-workbench\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\) clamp\(260px, 24vw, 330px\);/);
+  assert.match(css, /\.sanborn-atlas-navigator__steps\s*\{[\s\S]*overflow: auto;/);
+  assert.match(css, /\.sanborn-atlas-workflow--stations\s*\{[\s\S]*grid-template-columns: clamp\(190px, 16vw, 230px\) minmax\(0, 1fr\) clamp\(300px, 24vw, 360px\);/);
+  assert.match(css, /\.sanborn-station-inspector\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);/);
+  assert.match(css, /\.sanborn-page-workbench--center-only\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+});
+
+test("Historical Map Studio uses six reconstruction stations with right-side inspectors", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+  const missionMap = readFileSync("components/TownIndexMissionMap.tsx", "utf8");
+  const activeShellStart = studioComponent.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyShellStart = studioComponent.indexOf("Legacy pre-station");
+  const activeShell = studioComponent.slice(activeShellStart, legacyShellStart > activeShellStart ? legacyShellStart : undefined);
+
+  assert.match(navigator, /Town & Edition/);
+  assert.match(navigator, /Source Record/);
+  assert.match(navigator, /Town Index/);
+  assert.match(navigator, /Sheet Inventory/);
+  assert.match(navigator, /Map Pieces/);
+  assert.match(navigator, /Map Placement/);
+  assert.doesNotMatch(navigator, /Building Reconstruction/);
+  assert.doesNotMatch(navigator, /People & Activity/);
+  assert.doesNotMatch(navigator, /Evidence Review/);
+  assert.match(activeShell, /sanborn-station-workspace/);
+  assert.match(activeShell, /sanborn-station-inspector/);
+  assert.match(studioComponent, /Save atlas/);
+  assert.match(activeShell, /sanborn-station-inspector__close/);
+  assert.match(studioComponent, /Back to Town Index/);
+  assert.match(studioComponent, /function renderInspectorBody/);
+  assert.match(studioComponent, /function renderTownIndexWorkspace/);
+  assert.match(studioComponent, /TownIndexMissionMap/);
+  assert.match(missionMap, /Manual Town Index region editor/);
+  assert.match(missionMap, /mode === "draw"/);
+  assert.match(missionMap, /mode === "move"/);
+  assert.match(missionMap, /onKeyDown/);
+  assert.match(missionMap, /validateTownIndexRegionPolygon/);
 });
 
 test("map piece saves restore selected page, piece, workflow, and source sheet after refresh", () => {
@@ -627,7 +658,7 @@ test("map piece saves restore selected page, piece, workflow, and source sheet a
   assert.match(studioComponent, /setSelectedMapPieceId\(nextPieceId\)/);
   assert.match(studioComponent, /setAtlasWorkflowStep\(pendingSelection\.workflowStep\)/);
   assert.match(studioComponent, /pendingStudioSelectionRef\.current = \{\s*atlasId: selectedAtlasPage\.atlasId,\s*pageId: selectedAtlasPage\.pageId,\s*pieceId: selectedMapPieceId \|\| piecesToSave\[0\]\?\.pieceId,\s*assetId: selectedAtlasPage\.sanbornSheetAssetId,\s*workflowStep: atlasWorkflowStep,/s);
-  assert.match(studioComponent, /onSelectPage=\{\(pageId\) => \{[\s\S]*setSelectedAssetId\(nextPage\.sanbornSheetAssetId\);[\s\S]*changeAtlasWorkflowStep\("piece_inventory"\);/);
+  assert.match(studioComponent, /function selectAtlasPage\(pageId: string, nextStep: SanbornAtlasWorkflowStep = atlasWorkflowStep\)/);
 });
 
 test("map piece placement helpers keep piece placement independent from source sheets", () => {

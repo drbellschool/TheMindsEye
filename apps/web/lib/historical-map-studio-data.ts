@@ -33,6 +33,12 @@ import {
   type SanbornMapPieceGeoreference,
 } from "./sanborn-map-piece-georeference.ts";
 import {
+  normalizeTownIndexRegionType,
+  normalizeTownIndexStatus,
+  validateTownIndexRegionPolygon,
+  type SanbornTownIndexRegionRecord,
+} from "./sanborn-town-index.ts";
+import {
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
   isControlledSanbornStoragePath,
@@ -287,6 +293,26 @@ type ControlPointRow = {
   updated_at: string | null;
 };
 
+type TownIndexRegionRow = {
+  id: string;
+  region_id: string;
+  town_package_id: string;
+  atlas_id: string;
+  index_atlas_page_id: string;
+  linked_atlas_page_id: string | null;
+  linked_sheet_asset_id: string | null;
+  region_label: string;
+  sheet_reference: string | null;
+  region_type: string | null;
+  source_polygon: unknown;
+  workflow_status: string | null;
+  progress_status: string | null;
+  review_status: string | null;
+  evidence_classification: string | null;
+  notes: string | null;
+  updated_at: string | null;
+};
+
 export type LoadHistoricalMapStudioOptions = {
   townPackageId?: string | null;
   mapYear?: string | number | null;
@@ -319,6 +345,7 @@ function createEmptyState(input: {
     placements: [],
     sheetGeoreferences: [],
     mapPieceGeoreferences: [],
+    townIndexRegions: [],
     geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
     atlasInventory: createEmptySanbornAtlasInventoryState({ warningMessage: input.warningMessage }),
@@ -781,6 +808,59 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
   return { placements, invalidCount };
 }
 
+function mapTownIndexRegions(
+  rows: TownIndexRegionRow[],
+  atlasInventory: Awaited<ReturnType<typeof loadSanbornAtlasInventory>>,
+  assets: StudioSheetAsset[],
+): { regions: SanbornTownIndexRegionRecord[]; invalidCount: number } {
+  const atlasByRowId = new Map(atlasInventory.atlases.map((atlas) => [atlas.rowId, atlas]));
+  const pageByRowId = new Map(atlasInventory.pages.map((page) => [page.rowId, page]));
+  const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
+  let invalidCount = 0;
+
+  const regions = rows
+    .map((row) => {
+      const atlas = atlasByRowId.get(row.atlas_id);
+      const indexPage = pageByRowId.get(row.index_atlas_page_id);
+      const linkedPage = row.linked_atlas_page_id ? pageByRowId.get(row.linked_atlas_page_id) ?? null : null;
+      const linkedAsset = row.linked_sheet_asset_id ? assetByRowId.get(row.linked_sheet_asset_id) ?? null : null;
+      const polygon = validateTownIndexRegionPolygon(row.source_polygon);
+
+      if (!atlas || !indexPage || !polygon.ok) {
+        invalidCount += 1;
+        return null;
+      }
+
+      return {
+        rowId: row.id,
+        regionId: row.region_id,
+        townPackageId: row.town_package_id,
+        atlasRowId: row.atlas_id,
+        atlasId: atlas.atlasId,
+        indexAtlasPageRowId: row.index_atlas_page_id,
+        indexAtlasPageId: indexPage.pageId,
+        linkedAtlasPageRowId: row.linked_atlas_page_id,
+        linkedAtlasPageId: linkedPage?.pageId ?? null,
+        linkedSheetAssetRowId: row.linked_sheet_asset_id,
+        linkedSheetAssetId: linkedAsset?.assetId ?? linkedPage?.sanbornSheetAssetId ?? null,
+        regionLabel: row.region_label,
+        sheetReference: row.sheet_reference,
+        regionType: normalizeTownIndexRegionType(row.region_type),
+        sourcePolygon: polygon.polygon,
+        workflowStatus: normalizeTownIndexStatus(row.workflow_status),
+        progressStatus: normalizeTownIndexStatus(row.progress_status),
+        reviewStatus: normalizeReviewClassification(row.review_status),
+        evidenceClassification: normalizeReviewClassification(row.evidence_classification),
+        notes: row.notes,
+        updatedAt: row.updated_at,
+        isPersisted: true,
+      };
+    })
+    .filter((region): region is SanbornTownIndexRegionRecord => Boolean(region));
+
+  return { regions, invalidCount };
+}
+
 function getCornerCoordinate(latitude: number | null, longitude: number | null) {
   return typeof latitude === "number" && typeof longitude === "number" ? { latitude, longitude } : null;
 }
@@ -1010,13 +1090,33 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     assets,
     mapYear: activeMapYear,
   });
+  let townIndexRegionRows: TownIndexRegionRow[] = [];
   let workspaceWarning: string | undefined;
+  let townIndexWarning: string | undefined;
   let workspaceRow: WorkspaceRow | null = null;
   let placementRows: PlacementRow[] = [];
   let sheetGeoreferenceRows: SheetGeoreferenceRow[] = [];
   let mapPieceGeoreferenceRows: MapPieceGeoreferenceRow[] = [];
   let georeferenceRows: GeoreferenceRow[] = [];
   let controlPointRows: ControlPointRow[] = [];
+
+  if (atlasInventory.atlases.length > 0) {
+    const townIndexRegionsResult = await supabase
+      .from("sanborn_town_index_regions")
+      .select(
+        "id, region_id, town_package_id, atlas_id, index_atlas_page_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, sheet_reference, region_type, source_polygon, workflow_status, progress_status, review_status, evidence_classification, notes, updated_at",
+      )
+      .eq("town_package_id", activeTownPackage.id)
+      .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))
+      .order("sheet_reference", { ascending: true })
+      .order("region_label", { ascending: true });
+
+    if (townIndexRegionsResult.error) {
+      townIndexWarning = `Town Index region query failed: ${townIndexRegionsResult.error.message}. Apply migration 0014 to enable the Town Index mission map.`;
+    } else {
+      townIndexRegionRows = (townIndexRegionsResult.data ?? []) as TownIndexRegionRow[];
+    }
+  }
 
   if (workspaceResult.error) {
     workspaceWarning = `Layout persistence query failed: ${workspaceResult.error.message}`;
@@ -1100,6 +1200,10 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     workspaceWarning = `Saved map piece placement query returned ${savedMapPieceGeoreferenceMapping.invalidCount} invalid geographic placement row(s).`;
   }
   const mapPieceGeoreferences = mergeSavedAndDefaultMapPieceGeoreferences(atlasInventory.pieces, savedMapPieceGeoreferenceMapping.placements);
+  const townIndexRegionMapping = mapTownIndexRegions(townIndexRegionRows, atlasInventory, assets);
+  if (townIndexRegionMapping.invalidCount > 0 && !townIndexWarning) {
+    townIndexWarning = `Town Index region query returned ${townIndexRegionMapping.invalidCount} invalid row(s).`;
+  }
   const georeferences = mapGeoreferences(georeferenceRows, controlPointRows, assets);
   const workspaceCenter =
     typeof workspaceRow?.geographic_center_latitude === "number" && typeof workspaceRow.geographic_center_longitude === "number"
@@ -1120,10 +1224,11 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     resolvedMapView.recoveredFromInvalidWorkspaceCenter && resolvedMapView.center
       ? `Recovered map center from invalid saved coordinates using ${resolvedMapView.source.replaceAll("_", " ")}.`
       : undefined;
+  const warningMessage = [workspaceWarning, activeTownSelection.warningMessage, mapWarning, townIndexWarning].filter(Boolean).join(" ");
 
   return {
     mode: workspaceWarning ? "read_only" : "public",
-    warningMessage: workspaceWarning ?? activeTownSelection.warningMessage ?? mapWarning,
+    warningMessage: warningMessage || undefined,
     dataSource: "supabase",
     townPackages,
     activeTownPackage,
@@ -1139,6 +1244,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     placements,
     sheetGeoreferences,
     mapPieceGeoreferences,
+    townIndexRegions: townIndexRegionMapping.regions,
     geographicMap: mapGeographicSettings(workspaceRow, resolvedMapView),
     georeferences,
     atlasInventory,

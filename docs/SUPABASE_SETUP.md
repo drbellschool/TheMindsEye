@@ -46,6 +46,7 @@ Run these SQL files in order from the Supabase SQL Editor:
 11. `supabase/migrations/0011_sanborn_map_piece_geographic_placement.sql`
 12. `supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql`
 13. `supabase/migrations/0013_town_reconstruction_source_provenance.sql`
+14. `supabase/migrations/0014_town_index_regions.sql`
 
 The migrations create:
 
@@ -63,6 +64,7 @@ The migrations create:
 - Piece-specific geographic placement records for saved map pieces, including four-corner quadrilateral validation and service-role save RPCs.
 - The scoped RPC replacement that fixes map-piece placement save scope on databases that already applied `0011`.
 - Durable source identity and provenance fields on `source_records`, including `SRC-XXXXXXXXXXXX` display IDs, repository metadata, Library of Congress fields, persistent URLs, IIIF URLs, rights notes, source status, and source links from sheets, pages, map pieces, buildings, people, and businesses.
+- Durable Town Index mission-map regions with normalized source-image polygons, non-sequential sheet references, scoped page/sheet links, explicit workflow statuses, RLS, and service-role-only save/delete RPCs.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -112,7 +114,8 @@ The studio supports:
 - Manual save plus debounced autosave for layout transforms and viewport.
 - Metadata edits for source URL, archive, rights, notes, evidence classification, and review status.
 - Shared Town Reconstruction context across Map, Buildings, People, and Sources routes.
-- Source Record, Town Index, Sheet Inventory, Map Pieces / Blocks, and Map Placement workflow steps.
+- Six Historical Map Studio stations: Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, and Map Placement.
+- Town Index mission-map region drawing, editing, linking, deletion, legend, and status/progress summaries.
 - Image replacement and deletion through server routes that keep Supabase service-role credentials server-only.
 - Piece-first Map Placement for saved Sanborn map pieces, with all visible placed pieces shown on a shared town canvas.
 - Optional advanced whole-sheet reference alignment for backward-compatible sheet-level georeferencing.
@@ -147,7 +150,7 @@ Migration `0009_town_package_location_metadata.sql` adds:
 
 The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for the active map center.
 
-Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Until it is applied, existing reads fall back to legacy source fields and source-record creation returns a visible database error rather than fabricating provenance.
+Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Migration `0014_town_index_regions.sql` is required for persistent Town Index region save/delete behavior. Until `0014` is applied, the studio still loads safely but region queries or writes return visible database errors rather than fabricating index-region data.
 
 ## Georeferencing Accuracy
 
@@ -193,8 +196,11 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 16. Open the shared Town Reconstruction header and confirm the active town, edition, sheet, and block/piece stay visible.
 17. Open Source Info and confirm the durable source ID, repository, citation, and persistent record link are shown when a source is linked.
 18. Create a Library of Congress source record from the Source Info drawer after applying `0013`; confirm the row receives a `SRC-XXXXXXXXXXXX` internal source ID.
-19. Use the Town Index, Sheet Inventory, and Map Pieces / Blocks steps to navigate without exposing raw database IDs in visible labels.
-20. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
+19. Use the six Historical Map Studio stations and confirm Building Reconstruction, People & Activity, and Evidence Review do not appear in the station rail.
+20. In Town Index, draw a region, close the polygon, link it to a non-sequential sheet reference, save it, reload, and confirm the region and `indexRegionId` selection restore.
+21. Confirm invalid or self-intersecting region polygons are rejected before save.
+22. Confirm direct anon table/RPC access to `sanborn_town_index_regions` fails, while the Next.js service-role region API works.
+23. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
 
 ## Local Validation
 
