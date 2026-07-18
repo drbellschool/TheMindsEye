@@ -47,6 +47,7 @@ Run these SQL files in order from the Supabase SQL Editor:
 12. `supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql`
 13. `supabase/migrations/0013_town_reconstruction_source_provenance.sql`
 14. `supabase/migrations/0014_town_index_regions.sql`
+15. `supabase/migrations/0015_page_classification_workflow.sql`
 
 The migrations create:
 
@@ -65,6 +66,7 @@ The migrations create:
 - The scoped RPC replacement that fixes map-piece placement save scope on databases that already applied `0011`.
 - Durable source identity and provenance fields on `source_records`, including `SRC-XXXXXXXXXXXX` display IDs, repository metadata, Library of Congress fields, persistent URLs, IIIF URLs, rights notes, source status, and source links from sheets, pages, map pieces, buildings, people, and businesses.
 - Durable Town Index mission-map regions with normalized source-image polygons, non-sequential sheet references, scoped page/sheet links, explicit workflow statuses, RLS, and service-role-only save/delete RPCs.
+- Page Classification workflow fields on Sanborn atlas pages, including canonical page types, printed references, display titles, classification notes, primary Graphic Index designation, safe backfill from legacy page types, and a service-role-only atlas-page save RPC.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -152,6 +154,8 @@ The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for 
 
 Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Migration `0014_town_index_regions.sql` is required for persistent Town Index region save/delete behavior. Until `0014` is applied, the studio still loads safely but region queries or writes return visible database errors rather than fabricating index-region data.
 
+Migration `0015_page_classification_workflow.sql` is required for page-type-driven station behavior. Until `0015` is applied, older atlas pages still load through the compatibility query, but page classification fields cannot persist and the Source Record classification controls will return visible database errors instead of silently pretending to save.
+
 ## Georeferencing Accuracy
 
 The georeferencing model stores three related levels of alignment:
@@ -199,8 +203,11 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 19. Use the six Historical Map Studio stations and confirm Building Reconstruction, People & Activity, and Evidence Review do not appear in the station rail.
 20. In Town Index, draw a region, close the polygon, link it to a non-sequential sheet reference, save it, reload, and confirm the region and `indexRegionId` selection restore.
 21. Confirm invalid or self-intersecting region polygons are rejected before save.
-22. Confirm direct anon table/RPC access to `sanborn_town_index_regions` fails, while the Next.js service-role region API works.
-23. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
+22. In Source Record, classify a cover page and confirm Map Pieces explains that cover pages do not use map pieces.
+23. Classify one uploaded page as Graphic Index, set it as the primary Town Index, and confirm Town Index loads that page immediately.
+24. Confirm Map Pieces and Map Placement are enabled only for Sanborn Sheet or Inset / Special Sheet pages.
+25. Confirm direct anon table/RPC access to `sanborn_town_index_regions` and atlas-page classification writes fails, while the Next.js service-role APIs work.
+26. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
 
 ## Local Validation
 

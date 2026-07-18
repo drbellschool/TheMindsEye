@@ -16,6 +16,7 @@ Historical Map Studio establishes where source-map regions belong. Building Reco
 
 - **Town Package**: the reusable town-scoped evidence package. Texarkana 1885 is the first package, not a hard-coded boundary.
 - **Edition**: a dated Sanborn atlas or comparable historical map edition for a town package.
+- **Page Classification**: the authoritative type assigned to each uploaded Sanborn page. It controls which station tools apply.
 - **Town Index**: the edition index or key-map page that helps reviewers navigate non-sequential sheet coverage.
 - **Sheet**: an uploaded archival Sanborn source image and its atlas-page assignment.
 - **Map Piece / Block**: a manually drawn source polygon on a sheet. A piece may be a block, district, street segment, index region, or other map region.
@@ -39,6 +40,32 @@ These stations are free navigation, not a rigid wizard. The left rail is station
 
 Building Reconstruction, People & Activity, and Sources & Evidence remain separate Community routes reached from the shared context bar. They carry the same Town / Edition / Sheet / Map Piece context but do not appear as Historical Map Studio stations.
 
+## Page Classification Workflow
+
+Every imported Sanborn page should be classified once in the Source Record station before reconstruction tools are used. The canonical page types are:
+
+- `cover`
+- `graphic_index`
+- `street_index`
+- `specials_index`
+- `sanborn_sheet`
+- `inset`
+- `legend`
+- `advertisement`
+- `other`
+- `unknown`
+
+The visible UI uses plain labels such as Cover page, Graphic Index, Sanborn Sheet, and Inset / Special Sheet. `unknown` pages generate work-queue tasks and cannot appear complete.
+
+Page classification controls station behavior:
+
+- Cover, legend, advertisement, street-index, specials-index, other, and unknown pages are metadata/provenance pages unless they are reclassified.
+- Graphic Index pages use Town Index coverage regions, not Map Pieces.
+- Sanborn Sheet and Inset / Special Sheet pages can use Map Pieces and Map Placement.
+- Existing map pieces on a non-geographic page are flagged as classification conflicts. They are not deleted automatically; the repair path is to reclassify the page or archive invalid pieces in a later workflow.
+
+The Source Record inspector is authoritative for page type, printed reference, display title, classification notes, and primary Town Index designation. Only Graphic Index pages can be primary, and there is one primary Graphic Index per edition by default. If exactly one Graphic Index page exists, the save RPC may designate it automatically.
+
 ## Shared Context
 
 `ReconstructionContextBar` displays the active town, edition/year, sheet/page, map piece/block, overall progress, source information, and route tabs for Map, Buildings, People, and Sources.
@@ -57,7 +84,7 @@ townPackageId, mapYear, atlasId, atlasPageId, sheetAssetId, mapPieceId, blockId,
 
 ## Town Index Mission Map
 
-The Town Index station is the edition-level workload map. Reviewers designate an index atlas page, draw normalized regions over the original index image, label each region, and link it to the corresponding atlas page or Sanborn sheet asset when known. The original index image remains the evidence source; no derivative image becomes the source of truth.
+The Town Index station is the edition-level workload map. Reviewers classify a source page as Graphic Index and set it as the primary Town Index in Source Record, then draw normalized coverage regions over the original index image. Each region is labeled with a printed sheet reference and linked to the corresponding atlas page or Sanborn sheet asset when known. The original index image remains the evidence source; no derivative image becomes the source of truth.
 
 Durable index regions are stored in `public.sanborn_town_index_regions` by migration `0014_town_index_regions.sql`. Regions validate normalized `0..1` polygons with at least three points, finite coordinates, nonzero area, and no self-intersection where practical. Server routes save and delete regions through service-role-only RPCs that validate town, atlas, page, and sheet scope before writing.
 
@@ -72,6 +99,8 @@ Region statuses are:
 
 Clicking a linked index region selects the linked sheet/page, keeps the town and edition context, updates URL parameters, and moves the workspace to Sheet Inventory or Map Pieces. Returning to Town Index preserves the selected region through `indexRegionId`.
 
+If no primary Graphic Index is designated, Town Index shows a repair state with eligible uploaded pages. Reviewers can select a page, classify it as Graphic Index, and set it as primary without leaving the station.
+
 ## Progress Formulas
 
 Progress is derived from explicit work states, not stored as arbitrary percentages.
@@ -80,13 +109,16 @@ Progress is derived from explicit work states, not stored as arbitrary percentag
 
 Each sheet receives credit for:
 
-- source record linked;
 - image uploaded;
+- source record linked;
+- page classified;
+- printed reference assigned when required;
+- workflow relationship valid for its page type;
 - at least one map piece identified;
 - all identified pieces geographically placed;
 - all identified pieces reviewed.
 
-The displayed percent is the whole-number count of completed units divided by available units.
+The displayed percent is the whole-number count of completed units divided by available units. Non-geographic classified pages can complete their sheet-inventory work through source/provenance metadata. Geographic pages cannot complete until their map-piece and placement work is complete. A classification conflict prevents the page from being treated as complete.
 
 ### Map Piece Progress
 
@@ -122,7 +154,10 @@ The Available Work panel is calculated from incomplete records. It is not an ass
 
 Example tasks:
 
-- designate the Town Index page;
+- classify uploaded pages;
+- select a primary Graphic Index;
+- resolve map pieces created on non-geographic pages;
+- add printed sheet references;
 - draw missing Town Index regions;
 - link or resolve Town Index regions;
 - add source records for sheets missing provenance;

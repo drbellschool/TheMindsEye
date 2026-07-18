@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildDefaultSanbornPieceId,
+  getPageTypeToolBlockMessage,
   isSanbornMapPieceType,
   normalizeOptionalSanbornText,
   normalizePositiveInteger,
   normalizeSanbornMapPieceCreationMethod,
   normalizeSanbornMapPieceInventoryStatus,
+  normalizeSanbornPageType,
+  pageTypeSupportsMapPieces,
   validateNormalizedPolygon,
 } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
@@ -49,6 +52,39 @@ export async function PUT(request: NextRequest) {
   }
 
   const townPackage = townPackageResult.data;
+  const pageScopeResult = await supabase
+    .from("sanborn_atlas_pages")
+    .select("id, page_id, atlas_id, page_type")
+    .eq("page_id", pageId)
+    .maybeSingle<{ id: string; page_id: string; atlas_id: string; page_type: string | null }>();
+
+  if (pageScopeResult.error) {
+    return jsonError(503, `Sanborn atlas page could not be loaded: ${pageScopeResult.error.message}`);
+  }
+
+  if (!pageScopeResult.data) {
+    return jsonError(400, "Sanborn atlas page was not found.");
+  }
+
+  const atlasScopeResult = await supabase
+    .from("sanborn_atlases")
+    .select("id, town_package_id")
+    .eq("id", pageScopeResult.data.atlas_id)
+    .maybeSingle<{ id: string; town_package_id: string }>();
+
+  if (atlasScopeResult.error) {
+    return jsonError(503, `Sanborn atlas scope could not be loaded: ${atlasScopeResult.error.message}`);
+  }
+
+  if (!atlasScopeResult.data || atlasScopeResult.data.town_package_id !== townPackage.id) {
+    return jsonError(400, "Atlas page belongs to another town package.");
+  }
+
+  const pageType = normalizeSanbornPageType(pageScopeResult.data.page_type);
+  if (!pageTypeSupportsMapPieces(pageType)) {
+    return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or Inset before saving map pieces.");
+  }
+
   const normalizedPieces = body.pieces.map((piece, index) => {
     const pieceSequence = normalizePositiveInteger(piece.pieceSequence) ?? index + 1;
     const pieceType = piece.pieceType;

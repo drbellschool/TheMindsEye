@@ -139,10 +139,13 @@ function atlasPage(pageId: string, overrides: Partial<SanbornAtlasPageRecord> = 
     sanbornSheetAssetId: `${pageId}-asset`,
     sanbornSheetAssetRowId: `${pageId}-asset-row`,
     pageSequence: 1,
-    pageType: "numbered_sheet",
+    pageType: "sanborn_sheet",
     sheetNumber: 1,
+    printedReference: "1",
     volumeLabel: null,
     displayLabel: null,
+    isPrimaryTownIndex: false,
+    classificationNotes: null,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     updatedAt: null,
@@ -582,12 +585,12 @@ test("draft atlas pages block piece inventory until page assignments are saved",
   assert.match(studioComponent, /pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean\(selectedAtlasPage && !selectedAtlasPage\.isPersisted\)/);
   assert.match(studioComponent, /if \(!selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\) \{\s*setSaveStatus\("error"\);\s*setSaveMessage\("Save atlas page assignments before saving map pieces\."\);/s);
   assert.match(studioComponent, /pendingStudioSelectionRef/);
-  assert.match(studioComponent, /workflowStepAfterSave = options\.continueToPieceInventory \? "piece_inventory" : atlasWorkflowStep/);
+  assert.match(studioComponent, /workflowStepAfterSave = options\.workflowStepAfterSave \?\? \(options\.continueToPieceInventory \? "piece_inventory" : atlasWorkflowStep\)/);
   assert.match(studioComponent, /setAtlasWorkflowStep\(workflowStepAfterSave\)/);
   assert.match(studioComponent, /saveAtlasPages\(\{ continueToPieceInventory: true \}\)/);
-  assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted\}/);
+  assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted \|\| !selectedPageSupportsMapPieces\}/);
   assert.match(workbenchComponent, /Save the atlas page assignments before drawing map pieces\./);
-  assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked/);
+  assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked \|\| classificationBlocked/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw piece/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !selectedPiece\}[\s\S]*Add vertex/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < 3\}[\s\S]*Finish polygon/);
@@ -646,6 +649,33 @@ test("Historical Map Studio uses six reconstruction stations with right-side ins
   assert.match(missionMap, /mode === "move"/);
   assert.match(missionMap, /onKeyDown/);
   assert.match(missionMap, /validateTownIndexRegionPolygon/);
+});
+
+test("Historical Map Studio drives tools from page classification", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const workbenchComponent = readFileSync("components/SanbornPageWorkbench.tsx", "utf8");
+  const activeShellStart = studioComponent.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyShellStart = studioComponent.indexOf("Legacy pre-station");
+  const activeShell = studioComponent.slice(activeShellStart, legacyShellStart > activeShellStart ? legacyShellStart : undefined);
+
+  assert.match(studioComponent, /Page Classification/);
+  assert.match(studioComponent, /Page type<select/);
+  assert.match(studioComponent, /Printed reference/);
+  assert.match(studioComponent, /Display title/);
+  assert.match(studioComponent, /Is primary Town Index/);
+  assert.match(studioComponent, /Save page classification/);
+  assert.match(studioComponent, /No graphic index is designated for this edition\./);
+  assert.match(studioComponent, /Classify as Graphic Index/);
+  assert.match(studioComponent, /Set as Primary Town Index/);
+  assert.match(studioComponent, /selectedPageSupportsMapPieces/);
+  assert.match(studioComponent, /selectedPageSupportsMapPlacement/);
+  assert.match(studioComponent, /selectedPageToolBlockMessage/);
+  assert.match(studioComponent, /Reclassify page or archive invalid pieces/);
+  assert.match(workbenchComponent, /classificationBlockedMessage/);
+  assert.match(workbenchComponent, /repairClassificationAction/);
+  assert.doesNotMatch(activeShell, /Building Reconstruction/);
+  assert.doesNotMatch(activeShell, /People & Activity/);
+  assert.doesNotMatch(activeShell, /Evidence Review/);
 });
 
 test("map piece saves restore selected page, piece, workflow, and source sheet after refresh", () => {

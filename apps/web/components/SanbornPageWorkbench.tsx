@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { SanbornPieceList } from "@/components/SanbornPieceList";
 import {
   buildDefaultSanbornPieceId,
   calculateSourceBoundingBox,
+  getSanbornPageTypeLabel,
   normalizedToPixelPoint,
   pixelToNormalizedPoint,
   type SanbornAtlasPageRecord,
@@ -29,6 +30,8 @@ type SanbornPageWorkbenchProps = {
   onSavePagesAndContinue?: () => void;
   savePagesAndContinueDisabled?: boolean;
   showPieceList?: boolean;
+  classificationBlockedMessage?: string;
+  repairClassificationAction?: ReactNode;
 };
 
 type EditorMode = "select" | "draw" | "add_vertex";
@@ -105,6 +108,8 @@ export function SanbornPageWorkbench({
   onSavePagesAndContinue,
   savePagesAndContinueDisabled = false,
   showPieceList = true,
+  classificationBlockedMessage = "",
+  repairClassificationAction = null,
 }: SanbornPageWorkbenchProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("select");
@@ -114,7 +119,8 @@ export function SanbornPageWorkbench({
   const sortedPieces = useMemo(() => [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence), [pieces]);
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
   const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
-  const editorReadOnly = readOnly || pieceInventoryBlocked;
+  const classificationBlocked = Boolean(classificationBlockedMessage);
+  const editorReadOnly = readOnly || pieceInventoryBlocked || classificationBlocked;
 
   useEffect(() => {
     setSelectedVertexIndex(null);
@@ -214,7 +220,7 @@ export function SanbornPageWorkbench({
         <header className="sanborn-page-workbench__header">
           <div>
             <strong>{page.displayLabel || `Page ${page.pageSequence}`}</strong>
-            <span>{page.pageType.replaceAll("_", " ")}</span>
+            <span>{getSanbornPageTypeLabel(page.pageType)}</span>
           </div>
           <div className="sanborn-page-workbench__tools" role="group" aria-label="Map piece editor">
             <button className={`sanborn-button${editorMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setEditorMode("select")} type="button">
@@ -246,6 +252,12 @@ export function SanbornPageWorkbench({
             <button className="sanborn-button sanborn-button--primary" disabled={savePagesAndContinueDisabled || !onSavePagesAndContinue} onClick={onSavePagesAndContinue} type="button">
               Save pages and continue
             </button>
+          </div>
+        ) : null}
+        {classificationBlocked ? (
+          <div className="sanborn-page-workbench__blocker">
+            <strong>{classificationBlockedMessage}</strong>
+            {repairClassificationAction}
           </div>
         ) : null}
         <div className="sanborn-page-workbench__image-frame">
