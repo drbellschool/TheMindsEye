@@ -1,6 +1,7 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 import type { HistoricalMapGeoreference } from "./historical-map-georeference.ts";
 import type { GeographicMapSettings, SheetGeographicTransform } from "./historical-map-sheet-georeference.ts";
+import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import type { SanbornAtlasInventoryState } from "./sanborn-atlas.ts";
 
 export const studioAutosaveDelayMs = 13_000;
@@ -136,6 +137,7 @@ export type HistoricalMapStudioState = {
   sheets: StudioSheetAsset[];
   placements: StudioPlacement[];
   sheetGeoreferences: SheetGeographicTransform[];
+  mapPieceGeoreferences: SanbornMapPieceGeoreference[];
   geographicMap: GeographicMapSettings;
   georeferences: HistoricalMapGeoreference[];
   atlasInventory: SanbornAtlasInventoryState;

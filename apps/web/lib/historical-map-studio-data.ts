@@ -26,6 +26,13 @@ import {
   type SheetGeographicTransform,
 } from "./historical-map-sheet-georeference.ts";
 import {
+  mergeSavedAndDefaultMapPieceGeoreferences,
+  normalizeSanbornMapPieceGeoreference,
+  persistedMapPieceTargetGeometry,
+  validateMapPieceGeographicCorners,
+  type SanbornMapPieceGeoreference,
+} from "./sanborn-map-piece-georeference.ts";
+import {
   findDuplicateStudioSheetNumbers,
   findMissingStudioSheetNumbers,
   isControlledSanbornStoragePath,
@@ -211,6 +218,33 @@ type SheetGeoreferenceRow = {
   updated_at: string | null;
 };
 
+type MapPieceGeoreferenceRow = {
+  piece_georeference_id: string;
+  atlas_page_id: string;
+  map_piece_id: string;
+  northwest_latitude: number;
+  northwest_longitude: number;
+  northeast_latitude: number;
+  northeast_longitude: number;
+  southeast_latitude: number;
+  southeast_longitude: number;
+  southwest_latitude: number;
+  southwest_longitude: number;
+  center_latitude: number;
+  center_longitude: number;
+  rotation: number | null;
+  opacity: number | null;
+  layer_order: number | null;
+  placement_status: string | null;
+  target_geometry: string | null;
+  is_visible: boolean | null;
+  is_locked: boolean | null;
+  review_status: string | null;
+  evidence_classification: string | null;
+  notes: string | null;
+  updated_at: string | null;
+};
+
 type ControlPointRow = {
   georeference_id: string;
   sanborn_sheet_asset_id: string | null;
@@ -259,6 +293,7 @@ function createEmptyState(input: {
     sheets: [],
     placements: [],
     sheetGeoreferences: [],
+    mapPieceGeoreferences: [],
     geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
     atlasInventory: createEmptySanbornAtlasInventoryState({ warningMessage: input.warningMessage }),
@@ -642,6 +677,60 @@ function mapSheetGeoreferences(rows: SheetGeoreferenceRow[], assets: StudioSheet
     .filter((placement): placement is SheetGeographicTransform => Boolean(placement));
 }
 
+function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventory: Awaited<ReturnType<typeof loadSanbornAtlasInventory>>): { placements: SanbornMapPieceGeoreference[]; invalidCount: number } {
+  const pieceByRowId = new Map(atlasInventory.pieces.map((piece) => [piece.rowId, piece]));
+  const pageByRowId = new Map(atlasInventory.pages.map((page) => [page.rowId, page]));
+  let invalidCount = 0;
+
+  const placements = rows
+    .map((row) => {
+      const piece = pieceByRowId.get(row.map_piece_id);
+      const page = pageByRowId.get(row.atlas_page_id);
+
+      if (!piece || !page) {
+        invalidCount += 1;
+        return null;
+      }
+
+      const corners = {
+        northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
+        northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
+        southeast: { latitude: row.southeast_latitude, longitude: row.southeast_longitude },
+        southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
+      };
+      const validation = validateMapPieceGeographicCorners(corners);
+
+      if (row.target_geometry !== persistedMapPieceTargetGeometry || !validation.ok) {
+        invalidCount += 1;
+        return null;
+      }
+
+      return normalizeSanbornMapPieceGeoreference({
+        pieceGeoreferenceId: row.piece_georeference_id,
+        pieceId: piece.pieceId,
+        atlasPageId: page.pageId,
+        targetGeometry: persistedMapPieceTargetGeometry,
+        centerLatitude: row.center_latitude,
+        centerLongitude: row.center_longitude,
+        corners,
+        rotation: row.rotation ?? 0,
+        opacity: row.opacity ?? undefined,
+        layerOrder: row.layer_order ?? 0,
+        placementStatus: row.placement_status ?? undefined,
+        isVisible: row.is_visible ?? true,
+        isLocked: row.is_locked ?? false,
+        reviewStatus: normalizeReviewClassification(row.review_status),
+        evidenceClassification: normalizeReviewClassification(row.evidence_classification),
+        notes: row.notes,
+        updatedAt: row.updated_at,
+        isPersisted: true,
+      });
+    })
+    .filter((placement): placement is SanbornMapPieceGeoreference => Boolean(placement));
+
+  return { placements, invalidCount };
+}
+
 function getCornerCoordinate(latitude: number | null, longitude: number | null) {
   return typeof latitude === "number" && typeof longitude === "number" ? { latitude, longitude } : null;
 }
@@ -849,6 +938,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   let workspaceRow: WorkspaceRow | null = null;
   let placementRows: PlacementRow[] = [];
   let sheetGeoreferenceRows: SheetGeoreferenceRow[] = [];
+  let mapPieceGeoreferenceRows: MapPieceGeoreferenceRow[] = [];
   let georeferenceRows: GeoreferenceRow[] = [];
   let controlPointRows: ControlPointRow[] = [];
 
@@ -880,6 +970,19 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         workspaceWarning = `Saved sheet geographic placement query failed: ${sheetGeoreferencesResult.error.message}`;
       } else {
         sheetGeoreferenceRows = (sheetGeoreferencesResult.data ?? []) as SheetGeoreferenceRow[];
+      }
+
+      const mapPieceGeoreferencesResult = await supabase
+        .from("sanborn_map_piece_georeferences")
+        .select(
+          "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, is_visible, is_locked, review_status, evidence_classification, notes, updated_at",
+        )
+        .eq("workspace_id", workspaceRow.id);
+
+      if (mapPieceGeoreferencesResult.error) {
+        workspaceWarning = `Saved map piece placement query failed: ${mapPieceGeoreferencesResult.error.message}. Apply migration 0011 to enable piece map placement.`;
+      } else {
+        mapPieceGeoreferenceRows = (mapPieceGeoreferencesResult.data ?? []) as MapPieceGeoreferenceRow[];
       }
 
       const georeferencesResult = await supabase
@@ -916,6 +1019,11 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
   const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);
+  const savedMapPieceGeoreferenceMapping = mapMapPieceGeoreferences(mapPieceGeoreferenceRows, atlasInventory);
+  if (savedMapPieceGeoreferenceMapping.invalidCount > 0 && !workspaceWarning) {
+    workspaceWarning = `Saved map piece placement query returned ${savedMapPieceGeoreferenceMapping.invalidCount} invalid geographic placement row(s).`;
+  }
+  const mapPieceGeoreferences = mergeSavedAndDefaultMapPieceGeoreferences(atlasInventory.pieces, savedMapPieceGeoreferenceMapping.placements);
   const georeferences = mapGeoreferences(georeferenceRows, controlPointRows, assets);
   const workspaceCenter =
     typeof workspaceRow?.geographic_center_latitude === "number" && typeof workspaceRow.geographic_center_longitude === "number"
@@ -954,6 +1062,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     sheets: assets,
     placements,
     sheetGeoreferences,
+    mapPieceGeoreferences,
     geographicMap: mapGeographicSettings(workspaceRow, resolvedMapView),
     georeferences,
     atlasInventory,

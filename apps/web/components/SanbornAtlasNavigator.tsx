@@ -25,7 +25,7 @@ export const sanbornAtlasWorkflowSteps: Array<{ id: SanbornAtlasWorkflowStep; la
   { id: "town_index", label: "Town index / key map" },
   { id: "numbered_sheets", label: "Numbered sheets" },
   { id: "piece_inventory", label: "Piece inventory" },
-  { id: "gps_alignment", label: "GPS alignment" },
+  { id: "gps_alignment", label: "Map placement" },
 ];
 
 type AtlasDraft = {
