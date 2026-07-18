@@ -644,7 +644,7 @@ test("Historical Map Studio uses six reconstruction stations with right-side ins
   assert.match(studioComponent, /function renderInspectorBody/);
   assert.match(studioComponent, /function renderTownIndexWorkspace/);
   assert.match(studioComponent, /TownIndexMissionMap/);
-  assert.match(missionMap, /Manual Town Index region editor/);
+  assert.match(missionMap, /Manual source region editor/);
   assert.match(missionMap, /mode === "draw"/);
   assert.match(missionMap, /mode === "move"/);
   assert.match(missionMap, /onKeyDown/);
@@ -664,9 +664,13 @@ test("Historical Map Studio drives tools from page classification", () => {
   assert.match(studioComponent, /Display title/);
   assert.match(studioComponent, /Is primary Town Index/);
   assert.match(studioComponent, /Save page classification/);
-  assert.match(studioComponent, /No graphic index is designated for this edition\./);
-  assert.match(studioComponent, /Classify as Graphic Index/);
+  assert.match(studioComponent, /No primary Town Index page is designated for this edition\./);
+  assert.match(studioComponent, /Classify as Index or mixed/);
+  assert.match(studioComponent, /Functional Source Regions/);
+  assert.match(studioComponent, /Mark region/);
+  assert.match(studioComponent, /Save regions/);
   assert.match(studioComponent, /Set as Primary Town Index/);
+  assert.doesNotMatch(studioComponent, /graphicIndexPages\.length === 1/);
   assert.match(studioComponent, /selectedPageSupportsMapPieces/);
   assert.match(studioComponent, /selectedPageSupportsMapPlacement/);
   assert.match(studioComponent, /selectedPageToolBlockMessage/);

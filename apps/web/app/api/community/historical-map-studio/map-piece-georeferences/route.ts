@@ -283,7 +283,21 @@ export async function PUT(request: NextRequest) {
 
   const pageType = normalizeSanbornPageType(scope.page.page_type);
   if (!pageTypeSupportsMapPlacement(pageType)) {
-    return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or Inset before saving placement.");
+    const sourceRegionResult = await supabase
+      .from("sanborn_source_regions")
+      .select("id")
+      .eq("atlas_page_id", scope.page.id)
+      .eq("available_to_map_pieces", true)
+      .in("region_type", ["geographic_map_content", "inset_map"])
+      .limit(1);
+
+    if (sourceRegionResult.error) {
+      return jsonError(503, `Functional source regions could not be checked: ${sourceRegionResult.error.message}`);
+    }
+
+    if ((sourceRegionResult.data ?? []).length === 0) {
+      return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or mark a geographic source region before saving placement.");
+    }
   }
 
   const mapYear = Number.isInteger(body.mapYear) && body.mapYear! > 0 ? body.mapYear! : townPackage.year;

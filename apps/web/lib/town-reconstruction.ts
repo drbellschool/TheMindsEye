@@ -7,6 +7,7 @@ import {
   getSanbornPageTypeLabel,
   hasSanbornPageClassificationConflict,
   isClassifiedSanbornPage,
+  pageTypeCanBePrimaryTownIndex,
   pageTypeSupportsMapPieces,
 } from "./sanborn-atlas.ts";
 import { hasOperationalMapPiecePlacement, type SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
@@ -14,6 +15,9 @@ import {
   calculateTownIndexCompletion,
   calculateTownIndexRegionProgress,
   compareSheetReferences,
+  sourceRegionIsTownIndexContext,
+  sourceRegionSupportsMapPieces,
+  sourceRegionSupportsTownIndex,
   type SanbornTownIndexCompletion,
   type SanbornTownIndexRegionProgress,
   type SanbornTownIndexRegionRecord,
@@ -407,15 +411,19 @@ export function calculateSheetProgress(input: {
   page?: SanbornAtlasPageRecord | null;
   pieces: SanbornMapPieceRecord[];
   placements: SanbornMapPieceGeoreference[];
+  sourceRegions?: SanbornTownIndexRegionRecord[];
 }): SheetReconstructionProgress {
   const pageType = input.page?.pageType ?? "unknown";
   const pageClassified = Boolean(input.page && isClassifiedSanbornPage(input.page));
   const printedReference = getSanbornPagePrintedReference(input.page);
-  const geographicPage = Boolean(input.page && pageTypeSupportsMapPieces(input.page.pageType));
+  const pageSourceRegions = input.page ? input.sourceRegions?.filter((region) => region.indexAtlasPageId === input.page?.pageId) ?? [] : [];
+  const hasGeographicSourceRegion = pageSourceRegions.some(sourceRegionSupportsMapPieces);
+  const geographicPage = Boolean(input.page && (pageTypeSupportsMapPieces(input.page.pageType) || hasGeographicSourceRegion));
   const classificationConflict = hasSanbornPageClassificationConflict({
     page: input.page,
     mapPieceCount: input.pieces.length,
     isPrimaryTownIndex: input.page?.isPrimaryTownIndex,
+    hasGeographicSourceRegion,
   });
   const placementByPieceId = new Map(input.placements.map((placement) => [placement.pieceId, placement]));
   const pieceProgress = input.pieces.map((piece) => calculateMapPieceProgress({ piece, placement: placementByPieceId.get(piece.pieceId) }));
@@ -424,9 +432,9 @@ export function calculateSheetProgress(input: {
   const hidden = input.pieces.filter((piece) => placementByPieceId.get(piece.pieceId)?.isVisible === false).length;
   const locked = input.pieces.filter((piece) => placementByPieceId.get(piece.pieceId)?.isLocked === true).length;
   const sourceLinked = Boolean(input.asset.sourceRecordId);
-  const printedReferenceRequired = geographicPage || pageType === "graphic_index" || pageType === "street_index" || pageType === "specials_index" || pageType === "inset";
+  const printedReferenceRequired = geographicPage || pageType === "index_or_mixed" || pageType === "street_index" || pageType === "special_sheet";
   const printedReferenceAssigned = !printedReferenceRequired || Boolean(printedReference);
-  const workflowRelationshipValid = pageClassified && !classificationConflict && (pageType !== "graphic_index" || input.page?.isPrimaryTownIndex === true);
+  const workflowRelationshipValid = pageClassified && !classificationConflict;
   const geographicWorkComplete = geographicPage ? input.pieces.length > 0 && placed === input.pieces.length : !classificationConflict;
   const units = [true, sourceLinked, pageClassified, printedReferenceAssigned, workflowRelationshipValid, geographicWorkComplete];
   const completed = units.filter(Boolean).length;
@@ -452,9 +460,7 @@ export function calculateSheetProgress(input: {
           ? "Missing source record"
           : printedReferenceRequired && !printedReferenceAssigned
             ? "Missing printed reference"
-            : pageType === "graphic_index" && input.page?.isPrimaryTownIndex !== true
-              ? "Graphic index is not primary"
-              : null;
+            : null;
 
   return {
     sheetAssetId: input.asset.assetId,
@@ -488,6 +494,7 @@ export function calculateEditionProgress(input: {
   assets: StudioSheetAsset[];
   pieces: SanbornMapPieceRecord[];
   placements: SanbornMapPieceGeoreference[];
+  sourceRegions?: SanbornTownIndexRegionRecord[];
 }): EditionReconstructionProgress {
   const assetById = new Map(input.assets.map((asset) => [asset.assetId, asset]));
   const placementsByPieceId = new Map(input.placements.map((placement) => [placement.pieceId, placement]));
@@ -500,6 +507,7 @@ export function calculateEditionProgress(input: {
             page,
             pieces: input.pieces.filter((piece) => piece.atlasPageId === page.pageId),
             placements: input.placements,
+            sourceRegions: input.sourceRegions,
           })
         : null;
     })
@@ -531,23 +539,32 @@ export function calculateEditionProgress(input: {
 export function calculatePageClassificationSummary(input: {
   pages: SanbornAtlasPageRecord[];
   pieces: SanbornMapPieceRecord[];
+  sourceRegions?: SanbornTownIndexRegionRecord[];
 }): PageClassificationSummary {
   const piecesByPageId = new Map<string, number>();
+  const pageHasGeographicSourceRegion = new Map<string, boolean>();
 
   for (const piece of input.pieces) {
     piecesByPageId.set(piece.atlasPageId, (piecesByPageId.get(piece.atlasPageId) ?? 0) + 1);
   }
 
+  for (const region of input.sourceRegions ?? []) {
+    if (sourceRegionSupportsMapPieces(region)) {
+      pageHasGeographicSourceRegion.set(region.indexAtlasPageId, true);
+    }
+  }
+
   const classifiedPages = input.pages.filter((page) => isClassifiedSanbornPage(page)).length;
   const unknownPages = input.pages.filter((page) => page.pageType === "unknown").length;
-  const geographicPages = input.pages.filter((page) => pageTypeSupportsMapPieces(page.pageType)).length;
-  const indexPages = input.pages.filter((page) => page.pageType === "graphic_index").length;
-  const primaryIndexPages = input.pages.filter((page) => page.isPrimaryTownIndex && page.pageType === "graphic_index").length;
+  const geographicPages = input.pages.filter((page) => pageTypeSupportsMapPieces(page.pageType) || pageHasGeographicSourceRegion.get(page.pageId) === true).length;
+  const indexPages = input.pages.filter((page) => pageTypeCanBePrimaryTownIndex(page.pageType)).length;
+  const primaryIndexPages = input.pages.filter((page) => page.isPrimaryTownIndex && pageTypeCanBePrimaryTownIndex(page.pageType)).length;
   const conflictPages = input.pages.filter((page) =>
     hasSanbornPageClassificationConflict({
       page,
       mapPieceCount: piecesByPageId.get(page.pageId) ?? 0,
       isPrimaryTownIndex: page.isPrimaryTownIndex,
+      hasGeographicSourceRegion: pageHasGeographicSourceRegion.get(page.pageId) === true,
     }),
   ).length;
   const completionPercent = input.pages.length > 0 ? clampPercent((classifiedPages / input.pages.length) * 100) : 0;
@@ -582,6 +599,7 @@ export function calculateTownProgress(input: {
   pages: SanbornAtlasPageRecord[];
   pieces: SanbornMapPieceRecord[];
   placements: SanbornMapPieceGeoreference[];
+  sourceRegions?: SanbornTownIndexRegionRecord[];
   buildingsIdentified?: number | null;
   peopleLinked?: number | null;
 }): TownReconstructionProgress {
@@ -591,10 +609,11 @@ export function calculateTownProgress(input: {
     assets: input.sheets,
     pieces: input.pieces,
     placements: input.placements,
+    sourceRegions: input.sourceRegions,
   });
   const sheetsAligned = edition.sheetsWithPlacedPieces;
   const sourceRecordsLinked = new Set(input.sheets.map((sheet) => sheet.sourceRecordId).filter(Boolean)).size;
-  const classification = calculatePageClassificationSummary({ pages: input.pages, pieces: input.pieces });
+  const classification = calculatePageClassificationSummary({ pages: input.pages, pieces: input.pieces, sourceRegions: input.sourceRegions });
   const unresolvedWorkCount =
     input.sheets.filter((sheet) => !sheet.sourceRecordId).length +
     Math.max(0, input.pieces.length - edition.placedMapPieceCount) +
@@ -629,8 +648,8 @@ export function buildTownIndexSummary(input: {
   indexRegions?: SanbornTownIndexRegionRecord[];
 }): TownIndexSummary {
   const assetById = new Map(input.assets.map((asset) => [asset.assetId, asset]));
-  const indexPage = input.pages.find((page) => page.isPrimaryTownIndex && page.pageType === "graphic_index") ?? null;
-  const durableRegions = input.indexRegions ?? [];
+  const indexPage = input.pages.find((page) => page.isPrimaryTownIndex && pageTypeCanBePrimaryTownIndex(page.pageType)) ?? null;
+  const durableRegions = (input.indexRegions ?? []).filter(sourceRegionIsTownIndexContext);
   const regionProgress = durableRegions.map((region) =>
     calculateTownIndexRegionProgress({
       region,
@@ -684,7 +703,10 @@ export function buildTownIndexSummary(input: {
           });
   const completion = calculateTownIndexCompletion(
     durableRegions.length > 0
-      ? regionProgress
+      ? regionProgress.filter((progress) => {
+          const region = durableRegions.find((candidate) => candidate.regionId === progress.regionId);
+          return Boolean(region && sourceRegionSupportsTownIndex(region));
+        })
       : regions.map((region) => ({
           regionId: region.id,
           label: region.label,
@@ -716,6 +738,7 @@ export function buildReconstructionWorkQueue(input: {
   mapYear?: number | null;
   atlasId?: string | null;
   pages?: SanbornAtlasPageRecord[];
+  sourceRegions?: SanbornTownIndexRegionRecord[];
   sheets: SheetReconstructionProgress[];
   pieces: MapPieceReconstructionProgress[];
   classification?: PageClassificationSummary;
@@ -732,6 +755,11 @@ export function buildReconstructionWorkQueue(input: {
   };
   const pages = input.pages ?? [];
   const pageById = new Map(pages.map((page) => [page.pageId, page]));
+  const sourceRegionsByPageId = new Map<string, SanbornTownIndexRegionRecord[]>();
+
+  for (const region of input.sourceRegions ?? []) {
+    sourceRegionsByPageId.set(region.indexAtlasPageId, [...(sourceRegionsByPageId.get(region.indexAtlasPageId) ?? []), region]);
+  }
 
   for (const page of pages) {
     const sheet = input.sheets.find((candidate) => candidate.pageId === page.pageId) ?? null;
@@ -747,7 +775,15 @@ export function buildReconstructionWorkQueue(input: {
       });
     }
 
-    if (hasSanbornPageClassificationConflict({ page, mapPieceCount: input.pieces.filter((piece) => piece.atlasPageId === page.pageId).length, isPrimaryTownIndex: page.isPrimaryTownIndex })) {
+    const pageSourceRegions = sourceRegionsByPageId.get(page.pageId) ?? [];
+    const hasGeographicSourceRegion = pageSourceRegions.some(sourceRegionSupportsMapPieces);
+
+    if (hasSanbornPageClassificationConflict({
+      page,
+      mapPieceCount: input.pieces.filter((piece) => piece.atlasPageId === page.pageId).length,
+      isPrimaryTownIndex: page.isPrimaryTownIndex,
+      hasGeographicSourceRegion,
+    })) {
       tasks.push({
         id: `classification-conflict-${page.pageId}`,
         label: `Resolve map pieces created on ${getSanbornPageDisplayLabel(page)}`,
@@ -758,7 +794,7 @@ export function buildReconstructionWorkQueue(input: {
       });
     }
 
-    if (pageTypeSupportsMapPieces(page.pageType) && !getSanbornPagePrintedReference(page)) {
+    if ((pageTypeSupportsMapPieces(page.pageType) || hasGeographicSourceRegion) && !getSanbornPagePrintedReference(page)) {
       tasks.push({
         id: `printed-reference-${page.pageId}`,
         label: `Add printed sheet reference for ${getSanbornPageDisplayLabel(page)}`,
@@ -773,11 +809,46 @@ export function buildReconstructionWorkQueue(input: {
   if (!input.index.indexPage && pages.length > 0) {
     tasks.push({
       id: "town-index-designate",
-      label: "Select a primary graphic index",
-      detail: "Classify one uploaded page as Graphic Index and set it as the edition Town Index.",
+      label: "Select a primary Town Index page",
+      detail: "Classify one uploaded page as Index or mixed and explicitly set it as the edition Town Index.",
       route: "map",
       priority: "high",
       context: { ...baseContext, workflow: "page_classification" },
+    });
+  }
+
+  const primaryIndexSourceRegions = input.index.indexPage ? sourceRegionsByPageId.get(input.index.indexPage.pageId) ?? [] : [];
+
+  if (input.index.indexPage && primaryIndexSourceRegions.length === 0) {
+    tasks.push({
+      id: `source-regions-${input.index.indexPage.pageId}`,
+      label: "Classify functional regions on the index page",
+      detail: "Mark the town coverage diagram, sheet coverage regions, printed index, and other useful source areas.",
+      route: "map",
+      priority: "high",
+      context: { ...baseContext, atlasPageId: input.index.indexPage.pageId, sheetAssetId: input.index.indexPage.sanbornSheetAssetId, workflow: "page_classification" },
+    });
+  }
+
+  if (input.index.indexPage && !primaryIndexSourceRegions.some((region) => region.regionType === "town_coverage_diagram")) {
+    tasks.push({
+      id: `town-coverage-${input.index.indexPage.pageId}`,
+      label: "Mark the town coverage diagram",
+      detail: "Outline the overall source diagram before reviewing sheet coverage.",
+      route: "map",
+      priority: "normal",
+      context: { ...baseContext, atlasPageId: input.index.indexPage.pageId, sheetAssetId: input.index.indexPage.sanbornSheetAssetId, workflow: "page_classification" },
+    });
+  }
+
+  if (input.index.indexPage && !primaryIndexSourceRegions.some((region) => region.regionType === "printed_index")) {
+    tasks.push({
+      id: `printed-index-${input.index.indexPage.pageId}`,
+      label: "Mark printed index area",
+      detail: "Store the printed index box as a durable source region for later transcription work.",
+      route: "map",
+      priority: "low",
+      context: { ...baseContext, atlasPageId: input.index.indexPage.pageId, sheetAssetId: input.index.indexPage.sanbornSheetAssetId, workflow: "page_classification" },
     });
   }
 
@@ -843,7 +914,8 @@ export function buildReconstructionWorkQueue(input: {
   for (const piece of input.pieces) {
     const piecePage = pageById.get(piece.atlasPageId);
 
-    if (piecePage && !pageTypeSupportsMapPieces(piecePage.pageType)) {
+    const piecePageRegions = piecePage ? sourceRegionsByPageId.get(piecePage.pageId) ?? [] : [];
+    if (piecePage && !pageTypeSupportsMapPieces(piecePage.pageType) && !piecePageRegions.some(sourceRegionSupportsMapPieces)) {
       continue;
     }
 
@@ -924,18 +996,20 @@ export function buildReconstructionModelFromStudioState(input: {
       asset,
       page: pageByAsset.get(asset.assetId) ?? null,
       pieces: pieces.filter((piece) => piece.atlasPageId === pageByAsset.get(asset.assetId)?.pageId),
-      placements: input.state.mapPieceGeoreferences,
-    }),
+            placements: input.state.mapPieceGeoreferences,
+            sourceRegions: input.state.townIndexRegions,
+          }),
   );
   const placementByPieceId = new Map(input.state.mapPieceGeoreferences.map((placement) => [placement.pieceId, placement]));
   const pieceProgress = pieces.map((piece) => calculateMapPieceProgress({ piece, placement: placementByPieceId.get(piece.pieceId) }));
-  const classification = calculatePageClassificationSummary({ pages, pieces });
+  const sourceRegions = input.state.townIndexRegions.filter((region) => region.atlasId === activeAtlas?.atlasId);
+  const classification = calculatePageClassificationSummary({ pages, pieces, sourceRegions });
   const index = buildTownIndexSummary({
     pages,
     assets: input.state.sheets,
     pieces,
     placements: input.state.mapPieceGeoreferences,
-    indexRegions: input.state.townIndexRegions.filter((region) => region.atlasId === activeAtlas?.atlasId),
+    indexRegions: sourceRegions,
   });
   const town = calculateTownProgress({
     town: input.state.activeTownPackage,
@@ -945,6 +1019,7 @@ export function buildReconstructionModelFromStudioState(input: {
     pages,
     pieces,
     placements: input.state.mapPieceGeoreferences,
+    sourceRegions,
   });
   const edition = calculateEditionProgress({
     atlas: activeAtlas,
@@ -952,6 +1027,7 @@ export function buildReconstructionModelFromStudioState(input: {
     assets: input.state.sheets,
     pieces,
     placements: input.state.mapPieceGeoreferences,
+    sourceRegions,
   });
   const tasks = buildReconstructionWorkQueue({
     townPackageId: input.state.activeTownPackage?.id,
@@ -960,6 +1036,7 @@ export function buildReconstructionModelFromStudioState(input: {
     sheets: sheetProgress,
     pieces: pieceProgress,
     pages,
+    sourceRegions,
     classification,
     index,
     sourceRecordCount: input.state.sourceOptions.length,

@@ -45,26 +45,39 @@ Building Reconstruction, People & Activity, and Sources & Evidence remain separa
 Every imported Sanborn page should be classified once in the Source Record station before reconstruction tools are used. The canonical page types are:
 
 - `cover`
-- `graphic_index`
-- `street_index`
-- `specials_index`
 - `sanborn_sheet`
-- `inset`
+- `index_or_mixed`
+- `street_index`
+- `special_sheet`
 - `legend`
 - `advertisement`
 - `other`
 - `unknown`
 
-The visible UI uses plain labels such as Cover page, Graphic Index, Sanborn Sheet, and Inset / Special Sheet. `unknown` pages generate work-queue tasks and cannot appear complete.
+The visible UI uses plain labels such as Cover page, Index or mixed page, Sanborn Sheet, and Special Sheet / Inset. `unknown` pages generate work-queue tasks and cannot appear complete. Legacy values such as `graphic_index`, `specials_index`, `numbered_sheet`, and `inset` are normalized by migration `0016_functional_source_regions.sql`.
 
-Page classification controls station behavior:
+Page classification describes the broad page. Functional source regions describe useful areas inside the page:
 
-- Cover, legend, advertisement, street-index, specials-index, other, and unknown pages are metadata/provenance pages unless they are reclassified.
-- Graphic Index pages use Town Index coverage regions, not Map Pieces.
-- Sanborn Sheet and Inset / Special Sheet pages can use Map Pieces and Map Placement.
+- `town_coverage_diagram`
+- `sheet_coverage_region`
+- `printed_index`
+- `geographic_map_content`
+- `street_index_text`
+- `block_index_text`
+- `legend_key`
+- `inset_map`
+- `title_or_decoration`
+- `notes`
+- `other`
+
+Workflow behavior is driven by both levels:
+
+- Cover, legend, advertisement, street-index, other, and unknown pages are metadata/provenance pages unless functional regions make specific work available.
+- Index or mixed pages use functional source regions. `sheet_coverage_region` entries feed Town Index, while `geographic_map_content` and `inset_map` entries can make Map Pieces available for that page.
+- Sanborn Sheet and Special Sheet / Inset pages can use Map Pieces and Map Placement by default.
 - Existing map pieces on a non-geographic page are flagged as classification conflicts. They are not deleted automatically; the repair path is to reclassify the page or archive invalid pieces in a later workflow.
 
-The Source Record inspector is authoritative for page type, printed reference, display title, classification notes, and primary Town Index designation. Only Graphic Index pages can be primary, and there is one primary Graphic Index per edition by default. If exactly one Graphic Index page exists, the save RPC may designate it automatically.
+The Source Record inspector is authoritative for page type, printed reference, display title, classification notes, primary Town Index designation, and functional source-region drawing. Only Index or mixed pages can be primary, and primary Town Index remains a separate explicit user action. The save RPC must not auto-designate the only eligible page.
 
 ## Shared Context
 
@@ -84,9 +97,9 @@ townPackageId, mapYear, atlasId, atlasPageId, sheetAssetId, mapPieceId, blockId,
 
 ## Town Index Mission Map
 
-The Town Index station is the edition-level workload map. Reviewers classify a source page as Graphic Index and set it as the primary Town Index in Source Record, then draw normalized coverage regions over the original index image. Each region is labeled with a printed sheet reference and linked to the corresponding atlas page or Sanborn sheet asset when known. The original index image remains the evidence source; no derivative image becomes the source of truth.
+The Town Index station is the edition-level workload map. Reviewers classify a source page as Index or mixed, explicitly set it as the primary Town Index, and mark functional source regions in Source Record. Town Index then reads saved `sheet_coverage_region` polygons from that page instead of requiring duplicate drawing. Each sheet-coverage region is labeled with a printed sheet reference and linked to the corresponding atlas page or Sanborn sheet asset when known. The original source image remains the evidence source; no derivative image becomes the source of truth.
 
-Durable index regions are stored in `public.sanborn_town_index_regions` by migration `0014_town_index_regions.sql`. Regions validate normalized `0..1` polygons with at least three points, finite coordinates, nonzero area, and no self-intersection where practical. Server routes save and delete regions through service-role-only RPCs that validate town, atlas, page, and sheet scope before writing.
+Functional source regions are stored in `public.sanborn_source_regions` by migration `0016_functional_source_regions.sql`. Migration `0016` links existing `public.sanborn_town_index_regions` rows into source regions as `sheet_coverage_region` records where appropriate so earlier polygons are preserved. Regions validate normalized `0..1` polygons with at least three points, finite coordinates, nonzero area, and no self-intersection where practical. Server routes save and delete regions through service-role-only RPCs that validate town, atlas, page, and sheet scope before writing.
 
 Region statuses are:
 
@@ -99,7 +112,7 @@ Region statuses are:
 
 Clicking a linked index region selects the linked sheet/page, keeps the town and edition context, updates URL parameters, and moves the workspace to Sheet Inventory or Map Pieces. Returning to Town Index preserves the selected region through `indexRegionId`.
 
-If no primary Graphic Index is designated, Town Index shows a repair state with eligible uploaded pages. Reviewers can select a page, classify it as Graphic Index, and set it as primary without leaving the station.
+If no primary Town Index is designated, Town Index shows a repair state with eligible uploaded pages. Reviewers can select a page, classify it as Index or mixed, and explicitly set it as primary without leaving the station.
 
 ## Progress Formulas
 
@@ -146,7 +159,7 @@ Index-region progress uses milestones rather than false precision:
 - all linked page pieces placed: 90%;
 - reviewed: 100%.
 
-`missing` regions count as 0% and remain visible. `conflict` regions remain incomplete until the conflict is cleared. Edition-wide Town Index completion averages durable region progress across all regions, so reviewed regions cannot hide missing or conflicted work.
+`missing` regions count as 0% and remain visible. `conflict` regions remain incomplete until the conflict is cleared. Edition-wide Town Index completion averages durable sheet-coverage region progress only. Printed-index, title, legend, and other contextual source regions remain visible where useful but do not count as incomplete sheet-link work.
 
 ## Work Queue
 
@@ -155,11 +168,13 @@ The Available Work panel is calculated from incomplete records. It is not an ass
 Example tasks:
 
 - classify uploaded pages;
-- select a primary Graphic Index;
+- select a primary Town Index page;
+- classify functional regions on the index page;
+- mark the town coverage diagram;
+- mark printed index areas;
 - resolve map pieces created on non-geographic pages;
 - add printed sheet references;
-- draw missing Town Index regions;
-- link or resolve Town Index regions;
+- link or resolve sheet-coverage regions;
 - add source records for sheets missing provenance;
 - identify regions on a sheet;
 - place an unplaced map piece;

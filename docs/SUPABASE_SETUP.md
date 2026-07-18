@@ -66,7 +66,8 @@ The migrations create:
 - The scoped RPC replacement that fixes map-piece placement save scope on databases that already applied `0011`.
 - Durable source identity and provenance fields on `source_records`, including `SRC-XXXXXXXXXXXX` display IDs, repository metadata, Library of Congress fields, persistent URLs, IIIF URLs, rights notes, source status, and source links from sheets, pages, map pieces, buildings, people, and businesses.
 - Durable Town Index mission-map regions with normalized source-image polygons, non-sequential sheet references, scoped page/sheet links, explicit workflow statuses, RLS, and service-role-only save/delete RPCs.
-- Page Classification workflow fields on Sanborn atlas pages, including canonical page types, printed references, display titles, classification notes, primary Graphic Index designation, safe backfill from legacy page types, and a service-role-only atlas-page save RPC.
+- Page Classification workflow fields on Sanborn atlas pages, including canonical page types, printed references, display titles, classification notes, explicit primary Town Index designation, safe backfill from legacy page types, and a service-role-only atlas-page save RPC.
+- Functional Sanborn source regions with normalized source-image polygons, region-purpose types, source-page/sheet links, optional Town Index inclusion, optional Map Pieces availability for geographic regions, scoped save/delete RPCs, RLS, and service-role-only access.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -152,7 +153,7 @@ Migration `0009_town_package_location_metadata.sql` adds:
 
 The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for the active map center.
 
-Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Migration `0014_town_index_regions.sql` is required for persistent Town Index region save/delete behavior. Until `0014` is applied, the studio still loads safely but region queries or writes return visible database errors rather than fabricating index-region data.
+Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Migration `0014_town_index_regions.sql` is required for legacy persistent Town Index region save/delete behavior. Migration `0016_functional_source_regions.sql` is required for PR #73 functional source regions, canonical page-type repair, Source Record region saves, and Town Index reuse of saved sheet-coverage regions. Until `0016` is applied, the studio falls back to legacy Town Index region reads where possible and shows visible database errors for source-region writes rather than fabricating data.
 
 Migration `0015_page_classification_workflow.sql` is required for page-type-driven station behavior. Until `0015` is applied, older atlas pages still load through the compatibility query, but page classification fields cannot persist and the Source Record classification controls will return visible database errors instead of silently pretending to save.
 
@@ -204,7 +205,8 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 20. In Town Index, draw a region, close the polygon, link it to a non-sequential sheet reference, save it, reload, and confirm the region and `indexRegionId` selection restore.
 21. Confirm invalid or self-intersecting region polygons are rejected before save.
 22. In Source Record, classify a cover page and confirm Map Pieces explains that cover pages do not use map pieces.
-23. Classify one uploaded page as Graphic Index, set it as the primary Town Index, and confirm Town Index loads that page immediately.
+23. Classify one uploaded page as Index or mixed, explicitly set it as the primary Town Index, and confirm Town Index loads that page immediately.
+24. In Source Record, mark functional regions for town coverage, sheet coverage, printed index, and geographic map content; save regions and confirm Town Index reuses the sheet-coverage regions without redrawing.
 24. Confirm Map Pieces and Map Placement are enabled only for Sanborn Sheet or Inset / Special Sheet pages.
 25. Confirm direct anon table/RPC access to `sanborn_town_index_regions` and atlas-page classification writes fails, while the Next.js service-role APIs work.
 26. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.

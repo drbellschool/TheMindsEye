@@ -148,7 +148,7 @@ export function SanbornAtlasNavigator({
     town_index: {
       summary: `${townIndexSummary.completion.linkedRegions}/${Math.max(1, townIndexSummary.completion.totalRegions)} linked`,
       status: !townIndexSummary.indexPage ? "missing" : townIndexSummary.completion.conflictRegions > 0 ? "conflict" : townIndexSummary.completion.reviewedRegions === townIndexSummary.completion.totalRegions && townIndexSummary.completion.totalRegions > 0 ? "reviewed" : townIndexSummary.completion.linkedRegions > 0 ? "started" : "not_started",
-      warning: !townIndexSummary.indexPage ? "No primary Graphic Index" : townIndexSummary.completion.conflictRegions > 0 ? "Index conflicts" : townIndexSummary.completion.missingRegions > 0 ? "Missing regions" : undefined,
+      warning: !townIndexSummary.indexPage ? "No primary Town Index" : townIndexSummary.completion.conflictRegions > 0 ? "Index conflicts" : townIndexSummary.completion.missingRegions > 0 ? "Missing regions" : undefined,
     },
     numbered_sheets: {
       summary: `${startedSheets}/${Math.max(1, sheetProgress.length)} started`,

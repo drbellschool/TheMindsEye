@@ -29,6 +29,7 @@ import {
 
 const migrationPath = "../../supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql";
 const pageClassificationMigrationPath = "../../supabase/migrations/0015_page_classification_workflow.sql";
+const functionalSourceRegionsMigrationPath = "../../supabase/migrations/0016_functional_source_regions.sql";
 const atlasRoutePath = "app/api/community/historical-map-studio/atlases/route.ts";
 const pageRoutePath = "app/api/community/historical-map-studio/atlas-pages/route.ts";
 const pieceRoutePath = "app/api/community/historical-map-studio/map-pieces/route.ts";
@@ -40,6 +41,10 @@ function readMigration(): string {
 
 function readPageClassificationMigration(): string {
   return readFileSync(pageClassificationMigrationPath, "utf8");
+}
+
+function readFunctionalSourceRegionsMigration(): string {
+  return readFileSync(functionalSourceRegionsMigrationPath, "utf8");
 }
 
 function readRoute(path: string): string {
@@ -63,12 +68,11 @@ function assertSqlIncludes(sql: string, statement: string): void {
 test("sanborn atlas page and piece type allowlists match the manual inventory workflow", () => {
   assert.deepEqual(sanbornPageTypes, [
     "cover",
-    "legend",
-    "graphic_index",
-    "street_index",
-    "specials_index",
+    "index_or_mixed",
     "sanborn_sheet",
-    "inset",
+    "street_index",
+    "special_sheet",
+    "legend",
     "advertisement",
     "other",
     "unknown",
@@ -86,6 +90,9 @@ test("sanborn atlas page and piece type allowlists match the manual inventory wo
   assert.equal(isSanbornPageType("sanborn_sheet"), true);
   assert.equal(isSanbornPageType("numbered_sheet"), false);
   assert.equal(normalizeSanbornPageType("numbered_sheet"), "sanborn_sheet");
+  assert.equal(normalizeSanbornPageType("graphic_index"), "index_or_mixed");
+  assert.equal(normalizeSanbornPageType("specials_index"), "special_sheet");
+  assert.equal(normalizeSanbornPageType("inset"), "special_sheet");
   assert.equal(normalizeSanbornPageType("title"), "cover");
   assert.equal(normalizeSanbornPageType("supplement"), "other");
   assert.equal(isSanbornPageType("ocr_detected_sheet"), false);
@@ -94,18 +101,35 @@ test("sanborn atlas page and piece type allowlists match the manual inventory wo
 });
 
 test("page classification controls Town Index, Map Pieces, and Map Placement availability", () => {
+  assert.equal(pageTypeSupportsTownIndexRegions("index_or_mixed"), true);
   assert.equal(pageTypeSupportsTownIndexRegions("graphic_index"), true);
   assert.equal(pageTypeSupportsTownIndexRegions("sanborn_sheet"), false);
   assert.equal(pageTypeSupportsMapPieces("sanborn_sheet"), true);
   assert.equal(pageTypeSupportsMapPieces("inset"), true);
+  assert.equal(pageTypeSupportsMapPieces("special_sheet"), true);
   assert.equal(pageTypeSupportsMapPieces("cover"), false);
-  assert.equal(pageTypeSupportsMapPieces("graphic_index"), false);
+  assert.equal(pageTypeSupportsMapPieces("index_or_mixed"), false);
   assert.equal(pageTypeSupportsMapPlacement("sanborn_sheet"), true);
   assert.equal(pageTypeSupportsMapPlacement("street_index"), false);
-  assert.equal(getSanbornPageTypeLabel("graphic_index"), "Graphic Index");
+  assert.equal(getSanbornPageTypeLabel("graphic_index"), "Index or mixed page");
   assert.match(getPageTypeToolBlockMessage("cover"), /Cover pages do not use Map Pieces/);
-  assert.match(getPageTypeToolBlockMessage("graphic_index"), /Town Index coverage regions/);
+  assert.match(getPageTypeToolBlockMessage("index_or_mixed"), /functional geographic map-content region/);
   assert.match(getPageTypeToolBlockMessage("unknown"), /Classify this page in Source Record/);
+});
+
+test("every canonical page type is accepted by client, API normalization, and database repair migration", () => {
+  const route = readRoute(pageRoutePath);
+  const migration = readFunctionalSourceRegionsMigration();
+
+  for (const pageType of sanbornPageTypes) {
+    assert.equal(isSanbornPageType(pageType), true);
+    assert.equal(normalizeSanbornPageType(pageType), pageType);
+    assert.match(migration, new RegExp(`'${pageType}'`));
+  }
+
+  assert.match(route, /normalizeSanbornPageType\(page\.pageType\)/);
+  assert.match(route, /legacySanbornPageTypeAliases/);
+  assert.match(migration, /save_sanborn_atlas_pages/);
 });
 
 test("validates normalized polygon coordinates without accepting source-image crops", () => {
@@ -226,33 +250,31 @@ test("page saves resolve existing page IDs under the selected atlas before writi
   assert.match(savePages, /Existing atlas page IDs cannot be reassigned to a different Sanborn sheet asset/);
 });
 
-test("migration 0015 normalizes page classification and preserves service-role-only page saves", () => {
-  const migration = readPageClassificationMigration();
+test("migration 0016 repairs page classification values and preserves service-role-only page saves", () => {
+  const migration = readFunctionalSourceRegionsMigration();
   const savePages = readSqlFunction(migration, "save_sanborn_atlas_pages");
 
-  assert.match(migration, /0015_page_classification_workflow|sanborn_atlas_pages/i);
-  assert.match(migration, /add column if not exists printed_reference text/);
-  assert.match(migration, /add column if not exists is_primary_town_index boolean not null default false/);
-  assert.match(migration, /add column if not exists classification_notes text/);
+  assert.match(migration, /0016_functional_source_regions|sanborn_atlas_pages/i);
   assert.match(migration, /when 'title' then 'cover'/);
   assert.match(migration, /when 'numbered_sheet' then 'sanborn_sheet'/);
+  assert.match(migration, /when 'graphic_index' then 'index_or_mixed'/);
+  assert.match(migration, /when 'specials_index' then 'special_sheet'/);
+  assert.match(migration, /when 'inset' then 'special_sheet'/);
   assert.match(migration, /when 'supplement' then 'other'/);
   assert.match(migration, /sanborn_atlas_pages_page_type_allowed/);
   assert.match(migration, /'cover'/);
+  assert.match(migration, /'index_or_mixed'/);
   assert.match(migration, /'sanborn_sheet'/);
-  assert.match(migration, /'inset'/);
+  assert.match(migration, /'special_sheet'/);
   assert.match(migration, /'advertisement'/);
-  assert.match(migration, /sanborn_atlas_pages_primary_index_requires_graphic/);
-  assert.match(migration, /sanborn_atlas_pages_printed_reference_format/);
-  assert.match(migration, /printed_reference !~ '\[\[:cntrl:\]\]'/);
-  assert.match(migration, /sanborn_atlas_pages_classification_notes_length/);
-  assert.match(migration, /idx_sanborn_atlas_pages_one_primary_town_index/);
-  assert.match(savePages, /Only Graphic Index pages can be the primary Town Index/);
+  assert.match(migration, /sanborn_atlas_pages_primary_index_requires_index_or_mixed/);
+  assert.match(savePages, /Only Index or mixed pages can be the primary Town Index/);
   assert.match(savePages, /Only one primary Town Index page is allowed per Sanborn atlas/);
   assert.match(savePages, /Printed reference must be 80 characters or fewer/);
   assert.match(savePages, /Classification notes must be 1000 characters or fewer/);
-  assert.match(savePages, /page_type <> 'graphic_index'/);
+  assert.match(savePages, /page_type <> 'index_or_mixed'/);
   assert.match(savePages, /is_primary_town_index = false/);
+  assert.doesNotMatch(savePages, /count\(\*\) from _sanborn_page_payload where page_type = 'index_or_mixed'[\s\S]*set is_primary_town_index = true/);
   assert.match(savePages, /where page_row\.id = payload\.existing_page_row_id/);
   assert.doesNotMatch(savePages, /security definer/i);
   assert.match(savePages, /security invoker/i);
@@ -270,8 +292,9 @@ test("page classification API persists classification fields and blocks invalid 
   assert.match(route, /normalizeLimitedText\(page\.printedReference, 80, "Printed reference"\)/);
   assert.match(route, /\$\{fieldName\} must be \$\{maxLength\} characters or fewer/);
   assert.match(route, /contains unsupported control characters/);
-  assert.match(route, /Only Graphic Index pages can be the primary Town Index/);
+  assert.match(route, /Only Index or mixed pages can be the primary Town Index/);
   assert.match(route, /Only one primary Town Index page is allowed per Sanborn atlas/);
+  assert.match(route, /legacySanbornPageTypeAliases/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
 });
 
@@ -280,11 +303,13 @@ test("map-piece and placement APIs reject non-geographic page classifications be
   const placementRoute = readRoute(piecePlacementRoutePath);
 
   assert.match(pieceRoute, /pageTypeSupportsMapPieces/);
+  assert.match(pieceRoute, /sanborn_source_regions/);
   assert.match(pieceRoute, /getPageTypeToolBlockMessage/);
-  assert.match(pieceRoute, /Classify this page as a Sanborn Sheet or Inset before saving map pieces/);
+  assert.match(pieceRoute, /Classify this page as a Sanborn Sheet or mark a geographic source region before saving map pieces/);
   assert.match(placementRoute, /pageTypeSupportsMapPlacement/);
+  assert.match(placementRoute, /sanborn_source_regions/);
   assert.match(placementRoute, /getPageTypeToolBlockMessage/);
-  assert.match(placementRoute, /Classify this page as a Sanborn Sheet or Inset before saving placement/);
+  assert.match(placementRoute, /Classify this page as a Sanborn Sheet or mark a geographic source region before saving placement/);
 });
 
 test("piece saves reject cross-page piece IDs and update by scoped row ID", () => {

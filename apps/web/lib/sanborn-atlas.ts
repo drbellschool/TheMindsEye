@@ -2,12 +2,11 @@ import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 
 export const sanbornPageTypes = [
   "cover",
-  "legend",
-  "graphic_index",
-  "street_index",
-  "specials_index",
+  "index_or_mixed",
   "sanborn_sheet",
-  "inset",
+  "street_index",
+  "special_sheet",
+  "legend",
   "advertisement",
   "other",
   "unknown",
@@ -15,17 +14,19 @@ export const sanbornPageTypes = [
 
 export const legacySanbornPageTypeAliases: Record<string, SanbornPageType> = {
   title: "cover",
+  graphic_index: "index_or_mixed",
   numbered_sheet: "sanborn_sheet",
+  specials_index: "special_sheet",
+  inset: "special_sheet",
   supplement: "other",
 };
 
 export const sanbornPageTypeLabels: Record<SanbornPageType, string> = {
   cover: "Cover page",
-  graphic_index: "Graphic Index",
-  street_index: "Street Index",
-  specials_index: "Specials Index",
+  index_or_mixed: "Index or mixed page",
   sanborn_sheet: "Sanborn Sheet",
-  inset: "Inset / Special Sheet",
+  street_index: "Street Index",
+  special_sheet: "Special Sheet / Inset",
   legend: "Legend / Key",
   advertisement: "Advertisement",
   other: "Other",
@@ -34,18 +35,18 @@ export const sanbornPageTypeLabels: Record<SanbornPageType, string> = {
 
 export const sanbornPageTypeDescriptions: Record<SanbornPageType, string> = {
   cover: "Provenance and metadata only.",
-  graphic_index: "Edition-level index page used to outline sheet coverage regions.",
-  street_index: "Street reference material; geographic piece tools are not active yet.",
-  specials_index: "Special or inset reference material; link regions through Town Index.",
+  index_or_mixed: "Index or mixed source page; mark functional regions before using reconstruction tools.",
   sanborn_sheet: "Geographic Sanborn sheet that can contain map pieces or blocks.",
-  inset: "Geographic inset or special sheet that can contain map pieces where meaningful.",
+  street_index: "Street reference material; geographic piece tools are not active yet.",
+  special_sheet: "Special sheet or inset that can contain map pieces where geographically meaningful.",
   legend: "Legend or key page; metadata only.",
   advertisement: "Advertisement page; metadata only.",
   other: "Unclassified supporting page; metadata only until reclassified.",
   unknown: "Needs classification before reconstruction tools are enabled.",
 };
 
-export const sanbornGeographicPageTypes = ["sanborn_sheet", "inset"] as const;
+export const sanbornTownIndexPageTypes = ["index_or_mixed"] as const;
+export const sanbornDefaultGeographicPageTypes = ["sanborn_sheet", "special_sheet"] as const;
 
 export const sanbornMapPieceTypes = [
   "regular_block",
@@ -192,7 +193,7 @@ export function getSanbornPageTypeDescription(value: string | null | undefined):
 }
 
 export function isSanbornGraphicIndexPage(page: Pick<SanbornAtlasPageRecord, "pageType"> | null | undefined): boolean {
-  return page?.pageType === "graphic_index";
+  return pageTypeSupportsTownIndexRegions(page?.pageType);
 }
 
 export function isClassifiedSanbornPage(page: Pick<SanbornAtlasPageRecord, "pageType"> | null | undefined): boolean {
@@ -200,11 +201,15 @@ export function isClassifiedSanbornPage(page: Pick<SanbornAtlasPageRecord, "page
 }
 
 export function pageTypeSupportsTownIndexRegions(pageType: SanbornPageType | string | null | undefined): boolean {
-  return normalizeSanbornPageType(pageType) === "graphic_index";
+  return sanbornTownIndexPageTypes.includes(normalizeSanbornPageType(pageType) as (typeof sanbornTownIndexPageTypes)[number]);
+}
+
+export function pageTypeCanBePrimaryTownIndex(pageType: SanbornPageType | string | null | undefined): boolean {
+  return pageTypeSupportsTownIndexRegions(pageType);
 }
 
 export function pageTypeSupportsMapPieces(pageType: SanbornPageType | string | null | undefined): boolean {
-  return sanbornGeographicPageTypes.includes(normalizeSanbornPageType(pageType) as (typeof sanbornGeographicPageTypes)[number]);
+  return sanbornDefaultGeographicPageTypes.includes(normalizeSanbornPageType(pageType) as (typeof sanbornDefaultGeographicPageTypes)[number]);
 }
 
 export function pageTypeSupportsMapPlacement(pageType: SanbornPageType | string | null | undefined): boolean {
@@ -232,12 +237,10 @@ export function getPageTypeToolBlockMessage(pageType: SanbornPageType | string |
   switch (normalizeSanbornPageType(pageType)) {
     case "cover":
       return "Cover pages do not use Map Pieces. Classify this page as a Sanborn Sheet if that is incorrect.";
-    case "graphic_index":
-      return "Graphic Index pages use Town Index coverage regions rather than Map Pieces.";
+    case "index_or_mixed":
+      return "Index or mixed pages need a functional geographic map-content region before Map Pieces are available.";
     case "street_index":
       return "Street Index pages do not currently support geographic placement.";
-    case "specials_index":
-      return "Specials Index pages link special sheets or insets through Town Index before Map Pieces.";
     case "legend":
       return "Legend and key pages are metadata-only unless reclassified as a geographic sheet.";
     case "advertisement":
@@ -247,7 +250,7 @@ export function getPageTypeToolBlockMessage(pageType: SanbornPageType | string |
     case "unknown":
       return "Classify this page in Source Record before using Map Pieces or Map Placement.";
     case "sanborn_sheet":
-    case "inset":
+    case "special_sheet":
       return "";
   }
 }
@@ -256,16 +259,17 @@ export function hasSanbornPageClassificationConflict(input: {
   page: Pick<SanbornAtlasPageRecord, "pageType"> | null | undefined;
   mapPieceCount?: number | null;
   isPrimaryTownIndex?: boolean | null;
+  hasGeographicSourceRegion?: boolean | null;
 }): boolean {
   if (!input.page) {
     return false;
   }
 
-  if ((input.mapPieceCount ?? 0) > 0 && !pageTypeSupportsMapPieces(input.page.pageType)) {
+  if ((input.mapPieceCount ?? 0) > 0 && !pageTypeSupportsMapPieces(input.page.pageType) && input.hasGeographicSourceRegion !== true) {
     return true;
   }
 
-  if (input.isPrimaryTownIndex && input.page.pageType !== "graphic_index") {
+  if (input.isPrimaryTownIndex && !pageTypeCanBePrimaryTownIndex(input.page.pageType)) {
     return true;
   }
 
@@ -391,16 +395,14 @@ function pageTypeSortRank(pageType: SanbornPageType): number {
   switch (pageType) {
     case "cover":
       return 10;
-    case "graphic_index":
+    case "index_or_mixed":
       return 20;
     case "street_index":
-    case "specials_index":
+    case "special_sheet":
     case "legend":
       return 30;
     case "sanborn_sheet":
       return 40;
-    case "inset":
-      return 50;
     case "advertisement":
       return 60;
     case "other":

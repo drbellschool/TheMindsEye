@@ -82,7 +82,21 @@ export async function PUT(request: NextRequest) {
 
   const pageType = normalizeSanbornPageType(pageScopeResult.data.page_type);
   if (!pageTypeSupportsMapPieces(pageType)) {
-    return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or Inset before saving map pieces.");
+    const sourceRegionResult = await supabase
+      .from("sanborn_source_regions")
+      .select("id")
+      .eq("atlas_page_id", pageScopeResult.data.id)
+      .eq("available_to_map_pieces", true)
+      .in("region_type", ["geographic_map_content", "inset_map"])
+      .limit(1);
+
+    if (sourceRegionResult.error) {
+      return jsonError(503, `Functional source regions could not be checked: ${sourceRegionResult.error.message}`);
+    }
+
+    if ((sourceRegionResult.data ?? []).length === 0) {
+      return jsonError(400, getPageTypeToolBlockMessage(pageType) || "Classify this page as a Sanborn Sheet or mark a geographic source region before saving map pieces.");
+    }
   }
 
   const normalizedPieces = body.pieces.map((piece, index) => {
