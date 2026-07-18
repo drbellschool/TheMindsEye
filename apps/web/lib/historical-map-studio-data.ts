@@ -74,10 +74,35 @@ type TownPackageRow = {
 type SourceRecordRow = {
   id: string;
   source_id: string;
+  internal_source_id?: string | null;
   title: string;
   source_url: string | null;
   archive_name: string | null;
   rights_note: string | null;
+  repository_name?: string | null;
+  collection_name?: string | null;
+  repository_external_id?: string | null;
+  persistent_url?: string | null;
+  item_page_url?: string | null;
+  iiif_manifest_url?: string | null;
+  image_service_url?: string | null;
+  item_resource_id?: string | null;
+  town_name?: string | null;
+  county_name?: string | null;
+  state_name?: string | null;
+  edition_year?: number | null;
+  sheet_number?: string | null;
+  map_publisher?: string | null;
+  publication_date?: string | null;
+  downloaded_at?: string | null;
+  imported_at?: string | null;
+  imported_by?: string | null;
+  rights_statement?: string | null;
+  rights_url?: string | null;
+  access_note?: string | null;
+  access_date?: string | null;
+  citation_note?: string | null;
+  source_status?: string | null;
 };
 
 type MapLayerRow = {
@@ -482,10 +507,35 @@ function mapSourceOptions(rows: SourceRecordRow[]): StudioSourceOption[] {
     .map((row) => ({
       sourceRecordId: row.id,
       sourceId: row.source_id,
+      internalSourceId: row.internal_source_id ?? null,
       title: row.title,
       sourceUrl: row.source_url,
       archiveName: row.archive_name,
       rightsNote: row.rights_note,
+      repositoryName: row.repository_name ?? null,
+      collectionName: row.collection_name ?? null,
+      repositoryExternalId: row.repository_external_id ?? null,
+      persistentUrl: row.persistent_url ?? null,
+      itemPageUrl: row.item_page_url ?? null,
+      iiifManifestUrl: row.iiif_manifest_url ?? null,
+      imageServiceUrl: row.image_service_url ?? null,
+      itemResourceId: row.item_resource_id ?? null,
+      townName: row.town_name ?? null,
+      countyName: row.county_name ?? null,
+      stateName: row.state_name ?? null,
+      editionYear: row.edition_year ?? null,
+      sheetNumber: row.sheet_number ?? null,
+      mapPublisher: row.map_publisher ?? null,
+      publicationDate: row.publication_date ?? null,
+      downloadedAt: row.downloaded_at ?? null,
+      importedAt: row.imported_at ?? null,
+      importedBy: row.imported_by ?? null,
+      rightsStatement: row.rights_statement ?? null,
+      rightsUrl: row.rights_url ?? null,
+      accessNote: row.access_note ?? null,
+      accessDate: row.access_date ?? null,
+      citationNote: row.citation_note ?? null,
+      sourceStatus: row.source_status ?? null,
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -887,10 +937,13 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   }
 
   const activeMapYear = parseMapYear(options.mapYear, activeTownPackage.year);
-  const [sourceRecordsResult, mapLayersResult, assetsResult, workspaceResult] = await Promise.all([
+  const sourceRecordProvenanceSelect =
+    "id, source_id, internal_source_id, title, source_url, archive_name, rights_note, repository_name, collection_name, repository_external_id, persistent_url, item_page_url, iiif_manifest_url, image_service_url, item_resource_id, town_name, county_name, state_name, edition_year, sheet_number, map_publisher, publication_date, downloaded_at, imported_at, imported_by, rights_statement, rights_url, access_note, access_date, citation_note, source_status";
+  const sourceRecordBaseSelect = "id, source_id, title, source_url, archive_name, rights_note";
+  const [sourceRecordsInitialResult, mapLayersResult, assetsResult, workspaceResult] = await Promise.all([
     supabase
       .from("source_records")
-      .select("id, source_id, title, source_url, archive_name, rights_note")
+      .select(sourceRecordProvenanceSelect)
       .eq("town_package_id", activeTownPackage.id)
       .order("title", { ascending: true }),
     supabase.from("map_layers").select("sheet_number").eq("town_package_id", activeTownPackage.id).order("sheet_number", { ascending: true }),
@@ -911,6 +964,29 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
       .eq("map_year", activeMapYear)
       .maybeSingle<WorkspaceRow>(),
   ]);
+  let sourceRecordsResult = sourceRecordsInitialResult as unknown as {
+    data: SourceRecordRow[] | null;
+    error: { message: string } | null;
+  };
+
+  if (
+    sourceRecordsResult.error &&
+    /internal_source_id|repository_name|collection_name|repository_external_id|persistent_url|item_page_url|iiif_manifest_url|image_service_url|item_resource_id|town_name|county_name|state_name|edition_year|sheet_number|map_publisher|publication_date|downloaded_at|imported_at|imported_by|rights_statement|rights_url|access_note|access_date|citation_note|source_status/i.test(
+      sourceRecordsResult.error.message,
+    )
+  ) {
+    console.warn("[HistoricalMapStudio] Source provenance columns are unavailable; falling back to legacy source select.", {
+      message: sourceRecordsResult.error.message,
+    });
+    sourceRecordsResult = (await supabase
+      .from("source_records")
+      .select(sourceRecordBaseSelect)
+      .eq("town_package_id", activeTownPackage.id)
+      .order("title", { ascending: true })) as unknown as {
+      data: SourceRecordRow[] | null;
+      error: { message: string } | null;
+    };
+  }
 
   const queryError = sourceRecordsResult.error ?? mapLayersResult.error ?? assetsResult.error;
 

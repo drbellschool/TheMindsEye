@@ -17,6 +17,75 @@
     "unresolved": 7,
     "progressPercent": 42
   },
+  "townReconstruction": {
+    "demoLabel": "Demo fallback reconstruction overview",
+    "townName": "Texarkana",
+    "activeEdition": 1885,
+    "overallProgressPercent": 42,
+    "sourceIdentity": {
+      "internalSourceId": "SRC-1234567890AB",
+      "repository": "Library of Congress",
+      "collection": "Sanborn Fire Insurance Maps",
+      "externalRecordId": "sanborn-texarkana-1885-demo",
+      "persistentUrl": "https://www.loc.gov/item/sanborn-demo-texarkana-1885/",
+      "iiifManifestUrl": "https://www.loc.gov/item/sanborn-demo-texarkana-1885/?fo=json",
+      "citation": "Sanborn Map Company. Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas. 1885. Sheet 2. Sanborn Fire Insurance Maps, Library of Congress. https://www.loc.gov/item/sanborn-demo-texarkana-1885/. Accessed 2026-07-18."
+    },
+    "townIndex": {
+      "indexPage": "Town Index",
+      "indexSheetNumber": null,
+      "regions": [
+        {
+          "label": "Sheet 2 region",
+          "sheetNumber": 2,
+          "status": "placed"
+        },
+        {
+          "label": "Sheet 3 rail district",
+          "sheetNumber": 3,
+          "status": "in_progress"
+        },
+        {
+          "label": "Sheet 7 outlying district",
+          "sheetNumber": 7,
+          "status": "missing"
+        }
+      ]
+    },
+    "sheetInventory": [
+      {
+        "sheetNumber": 2,
+        "filename": "texarkana-1885-sheet-02.png",
+        "sourceRecordId": "SRC-1234567890AB",
+        "mapPieces": 13,
+        "mapPiecesPlaced": 9,
+        "status": "in_progress"
+      },
+      {
+        "sheetNumber": 3,
+        "filename": "texarkana-1885-sheet-03.png",
+        "sourceRecordId": "SRC-1234567890AB",
+        "mapPieces": 4,
+        "mapPiecesPlaced": 2,
+        "status": "in_progress"
+      },
+      {
+        "sheetNumber": 7,
+        "filename": "texarkana-1885-sheet-07.png",
+        "sourceRecordId": null,
+        "mapPieces": 0,
+        "mapPiecesPlaced": 0,
+        "status": "missing"
+      }
+    ],
+    "nextTasks": [
+      "Link the Town Index to Sheet 7",
+      "Identify remaining regions on Sheet 2",
+      "Place Block 68",
+      "Review saved placement for Sheet 3 rail district",
+      "Add source record for Sheet 7"
+    ]
+  },
   "statusChips": [
     {
       "label": "Sources",
@@ -812,8 +881,8 @@
       "fields": [
         {
           "label": "Source ID",
-          "value": "source_texarkana_1885_sanborn_loc",
-          "detail": "Referenced by the town package."
+          "value": "SRC-1234567890AB",
+          "detail": "Durable internal Minds Eye source identity."
         },
         {
           "label": "Archive",

@@ -1091,7 +1091,9 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(studioComponent, /window\.history\.replaceState\(window\.history\.state, "", nextUrl\)/);
   assert.match(studioComponent, /params\.set\("workflow", atlasWorkflowStep\)/);
   assert.match(pageComponent, /workflow\?: string/);
-  assert.match(pageComponent, /initialSelection=\{\{[\s\S]*workflowStep: params\.workflow[\s\S]*pieceId: params\.piece[\s\S]*assetId: params\.sheet/s);
+  assert.match(pageComponent, /townPackageId: params\.townPackageId \?\? params\.town/);
+  assert.match(pageComponent, /mapYear: params\.mapYear \?\? params\.year/);
+  assert.match(pageComponent, /initialSelection=\{\{[\s\S]*workflowStep: params\.workflow[\s\S]*pieceId: params\.mapPieceId \?\? params\.piece[\s\S]*assetId: params\.sheetAssetId \?\? params\.sheet/s);
   assert.match(studioComponent, /pieceLayers=\{mapPieceLayers\}/);
   assert.match(studioComponent, /buildOperationalMapPieceLayers\(\{/);
   assert.match(studioComponent, /displayScope: "all_placed_pieces"/);

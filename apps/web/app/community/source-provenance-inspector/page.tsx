@@ -2,20 +2,77 @@ import Link from "next/link";
 
 import { KeyValueList } from "@/components/KeyValueList";
 import { Panel } from "@/components/Panel";
+import { ReconstructionContextBar } from "@/components/ReconstructionContextBar";
 import { SourceLinkList } from "@/components/SourceLinkList";
 import { loadCommunityData } from "@/lib/community-data";
+import { loadHistoricalMapStudioData } from "@/lib/historical-map-studio-data";
+import { buildReconstructionModelFromStudioState } from "@/lib/town-reconstruction";
 
 export const metadata = {
   title: "Source / Provenance Inspector | The Mind's Eye",
 };
 
-export default async function SourceProvenanceInspectorPage() {
+type SourceProvenanceInspectorPageProps = {
+  searchParams?: Promise<{
+    atlas?: string;
+    atlasId?: string;
+    page?: string;
+    atlasPageId?: string;
+    piece?: string;
+    mapPieceId?: string;
+    sheet?: string;
+    sheetAssetId?: string;
+    town?: string;
+    townPackageId?: string;
+    year?: string;
+    mapYear?: string;
+  }>;
+};
+
+export default async function SourceProvenanceInspectorPage({ searchParams }: SourceProvenanceInspectorPageProps) {
+  const params = (await searchParams) ?? {};
   const { data: communityData } = await loadCommunityData();
+  const studioState = await loadHistoricalMapStudioData({
+    townPackageId: params.townPackageId ?? params.town,
+    mapYear: params.mapYear ?? params.year,
+  });
+  const reconstructionModel = buildReconstructionModelFromStudioState({
+    state: studioState,
+    selectedAtlasId: params.atlasId ?? params.atlas,
+    selectedPageId: params.atlasPageId ?? params.page,
+    selectedPieceId: params.mapPieceId ?? params.piece,
+  });
+  const selectedPieceProgress = reconstructionModel.pieceProgress.find((piece) => piece.pieceId === (params.mapPieceId ?? params.piece)) ?? null;
+  const context = {
+    townPackageId: studioState.activeTownPackage?.id ?? params.townPackageId ?? params.town,
+    mapYear: studioState.activeMapYear ?? params.mapYear ?? params.year,
+    atlasId: params.atlasId ?? params.atlas ?? reconstructionModel.activeAtlas?.atlasId,
+    atlasPageId: params.atlasPageId ?? params.page,
+    sheetAssetId: params.sheetAssetId ?? params.sheet,
+    mapPieceId: params.mapPieceId ?? params.piece,
+    blockId: selectedPieceProgress?.blockNumber ?? null,
+    workflow: "evidence_review",
+  };
   const { sourceProvenanceInspector } = communityData;
   const primarySourceLink = sourceProvenanceInspector.source.sourceLinks[0];
 
   return (
-    <div className="content-grid content-grid--split">
+    <div className="reconstruction-route-shell">
+      <ReconstructionContextBar
+        context={context}
+        currentRoute="sources"
+        editionProgress={reconstructionModel.edition}
+        pieces={reconstructionModel.pieceProgress}
+        sheets={reconstructionModel.sheetProgress}
+        sourceOptions={studioState.sourceOptions}
+        townProgress={reconstructionModel.town}
+        towns={studioState.townPackages}
+        years={studioState.availableMapYears}
+      />
+      <Panel eyebrow="Sources & Evidence" title="Durable provenance" subtitle="Source records remain the canonical source identity for sheets, map pieces, claims, and later reconstruction records." tone="paper">
+        <p className="small-muted">This PR adds the workflow shell and source identity foundation without adding OCR, automatic interpretation, or structured feature inventory.</p>
+      </Panel>
+      <div className="content-grid content-grid--split">
       <Panel
         action={
           primarySourceLink ? (
@@ -82,6 +139,7 @@ export default async function SourceProvenanceInspectorPage() {
           ))}
         </div>
       </Panel>
+      </div>
     </div>
   );
 }
