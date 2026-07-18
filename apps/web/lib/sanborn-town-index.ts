@@ -4,10 +4,24 @@ import type { SanbornAtlasPageRecord, SanbornMapPieceRecord, SanbornNormalizedPo
 import { calculateNormalizedPolygonArea, validateNormalizedPolygon } from "./sanborn-atlas.ts";
 import { hasOperationalMapPiecePlacement, type SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 
-export const sanbornTownIndexRegionTypes = ["sheet_region", "district", "coverage_area", "inset", "index_label", "unknown"] as const;
+export const sanbornSourceRegionTypes = [
+  "town_coverage_diagram",
+  "sheet_coverage_region",
+  "printed_index",
+  "geographic_map_content",
+  "street_index_text",
+  "block_index_text",
+  "legend_key",
+  "inset_map",
+  "title_or_decoration",
+  "notes",
+  "other",
+] as const;
+export const sanbornTownIndexRegionTypes = sanbornSourceRegionTypes;
 export const sanbornTownIndexStatuses = ["missing", "not_started", "started", "placed", "reviewed", "conflict"] as const;
 
-export type SanbornTownIndexRegionType = (typeof sanbornTownIndexRegionTypes)[number];
+export type SanbornSourceRegionType = (typeof sanbornSourceRegionTypes)[number];
+export type SanbornTownIndexRegionType = SanbornSourceRegionType;
 export type SanbornTownIndexStatus = (typeof sanbornTownIndexStatuses)[number];
 
 export type SanbornTownIndexRegionRecord = {
@@ -18,6 +32,8 @@ export type SanbornTownIndexRegionRecord = {
   atlasId: string;
   indexAtlasPageRowId: string;
   indexAtlasPageId: string;
+  sourceAssetRowId: string | null;
+  sourceAssetId: string | null;
   linkedAtlasPageRowId: string | null;
   linkedAtlasPageId: string | null;
   linkedSheetAssetRowId: string | null;
@@ -28,6 +44,8 @@ export type SanbornTownIndexRegionRecord = {
   sourcePolygon: SanbornNormalizedPoint[];
   workflowStatus: SanbornTownIndexStatus;
   progressStatus: SanbornTownIndexStatus;
+  includeInTownIndex: boolean;
+  availableToMapPieces: boolean;
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
   notes: string | null;
@@ -61,6 +79,57 @@ export type SanbornTownIndexCompletion = {
   conflictRegions: number;
   completionPercent: number;
 };
+
+const legacySourceRegionTypeAliases: Record<string, SanbornSourceRegionType> = {
+  sheet_region: "sheet_coverage_region",
+  district: "sheet_coverage_region",
+  coverage_area: "sheet_coverage_region",
+  inset: "inset_map",
+  index_label: "printed_index",
+  unknown: "other",
+};
+
+export const sanbornSourceRegionTypeLabels: Record<SanbornSourceRegionType, string> = {
+  town_coverage_diagram: "Town coverage diagram",
+  sheet_coverage_region: "Sheet coverage region",
+  printed_index: "Printed index",
+  geographic_map_content: "Geographic map content",
+  street_index_text: "Street index text",
+  block_index_text: "Block index text",
+  legend_key: "Legend / key",
+  inset_map: "Inset map",
+  title_or_decoration: "Title or decoration",
+  notes: "Notes",
+  other: "Other",
+};
+
+export function isSanbornSourceRegionType(value: string | null | undefined): value is SanbornSourceRegionType {
+  return sanbornSourceRegionTypes.includes(value as SanbornSourceRegionType);
+}
+
+export function normalizeSourceRegionType(value: string | null | undefined): SanbornSourceRegionType {
+  const normalized = String(value ?? "").trim();
+  return isSanbornSourceRegionType(normalized) ? normalized : legacySourceRegionTypeAliases[normalized] ?? "other";
+}
+
+export function getSourceRegionTypeLabel(value: string | null | undefined): string {
+  return sanbornSourceRegionTypeLabels[normalizeSourceRegionType(value)];
+}
+
+export function sourceRegionSupportsTownIndex(region: Pick<SanbornTownIndexRegionRecord, "regionType" | "includeInTownIndex">): boolean {
+  return region.includeInTownIndex === true && region.regionType === "sheet_coverage_region";
+}
+
+export function sourceRegionIsTownIndexContext(region: Pick<SanbornTownIndexRegionRecord, "regionType" | "includeInTownIndex">): boolean {
+  return (
+    region.includeInTownIndex === true &&
+    (region.regionType === "sheet_coverage_region" || region.regionType === "town_coverage_diagram" || region.regionType === "printed_index")
+  );
+}
+
+export function sourceRegionSupportsMapPieces(region: Pick<SanbornTownIndexRegionRecord, "regionType" | "availableToMapPieces">): boolean {
+  return region.availableToMapPieces === true && (region.regionType === "geographic_map_content" || region.regionType === "inset_map");
+}
 
 const polygonTolerance = 1e-12;
 
@@ -124,7 +193,7 @@ export function normalizeTownIndexStatus(value: string | null | undefined, fallb
 }
 
 export function normalizeTownIndexRegionType(value: string | null | undefined): SanbornTownIndexRegionType {
-  return sanbornTownIndexRegionTypes.includes(value as SanbornTownIndexRegionType) ? (value as SanbornTownIndexRegionType) : "unknown";
+  return normalizeSourceRegionType(value);
 }
 
 export function compareSheetReferences(left: string | number | null | undefined, right: string | number | null | undefined): number {
@@ -161,6 +230,15 @@ export function buildDefaultTownIndexRegionId(input: { atlasId: string; regionLa
   return `${input.atlasId}-${base}-${suffix}-index-region`;
 }
 
+export function buildDefaultSourceRegionId(input: { atlasId: string; regionLabel?: string | null; printedReference?: string | null; suffix?: string | number | null }): string {
+  return buildDefaultTownIndexRegionId({
+    atlasId: input.atlasId,
+    regionLabel: input.regionLabel,
+    sheetReference: input.printedReference,
+    suffix: input.suffix,
+  }).replace(/-index-region$/, "-source-region");
+}
+
 export function calculateTownIndexRegionProgress(input: {
   region: SanbornTownIndexRegionRecord;
   pages: SanbornAtlasPageRecord[];
@@ -174,7 +252,8 @@ export function calculateTownIndexRegionProgress(input: {
     input.assets.find((asset) => asset.assetId === input.region.linkedSheetAssetId) ??
     (linkedPage ? input.assets.find((asset) => asset.assetId === linkedPage.sanbornSheetAssetId) : null) ??
     null;
-  const sheetLinked = Boolean(linkedPage || linkedAsset);
+  const townIndexSheetRegion = sourceRegionSupportsTownIndex(input.region);
+  const sheetLinked = townIndexSheetRegion ? Boolean(linkedPage || linkedAsset) : false;
   const pagePieces = linkedPage ? input.pieces.filter((piece) => piece.atlasPageId === linkedPage.pageId) : [];
   const mapPiecesPlaced = pagePieces.filter((piece) => {
     const placement = input.placements.find((candidate) => candidate.pieceId === piece.pieceId);
@@ -188,17 +267,17 @@ export function calculateTownIndexRegionProgress(input: {
   const warnings: string[] = [];
 
   if (!regionDefined) warnings.push("Invalid region geometry");
-  if (!sheetLinked && input.region.workflowStatus !== "missing") warnings.push("No linked sheet or page");
-  if (linkedPage && linkedAsset && linkedPage.sanbornSheetAssetId !== linkedAsset.assetId) warnings.push("Linked page and sheet conflict");
+  if (townIndexSheetRegion && !sheetLinked && input.region.workflowStatus !== "missing") warnings.push("No linked sheet or page");
+  if (townIndexSheetRegion && linkedPage && linkedAsset && linkedPage.sanbornSheetAssetId !== linkedAsset.assetId) warnings.push("Linked page and sheet conflict");
   if (input.region.workflowStatus === "conflict" || input.region.progressStatus === "conflict") warnings.push("Marked conflict");
   if (input.region.workflowStatus === "missing" || input.region.progressStatus === "missing") warnings.push("Marked missing");
 
   let completionPercent = 0;
   if (regionDefined) completionPercent = 15;
-  if (regionDefined && sheetLinked) completionPercent = 30;
-  if (regionDefined && sheetLinked && linkedAsset) completionPercent = 40;
-  if (regionDefined && sheetLinked && linkedAsset && pagePieces.length > 0) completionPercent = 60;
-  if (regionDefined && sheetLinked && linkedAsset && pagePieces.length > 0 && mapPiecesPlaced === pagePieces.length) completionPercent = 90;
+  if (townIndexSheetRegion && regionDefined && sheetLinked) completionPercent = 30;
+  if (townIndexSheetRegion && regionDefined && sheetLinked && linkedAsset) completionPercent = 40;
+  if (townIndexSheetRegion && regionDefined && sheetLinked && linkedAsset && pagePieces.length > 0) completionPercent = 60;
+  if (townIndexSheetRegion && regionDefined && sheetLinked && linkedAsset && pagePieces.length > 0 && mapPiecesPlaced === pagePieces.length) completionPercent = 90;
   if (reviewed && completionPercent >= 90) completionPercent = 100;
 
   const status =
@@ -222,9 +301,9 @@ export function calculateTownIndexRegionProgress(input: {
     completionPercent: status === "missing" ? 0 : Math.min(100, Math.max(0, Math.round(completionPercent))),
     regionDefined,
     sheetLinked,
-    sourceAvailable: Boolean(linkedAsset),
-    mapPiecesIdentified: pagePieces.length,
-    mapPiecesPlaced,
+    sourceAvailable: townIndexSheetRegion ? Boolean(linkedAsset) : false,
+    mapPiecesIdentified: townIndexSheetRegion ? pagePieces.length : 0,
+    mapPiecesPlaced: townIndexSheetRegion ? mapPiecesPlaced : 0,
     reviewed,
     warnings,
   };

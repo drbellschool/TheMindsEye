@@ -3,8 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildDefaultSanbornPageId,
   isSanbornPageType,
+  legacySanbornPageTypeAliases,
   normalizeOptionalSanbornText,
   normalizePositiveInteger,
+  normalizeSanbornPageType,
+  pageTypeCanBePrimaryTownIndex,
 } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
@@ -84,7 +87,8 @@ export async function PUT(request: NextRequest) {
     const assetId = normalizeOptionalSanbornText(page.assetId, 160);
     const pageSequence = normalizePositiveInteger(page.pageSequence) ?? index + 1;
     const sheetNumber = normalizePositiveInteger(page.sheetNumber);
-    const pageType = page.pageType;
+    const requestedPageType = normalizeOptionalSanbornText(page.pageType, 80);
+    const pageType = normalizeSanbornPageType(page.pageType);
     const printedReference = normalizeLimitedText(page.printedReference, 80, "Printed reference");
     const volumeLabel = normalizeLimitedText(page.volumeLabel, 80, "Volume label");
     const displayLabel = normalizeLimitedText(page.displayLabel, 160, "Display title");
@@ -94,7 +98,11 @@ export async function PUT(request: NextRequest) {
       return { ok: false as const, error: "Each atlas page must reference a Sanborn sheet asset." };
     }
 
-    if (!isSanbornPageType(pageType)) {
+    if (
+      requestedPageType &&
+      !isSanbornPageType(requestedPageType) &&
+      !Object.prototype.hasOwnProperty.call(legacySanbornPageTypeAliases, requestedPageType)
+    ) {
       return { ok: false as const, error: "Atlas page type is not allowed." };
     }
 
@@ -159,8 +167,8 @@ export async function PUT(request: NextRequest) {
     return jsonError(400, "Atlas page IDs must be unique.");
   }
 
-  if (primaryTownIndexPages.some((page) => page.pageType !== "graphic_index")) {
-    return jsonError(400, "Only Graphic Index pages can be the primary Town Index.");
+  if (primaryTownIndexPages.some((page) => !pageTypeCanBePrimaryTownIndex(page.pageType))) {
+    return jsonError(400, "Only Index or mixed pages can be the primary Town Index.");
   }
 
   if (primaryTownIndexPages.length > 1) {

@@ -118,7 +118,7 @@ export function TownIndexMissionMap({
       <section className="town-index-mission-map">
         <div className="town-index-mission-map__empty">
           <strong>No Town Index page is designated.</strong>
-          <span>Classify an atlas page as Graphic Index and set it as the primary Town Index before drawing coverage regions.</span>
+          <span>Classify an atlas page as Index or mixed, then explicitly set it as the primary Town Index.</span>
         </div>
       </section>
     );
@@ -180,7 +180,7 @@ export function TownIndexMissionMap({
           <span>{indexAsset.originalFilename}</span>
         </div>
         <div className="town-index-mission-map__mode" aria-live="polite">
-          {mode === "draw" ? "Outline sheet coverage: click points, then close from the inspector." : mode === "move" ? "Move coverage region" : "Select coverage region"}
+          {mode === "draw" ? "Mark source region: click points, then finish from the inspector." : mode === "move" ? "Move source region" : "Select source region"}
         </div>
       </header>
 
@@ -191,7 +191,7 @@ export function TownIndexMissionMap({
           <div className="town-index-mission-map__missing-image">Signed index image unavailable.</div>
         )}
         <svg
-          aria-label="Manual Town Index region editor"
+          aria-label="Manual source region editor"
           className="town-index-mission-map__overlay"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

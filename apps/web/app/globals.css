@@ -4038,12 +4038,20 @@ body:has(.minimal-sanborn-gps) {
   align-content: start;
 }
 
-.sanborn-source-preview img {
+.sanborn-source-preview > img {
   width: min(100%, 980px);
   max-height: 58vh;
   object-fit: contain;
   border: 1px solid rgba(226, 190, 126, 0.2);
   background: #ede9dd;
+}
+
+.sanborn-source-region-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
 }
 
 .sanborn-station-citation {

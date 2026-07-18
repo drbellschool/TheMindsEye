@@ -50,7 +50,7 @@
         {
           "displayTitle": "Town Index",
           "printedReference": "Index",
-          "pageType": "graphic_index",
+          "pageType": "index_or_mixed",
           "primaryTownIndex": true,
           "filename": "texarkana-1885-index.png"
         },
@@ -92,7 +92,7 @@
         {
           "displayTitle": "Sheet 2A",
           "printedReference": "2A",
-          "pageType": "inset",
+          "pageType": "special_sheet",
           "primaryTownIndex": false,
           "filename": "texarkana-1885-sheet-02a.png"
         },
@@ -105,6 +105,41 @@
         }
       ]
     },
+    "sourceRegions": [
+      {
+        "label": "Town coverage diagram",
+        "regionType": "town_coverage_diagram",
+        "page": "Town Index",
+        "includeInTownIndex": true,
+        "availableToMapPieces": false,
+        "status": "started"
+      },
+      {
+        "label": "Printed street and block index",
+        "regionType": "printed_index",
+        "page": "Town Index",
+        "includeInTownIndex": true,
+        "availableToMapPieces": false,
+        "status": "not_started"
+      },
+      {
+        "label": "Lumber-yard geographic inset",
+        "regionType": "geographic_map_content",
+        "page": "Town Index",
+        "includeInTownIndex": false,
+        "availableToMapPieces": true,
+        "status": "started"
+      },
+      {
+        "label": "Sheet 2 coverage",
+        "regionType": "sheet_coverage_region",
+        "page": "Town Index",
+        "printedReference": "2",
+        "includeInTownIndex": true,
+        "availableToMapPieces": false,
+        "status": "placed"
+      }
+    ],
     "townIndex": {
       "indexPage": "Town Index",
       "indexSheetNumber": null,
@@ -210,7 +245,7 @@
       {
         "sheetNumber": null,
         "sheetReference": "2A",
-        "pageType": "inset",
+        "pageType": "special_sheet",
         "filename": "texarkana-1885-sheet-02a.png",
         "sourceRecordId": "SRC-1234567890AB",
         "linkedIndexRegionCount": 1,
@@ -254,6 +289,10 @@
     ],
     "nextTasks": [
       "Classify uploaded page texarkana-1885-unclassified.png",
+      "Classify functional regions on the index page",
+      "Mark the town coverage diagram",
+      "Mark printed index area",
+      "Link Sheet 2 coverage region",
       "Resolve map pieces created on Cover",
       "Draw missing region for Sheet 7",
       "Resolve duplicate link for East inset",

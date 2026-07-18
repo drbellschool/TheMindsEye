@@ -24,6 +24,10 @@ import {
   calculateTownIndexCompletion,
   calculateTownIndexRegionProgress,
   compareSheetReferences,
+  getSourceRegionTypeLabel,
+  sanbornSourceRegionTypes,
+  sourceRegionSupportsMapPieces,
+  sourceRegionSupportsTownIndex,
   validateTownIndexRegionPolygon,
   type SanbornTownIndexRegionRecord,
 } from "./sanborn-town-index.ts";
@@ -189,13 +193,15 @@ function indexRegion(regionId: string, overrides: Partial<SanbornTownIndexRegion
     atlasId: "atlas-1",
     indexAtlasPageRowId: "index-page-row",
     indexAtlasPageId: "index-page",
+    sourceAssetRowId: "index-asset-row",
+    sourceAssetId: "index-asset",
     linkedAtlasPageRowId: null,
     linkedAtlasPageId: null,
     linkedSheetAssetRowId: null,
     linkedSheetAssetId: null,
     regionLabel: regionId,
     sheetReference: null,
-    regionType: "sheet_region",
+    regionType: "sheet_coverage_region",
     sourcePolygon: [
       { x: 0.1, y: 0.1 },
       { x: 0.4, y: 0.1 },
@@ -204,6 +210,8 @@ function indexRegion(regionId: string, overrides: Partial<SanbornTownIndexRegion
     ],
     workflowStatus: "not_started",
     progressStatus: "not_started",
+    includeInTownIndex: true,
+    availableToMapPieces: false,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     notes: null,
@@ -309,7 +317,7 @@ test("sheet and map-piece progress is based on explicit completed work", () => {
 
 test("page classification progress tracks unknown pages, geographic pages, primary index, and conflicts", () => {
   const cover = page("cover-page", { pageType: "cover", printedReference: null });
-  const indexPage = page("index-page", { pageType: "graphic_index", printedReference: "Index", isPrimaryTownIndex: true });
+  const indexPage = page("index-page", { pageType: "index_or_mixed", printedReference: "Index", isPrimaryTownIndex: true });
   const sheet = page("sheet-page", { pageType: "sanborn_sheet", printedReference: "2" });
   const unknown = page("unknown-page", { pageType: "unknown", printedReference: null });
   const invalidCoverPiece = piece("piece-on-cover", { atlasPageId: "cover-page" });
@@ -355,6 +363,79 @@ test("sheet progress requires classification and flags invalid pieces on metadat
   assert.equal(unknownProgress.warning, "Page type unknown");
 });
 
+test("functional source regions refine index page Map Pieces availability and Town Index progress", () => {
+  const mixedPage = page("mixed-page", { pageType: "index_or_mixed", printedReference: "Index", sanbornSheetAssetId: "mixed-asset" });
+  const mixedPiece = piece("piece-on-mixed", { atlasPageId: "mixed-page" });
+  const geographicRegion = indexRegion("geographic-content", {
+    indexAtlasPageId: "mixed-page",
+    indexAtlasPageRowId: "mixed-page-row",
+    sourceAssetId: "mixed-asset",
+    sourceAssetRowId: "mixed-asset-row",
+    regionType: "geographic_map_content",
+    includeInTownIndex: false,
+    availableToMapPieces: true,
+  });
+  const sheetCoverage = indexRegion("sheet-2", {
+    regionLabel: "Sheet 2",
+    sheetReference: "2",
+    linkedAtlasPageId: "page-2",
+    linkedAtlasPageRowId: "page-2-row",
+    linkedSheetAssetId: "asset-2",
+    linkedSheetAssetRowId: "asset-2-row",
+  });
+  const printedIndex = indexRegion("printed-index", {
+    regionType: "printed_index",
+    regionLabel: "Printed index",
+    sheetReference: null,
+    includeInTownIndex: true,
+  });
+  const classification = calculatePageClassificationSummary({
+    pages: [mixedPage],
+    pieces: [mixedPiece],
+    sourceRegions: [geographicRegion],
+  });
+  const sheetProgress = calculateSheetProgress({
+    asset: asset("mixed-asset"),
+    page: mixedPage,
+    pieces: [mixedPiece],
+    placements: [],
+    sourceRegions: [geographicRegion],
+  });
+  const townIndex = buildTownIndexSummary({
+    pages: [page("index-page", { pageType: "index_or_mixed", isPrimaryTownIndex: true, sanbornSheetAssetId: "index-asset" }), page("page-2", { sanbornSheetAssetId: "asset-2" })],
+    assets: [asset("index-asset"), asset("asset-2")],
+    pieces: [],
+    placements: [],
+    indexRegions: [sheetCoverage, printedIndex, geographicRegion],
+  });
+
+  assert.equal(sourceRegionSupportsMapPieces(geographicRegion), true);
+  assert.equal(sourceRegionSupportsTownIndex(printedIndex), false);
+  assert.equal(getSourceRegionTypeLabel("town_coverage_diagram"), "Town coverage diagram");
+  assert.equal(classification.conflictPages, 0);
+  assert.equal(classification.geographicPages, 1);
+  assert.equal(sheetProgress.classificationConflict, false);
+  assert.equal(sheetProgress.mapPiecesIdentified, 1);
+  assert.equal(townIndex.regions.some((region) => region.id === "printed-index"), true);
+  assert.equal(townIndex.completion.totalRegions, 1);
+});
+
+test("source region model supports all functional region types", () => {
+  assert.deepEqual(sanbornSourceRegionTypes, [
+    "town_coverage_diagram",
+    "sheet_coverage_region",
+    "printed_index",
+    "geographic_map_content",
+    "street_index_text",
+    "block_index_text",
+    "legend_key",
+    "inset_map",
+    "title_or_decoration",
+    "notes",
+    "other",
+  ]);
+});
+
 test("non-sequential sheets aggregate without assuming a sheet-one sequence", () => {
   const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", pageSequence: 1, sanbornSheetAssetId: "asset-2" });
   const page7 = page("page-7", { sheetNumber: 7, printedReference: "7", pageSequence: 2, sanbornSheetAssetId: "asset-7" });
@@ -390,7 +471,7 @@ test("non-sequential sheets aggregate without assuming a sheet-one sequence", ()
 });
 
 test("Town Index designation and region navigation summary use index page metadata", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const indexPage = page("index-page", { pageType: "index_or_mixed", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
   const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
   const page9 = page("page-9", { sheetNumber: 9, printedReference: "9", sanbornSheetAssetId: "asset-9" });
   const summary = buildTownIndexSummary({
@@ -436,7 +517,7 @@ test("Town Index region polygons reject invalid normalized geometry", () => {
 });
 
 test("durable Town Index regions sort non-sequential references and aggregate completion", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const indexPage = page("index-page", { pageType: "index_or_mixed", sheetNumber: null, printedReference: "Index", displayLabel: "Town Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
   const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
   const page2A = page("page-2a", { sheetNumber: null, printedReference: "2A", displayLabel: "Sheet 2A", sanbornSheetAssetId: "asset-2a" });
   const page10 = page("page-10", { sheetNumber: 10, printedReference: "10", sanbornSheetAssetId: "asset-10" });
@@ -466,7 +547,7 @@ test("durable Town Index regions sort non-sequential references and aggregate co
 });
 
 test("Town Index region progress treats missing and conflict states as unresolved work", () => {
-  const indexPage = page("index-page", { pageType: "graphic_index", sheetNumber: null, printedReference: "Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
+  const indexPage = page("index-page", { pageType: "index_or_mixed", sheetNumber: null, printedReference: "Index", sanbornSheetAssetId: "index-asset", isPrimaryTownIndex: true });
   const page2 = page("page-2", { sheetNumber: 2, printedReference: "2", sanbornSheetAssetId: "asset-2" });
   const good = calculateTownIndexRegionProgress({
     region: indexRegion("good", { linkedAtlasPageId: "page-2", linkedAtlasPageRowId: "page-2-row", linkedSheetAssetId: "asset-2", linkedSheetAssetRowId: "asset-2-row" }),
@@ -531,7 +612,7 @@ test("work queue is generated from incomplete records and removes completed plac
     sourceRecordCount: 1,
   });
 
-  assert.equal(tasks.some((task) => task.label === "Select a primary graphic index"), true);
+  assert.equal(tasks.some((task) => task.label === "Select a primary Town Index page"), true);
   assert.equal(tasks.some((task) => /Classify uploaded page/.test(task.label)), true);
   assert.equal(tasks.some((task) => /Resolve map pieces created on/.test(task.label)), true);
   assert.equal(tasks.some((task) => /Add source record/.test(task.label)), true);
@@ -556,7 +637,7 @@ test("work queue is generated from incomplete records and removes completed plac
     },
     sourceRecordCount: 0,
   });
-  assert.equal(emptyTasks.some((task) => task.label === "Select a primary graphic index"), false);
+  assert.equal(emptyTasks.some((task) => task.label === "Select a primary Town Index page"), false);
 });
 
 test("work queue generates Town Index region tasks and removes reviewed regions", () => {
@@ -573,7 +654,7 @@ test("work queue generates Town Index region tasks and removes reviewed regions"
     sheets: [],
     pieces: [],
     index: {
-      indexPage: page("index-page", { pageType: "graphic_index", isPrimaryTownIndex: true }),
+      indexPage: page("index-page", { pageType: "index_or_mixed", isPrimaryTownIndex: true }),
       indexAsset: asset("index-asset"),
       regions,
       regionProgress: [],
@@ -642,6 +723,36 @@ test("migration 0014 stores durable Town Index regions with service-role-only se
   assert.match(migration, /Linked atlas page must belong to the selected atlas/);
 });
 
+test("migration 0016 stores functional source regions with scoped service-role-only RPCs", () => {
+  const migration = readFileSync("../../supabase/migrations/0016_functional_source_regions.sql", "utf8");
+
+  assert.match(migration, /create table if not exists public\.sanborn_source_regions/);
+  assert.match(migration, /source_region_id text not null unique/);
+  assert.match(migration, /region_type text not null/);
+  assert.match(migration, /normalized_polygon jsonb not null/);
+  assert.match(migration, /include_in_town_index boolean not null default false/);
+  assert.match(migration, /available_to_map_pieces boolean not null default false/);
+  assert.match(migration, /town_coverage_diagram/);
+  assert.match(migration, /sheet_coverage_region/);
+  assert.match(migration, /printed_index/);
+  assert.match(migration, /geographic_map_content/);
+  assert.match(migration, /public\.sanborn_source_region_polygon_is_valid\(normalized_polygon\)/);
+  assert.match(migration, /alter table public\.sanborn_town_index_regions\s+add column if not exists source_region_id uuid references public\.sanborn_source_regions\(id\)/);
+  assert.match(migration, /insert into public\.sanborn_source_regions/);
+  assert.match(migration, /save_sanborn_source_region\(uuid, text, jsonb\)/);
+  assert.match(migration, /delete_sanborn_source_region\(uuid, text, text\)/);
+  assert.match(migration, /Source region page must belong to the selected atlas/);
+  assert.match(migration, /Linked atlas page must belong to the selected atlas/);
+  assert.match(migration, /Linked Sanborn sheet asset must be assigned to the selected atlas/);
+  assert.match(migration, /alter table public\.sanborn_source_regions enable row level security/);
+  assert.match(migration, /revoke all on table public\.sanborn_source_regions from PUBLIC, anon, authenticated/);
+  assert.match(migration, /grant select, insert, update, delete on table public\.sanborn_source_regions to service_role/);
+  assert.match(migration, /revoke execute on function public\.save_sanborn_source_region\(uuid, text, jsonb\) from PUBLIC, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.save_sanborn_source_region\(uuid, text, jsonb\) to service_role/);
+  assert.match(migration, /security invoker/i);
+  assert.doesNotMatch(migration, /security definer/i);
+});
+
 test("Town Index region API validates polygons and keeps the service-role key server-side", () => {
   const route = readFileSync("./app/api/community/historical-map-studio/town-index-regions/route.ts", "utf8");
 
@@ -657,6 +768,32 @@ test("Town Index region API validates polygons and keeps the service-role key se
   assert.doesNotMatch(route, /\.upsert\(/);
 });
 
+test("Source Record source-region API validates polygons and keeps the service-role key server-side", () => {
+  const route = readFileSync("./app/api/community/historical-map-studio/source-regions/route.ts", "utf8");
+
+  assert.match(route, /requireMapStudioWriteAccess/);
+  assert.match(route, /validateTownIndexRegionPolygon/);
+  assert.match(route, /Source region type is not allowed/);
+  assert.match(route, /Source region status is not allowed/);
+  assert.match(route, /availableToMapPieces/);
+  assert.match(route, /save_sanborn_source_region/);
+  assert.match(route, /delete_sanborn_source_region/);
+  assert.match(route, /townPackageId/);
+  assert.match(route, /atlasId/);
+  assert.doesNotMatch(route, /NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(route, /\.upsert\(/);
+});
+
+test("Historical Map Studio reads functional source regions before legacy Town Index regions", () => {
+  const loader = readFileSync("./lib/historical-map-studio-data.ts", "utf8");
+
+  assert.match(loader, /\.from\("sanborn_source_regions"\)/);
+  assert.match(loader, /\.from\("sanborn_town_index_regions"\)/);
+  assert.match(loader, /Functional source regions are not available yet/);
+  assert.match(loader, /include_in_town_index/);
+  assert.match(loader, /available_to_map_pieces/);
+});
+
 test("demo fallback includes reconstruction overview and durable LOC provenance", () => {
   const demo = JSON.parse(readFileSync("./lib/demo-data/community.json", "utf8")) as {
     townReconstruction?: {
@@ -668,6 +805,7 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
         conflicts?: number;
         pages?: Array<{ pageType: string; primaryTownIndex?: boolean; filename?: string }>;
       };
+      sourceRegions?: Array<{ regionType: string; includeInTownIndex?: boolean; availableToMapPieces?: boolean }>;
       townIndex?: { regions?: Array<{ sheetReference: string; status: string }> };
       sheetInventory?: Array<{ sheetNumber: number | null; sheetReference: string; sourceRecordId: string | null; pageType?: string }>;
       nextTasks?: string[];
@@ -683,14 +821,17 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
   assert.equal(demo.townReconstruction?.pageClassification?.unknownPages, 1);
   assert.equal(demo.townReconstruction?.pageClassification?.conflicts, 1);
   assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "cover"), true);
-  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "graphic_index" && page.primaryTownIndex), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "index_or_mixed" && page.primaryTownIndex), true);
   assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "street_index"), true);
-  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "inset"), true);
+  assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "special_sheet"), true);
   assert.equal(demo.townReconstruction?.pageClassification?.pages?.some((page) => page.pageType === "unknown"), true);
+  assert.equal(demo.townReconstruction?.sourceRegions?.some((region) => region.regionType === "town_coverage_diagram"), true);
+  assert.equal(demo.townReconstruction?.sourceRegions?.some((region) => region.regionType === "printed_index"), true);
+  assert.equal(demo.townReconstruction?.sourceRegions?.some((region) => region.regionType === "geographic_map_content" && region.availableToMapPieces), true);
   assert.deepEqual(demo.townReconstruction?.townIndex?.regions?.map((region) => region.sheetReference), ["2", "3", "7", "2A", "10", "East inset"]);
   assert.deepEqual(new Set(demo.townReconstruction?.townIndex?.regions?.map((region) => region.status)), new Set(["missing", "not_started", "started", "placed", "reviewed", "conflict"]));
   assert.deepEqual(demo.townReconstruction?.sheetInventory?.map((sheet) => sheet.sheetReference), ["2", "2A", "3", "7", "10"]);
-  assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.pageType === "inset"), true);
+  assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.pageType === "special_sheet"), true);
   assert.equal(demo.townReconstruction?.sheetInventory?.some((sheet) => sheet.sourceRecordId === null), true);
   assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Classify uploaded page/.test(task)), true);
   assert.equal(demo.townReconstruction?.nextTasks?.some((task) => /Resolve map pieces created on Cover/.test(task)), true);

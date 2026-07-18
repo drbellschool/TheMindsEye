@@ -295,18 +295,25 @@ type ControlPointRow = {
 
 type TownIndexRegionRow = {
   id: string;
-  region_id: string;
+  region_id?: string;
+  source_region_id?: string;
   town_package_id: string;
   atlas_id: string;
-  index_atlas_page_id: string;
+  index_atlas_page_id?: string;
+  atlas_page_id?: string;
+  source_asset_id?: string | null;
   linked_atlas_page_id: string | null;
   linked_sheet_asset_id: string | null;
   region_label: string;
   sheet_reference: string | null;
+  printed_reference?: string | null;
   region_type: string | null;
-  source_polygon: unknown;
+  source_polygon?: unknown;
+  normalized_polygon?: unknown;
   workflow_status: string | null;
-  progress_status: string | null;
+  progress_status?: string | null;
+  include_in_town_index?: boolean | null;
+  available_to_map_pieces?: boolean | null;
   review_status: string | null;
   evidence_classification: string | null;
   notes: string | null;
@@ -675,7 +682,7 @@ function mapPlacements(rows: PlacementRow[], assets: StudioSheetAsset[]): Studio
   const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
 
   return rows
-    .map((row) => {
+    .map((row): StudioPlacement | null => {
       const asset = assetByRowId.get(row.sanborn_sheet_asset_id);
 
       if (!asset) {
@@ -819,12 +826,15 @@ function mapTownIndexRegions(
   let invalidCount = 0;
 
   const regions = rows
-    .map((row) => {
+    .map((row): SanbornTownIndexRegionRecord | null => {
       const atlas = atlasByRowId.get(row.atlas_id);
-      const indexPage = pageByRowId.get(row.index_atlas_page_id);
+      const sourcePageRowId = row.atlas_page_id ?? row.index_atlas_page_id;
+      const sourceAssetRowId = row.source_asset_id ?? null;
+      const indexPage = sourcePageRowId ? pageByRowId.get(sourcePageRowId) : null;
+      const sourceAsset = sourceAssetRowId ? assetByRowId.get(sourceAssetRowId) ?? null : null;
       const linkedPage = row.linked_atlas_page_id ? pageByRowId.get(row.linked_atlas_page_id) ?? null : null;
       const linkedAsset = row.linked_sheet_asset_id ? assetByRowId.get(row.linked_sheet_asset_id) ?? null : null;
-      const polygon = validateTownIndexRegionPolygon(row.source_polygon);
+      const polygon = validateTownIndexRegionPolygon(row.normalized_polygon ?? row.source_polygon);
 
       if (!atlas || !indexPage || !polygon.ok) {
         invalidCount += 1;
@@ -833,22 +843,26 @@ function mapTownIndexRegions(
 
       return {
         rowId: row.id,
-        regionId: row.region_id,
+        regionId: row.source_region_id ?? row.region_id ?? row.id,
         townPackageId: row.town_package_id,
         atlasRowId: row.atlas_id,
         atlasId: atlas.atlasId,
-        indexAtlasPageRowId: row.index_atlas_page_id,
+        indexAtlasPageRowId: sourcePageRowId ?? "",
         indexAtlasPageId: indexPage.pageId,
+        sourceAssetRowId: sourceAssetRowId ?? indexPage.sanbornSheetAssetRowId,
+        sourceAssetId: sourceAsset?.assetId ?? indexPage.sanbornSheetAssetId,
         linkedAtlasPageRowId: row.linked_atlas_page_id,
         linkedAtlasPageId: linkedPage?.pageId ?? null,
         linkedSheetAssetRowId: row.linked_sheet_asset_id,
         linkedSheetAssetId: linkedAsset?.assetId ?? linkedPage?.sanbornSheetAssetId ?? null,
         regionLabel: row.region_label,
-        sheetReference: row.sheet_reference,
+        sheetReference: row.printed_reference ?? row.sheet_reference,
         regionType: normalizeTownIndexRegionType(row.region_type),
         sourcePolygon: polygon.polygon,
         workflowStatus: normalizeTownIndexStatus(row.workflow_status),
         progressStatus: normalizeTownIndexStatus(row.progress_status),
+        includeInTownIndex: row.include_in_town_index ?? true,
+        availableToMapPieces: row.available_to_map_pieces === true,
         reviewStatus: normalizeReviewClassification(row.review_status),
         evidenceClassification: normalizeReviewClassification(row.evidence_classification),
         notes: row.notes,
@@ -1101,18 +1115,34 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   let controlPointRows: ControlPointRow[] = [];
 
   if (atlasInventory.atlases.length > 0) {
-    const townIndexRegionsResult = await supabase
-      .from("sanborn_town_index_regions")
+    let townIndexRegionsResult = (await supabase
+      .from("sanborn_source_regions")
       .select(
-        "id, region_id, town_package_id, atlas_id, index_atlas_page_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, sheet_reference, region_type, source_polygon, workflow_status, progress_status, review_status, evidence_classification, notes, updated_at",
+        "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, workflow_status, review_status, evidence_classification, notes, updated_at",
       )
       .eq("town_package_id", activeTownPackage.id)
       .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))
-      .order("sheet_reference", { ascending: true })
-      .order("region_label", { ascending: true });
+      .order("printed_reference", { ascending: true })
+      .order("region_label", { ascending: true })) as { data: TownIndexRegionRow[] | null; error: { message: string } | null };
 
     if (townIndexRegionsResult.error) {
-      townIndexWarning = `Town Index region query failed: ${townIndexRegionsResult.error.message}. Apply migration 0014 to enable the Town Index mission map.`;
+      const sourceRegionError = townIndexRegionsResult.error.message;
+      townIndexRegionsResult = (await supabase
+        .from("sanborn_town_index_regions")
+        .select(
+          "id, region_id, town_package_id, atlas_id, index_atlas_page_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, sheet_reference, region_type, source_polygon, workflow_status, progress_status, review_status, evidence_classification, notes, updated_at",
+        )
+        .eq("town_package_id", activeTownPackage.id)
+        .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))
+        .order("sheet_reference", { ascending: true })
+        .order("region_label", { ascending: true })) as { data: TownIndexRegionRow[] | null; error: { message: string } | null };
+
+      if (townIndexRegionsResult.error) {
+        townIndexWarning = `Source region query failed: ${sourceRegionError}. Town Index region fallback also failed: ${townIndexRegionsResult.error.message}. Apply migration 0016 to enable functional source regions.`;
+      } else {
+        townIndexWarning = `Functional source regions are not available yet: ${sourceRegionError}. Loaded legacy Town Index regions until migration 0016 is applied.`;
+        townIndexRegionRows = (townIndexRegionsResult.data ?? []) as TownIndexRegionRow[];
+      }
     } else {
       townIndexRegionRows = (townIndexRegionsResult.data ?? []) as TownIndexRegionRow[];
     }

@@ -112,6 +112,7 @@ import {
   getUnassignedSanbornUploads,
   hasSanbornPageClassificationConflict,
   normalizeOptionalSanbornText,
+  pageTypeCanBePrimaryTownIndex,
   pageTypeSupportsMapPieces,
   pageTypeSupportsMapPlacement,
   reorderAtlasPages,
@@ -125,10 +126,14 @@ import {
   type SanbornMapPieceRecord,
 } from "@/lib/sanborn-atlas";
 import {
-  buildDefaultTownIndexRegionId,
+  buildDefaultSourceRegionId,
   compareSheetReferences,
-  sanbornTownIndexRegionTypes,
+  getSourceRegionTypeLabel,
+  sanbornSourceRegionTypes,
   sanbornTownIndexStatuses,
+  sourceRegionIsTownIndexContext,
+  sourceRegionSupportsMapPieces,
+  sourceRegionSupportsTownIndex,
   validateTownIndexRegionPolygon,
   type SanbornTownIndexRegionRecord,
   type SanbornTownIndexRegionType,
@@ -916,14 +921,6 @@ export function HistoricalMapStudio({
         .filter((piece) => piece.atlasPageId === selectedAtlasPage.pageId)
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
-  const selectedPageSupportsMapPieces = Boolean(selectedAtlasPage && pageTypeSupportsMapPieces(selectedAtlasPage.pageType));
-  const selectedPageSupportsMapPlacement = Boolean(selectedAtlasPage && pageTypeSupportsMapPlacement(selectedAtlasPage.pageType));
-  const selectedPageToolBlockMessage = selectedAtlasPage ? getPageTypeToolBlockMessage(selectedAtlasPage.pageType) : "";
-  const selectedPageHasClassificationConflict = hasSanbornPageClassificationConflict({
-    page: selectedAtlasPage,
-    mapPieceCount: selectedAtlasPagePieces.length,
-    isPrimaryTownIndex: selectedAtlasPage?.isPrimaryTownIndex,
-  });
   const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? selectedAtlasPagePieces[0] ?? null;
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
@@ -976,11 +973,40 @@ export function HistoricalMapStudio({
   const activeTownIndexRegions = useMemo(
     () =>
       townIndexRegions
-        .filter((region) => region.atlasId === selectedAtlasId)
+        .filter((region) => region.atlasId === selectedAtlasId && sourceRegionIsTownIndexContext(region))
         .sort((left, right) => compareSheetReferences(left.sheetReference, right.sheetReference) || left.regionLabel.localeCompare(right.regionLabel)),
     [selectedAtlasId, townIndexRegions],
   );
+  const selectedPageSourceRegions = useMemo(
+    () =>
+      townIndexRegions
+        .filter((region) => region.atlasId === selectedAtlasId && region.indexAtlasPageId === selectedAtlasPage?.pageId)
+        .sort((left, right) => left.regionLabel.localeCompare(right.regionLabel) || left.regionId.localeCompare(right.regionId)),
+    [selectedAtlasId, selectedAtlasPage?.pageId, townIndexRegions],
+  );
+  const selectedPageGeographicSourceRegions = selectedPageSourceRegions.filter(sourceRegionSupportsMapPieces);
+  const selectedPageSupportsMapPieces = Boolean(
+    selectedAtlasPage && (pageTypeSupportsMapPieces(selectedAtlasPage.pageType) || selectedPageGeographicSourceRegions.length > 0),
+  );
+  const selectedPageSupportsMapPlacement = Boolean(
+    selectedAtlasPage && (pageTypeSupportsMapPlacement(selectedAtlasPage.pageType) || selectedPageGeographicSourceRegions.length > 0),
+  );
+  const selectedPageToolBlockMessage = selectedAtlasPage
+    ? selectedAtlasPage.pageType === "index_or_mixed"
+      ? "Index or mixed pages need a functional geographic map-content region before Map Pieces are available."
+      : getPageTypeToolBlockMessage(selectedAtlasPage.pageType)
+    : "";
+  const selectedPageHasClassificationConflict = hasSanbornPageClassificationConflict({
+    page: selectedAtlasPage,
+    mapPieceCount: selectedAtlasPagePieces.length,
+    isPrimaryTownIndex: selectedAtlasPage?.isPrimaryTownIndex,
+    hasGeographicSourceRegion: selectedPageGeographicSourceRegions.length > 0,
+  });
   const selectedTownIndexRegion = activeTownIndexRegions.find((region) => region.regionId === selectedIndexRegionId) ?? activeTownIndexRegions[0] ?? null;
+  const selectedSourceRegion =
+    atlasWorkflowStep === "page_classification"
+      ? selectedPageSourceRegions.find((region) => region.regionId === selectedIndexRegionId) ?? selectedPageSourceRegions[0] ?? null
+      : selectedTownIndexRegion;
   const townIndexProgressByRegionId = useMemo(
     () => new Map(reconstructionModel.index.regionProgress.map((progress) => [progress.regionId, progress])),
     [reconstructionModel.index.regionProgress],
@@ -3094,27 +3120,19 @@ export function HistoricalMapStudio({
         classificationNotes: patch.classificationNotes !== undefined ? normalizeOptionalSanbornText(patch.classificationNotes, 1000) : page.classificationNotes,
       };
 
-      return pageType === "graphic_index"
+      return pageTypeCanBePrimaryTownIndex(pageType)
         ? nextPage
         : {
             ...nextPage,
             isPrimaryTownIndex: false,
           };
     });
-    const primaryPage = nextPages.find((page) => page.isPrimaryTownIndex && page.pageType === "graphic_index");
-    const graphicIndexPages = nextPages.filter((page) => page.pageType === "graphic_index");
+    const primaryPage = nextPages.find((page) => page.isPrimaryTownIndex && pageTypeCanBePrimaryTownIndex(page.pageType));
 
     if (primaryPage) {
       return nextPages.map((page) => ({
         ...page,
-        isPrimaryTownIndex: page.pageId === primaryPage.pageId,
-      }));
-    }
-
-    if (graphicIndexPages.length === 1) {
-      return nextPages.map((page) => ({
-        ...page,
-        isPrimaryTownIndex: page.pageId === graphicIndexPages[0].pageId,
+        isPrimaryTownIndex: page.pageId === primaryPage.pageId && pageTypeCanBePrimaryTownIndex(page.pageType),
       }));
     }
 
@@ -3143,7 +3161,7 @@ export function HistoricalMapStudio({
 
     const nextPages = activeAtlasPages.map((page) =>
       page.pageId === pageId
-        ? { ...page, pageType: "graphic_index" as SanbornPageType, isPrimaryTownIndex: true }
+        ? { ...page, pageType: "index_or_mixed" as SanbornPageType, isPrimaryTownIndex: true }
         : { ...page, isPrimaryTownIndex: false },
     );
 
@@ -3350,13 +3368,16 @@ export function HistoricalMapStudio({
       ),
     );
     setSaveStatus("idle");
-    setSaveMessage("Town Index region has unsaved changes.");
+    setSaveMessage("Source region has unsaved changes.");
   }
 
   function finishTownIndexRegionDraft() {
-    if (!initialData.activeTownPackage || !activeAtlas || !reconstructionModel.index.indexPage) {
+    const sourcePage = atlasWorkflowStep === "page_classification" ? selectedAtlasPage : reconstructionModel.index.indexPage;
+    const sourceAsset = sourcePage ? sheets.find((asset) => asset.assetId === sourcePage.sanbornSheetAssetId) ?? null : null;
+
+    if (!initialData.activeTownPackage || !activeAtlas || !sourcePage) {
       setSaveStatus("error");
-      setSaveMessage("Designate an atlas and Town Index page before drawing index regions.");
+      setSaveMessage("Select an atlas page before drawing functional source regions.");
       return;
     }
 
@@ -3367,8 +3388,9 @@ export function HistoricalMapStudio({
       return;
     }
 
-    const nextIndex = activeTownIndexRegions.length + 1;
-    const regionId = buildDefaultTownIndexRegionId({
+    const pageRegions = townIndexRegions.filter((region) => region.atlasId === activeAtlas.atlasId && region.indexAtlasPageId === sourcePage.pageId);
+    const nextIndex = pageRegions.length + 1;
+    const regionId = buildDefaultSourceRegionId({
       atlasId: activeAtlas.atlasId,
       regionLabel: `Region ${nextIndex}`,
       suffix: nextIndex,
@@ -3379,18 +3401,22 @@ export function HistoricalMapStudio({
       townPackageId: initialData.activeTownPackage.id,
       atlasRowId: activeAtlas.rowId,
       atlasId: activeAtlas.atlasId,
-      indexAtlasPageRowId: reconstructionModel.index.indexPage.rowId,
-      indexAtlasPageId: reconstructionModel.index.indexPage.pageId,
+      indexAtlasPageRowId: sourcePage.rowId,
+      indexAtlasPageId: sourcePage.pageId,
+      sourceAssetRowId: sourceAsset?.rowId ?? sourcePage.sanbornSheetAssetRowId ?? null,
+      sourceAssetId: sourceAsset?.assetId ?? sourcePage.sanbornSheetAssetId ?? null,
       linkedAtlasPageRowId: null,
       linkedAtlasPageId: null,
       linkedSheetAssetRowId: null,
       linkedSheetAssetId: null,
       regionLabel: `Region ${nextIndex}`,
       sheetReference: null,
-      regionType: "sheet_region",
+      regionType: "sheet_coverage_region",
       sourcePolygon: validation.polygon,
       workflowStatus: "not_started",
       progressStatus: "not_started",
+      includeInTownIndex: true,
+      availableToMapPieces: false,
       reviewStatus: "unknown",
       evidenceClassification: "unknown",
       notes: null,
@@ -3403,17 +3429,19 @@ export function HistoricalMapStudio({
     setTownIndexDraftPoints([]);
     setTownIndexMapMode("select");
     setSaveStatus("idle");
-    setSaveMessage("Index region draft created. Complete its label and linked sheet, then save.");
+    setSaveMessage("Source region draft created. Complete its purpose, label, and links, then save.");
   }
 
   async function saveSelectedTownIndexRegion() {
-    if (!initialData.activeTownPackage || !activeAtlas || !selectedTownIndexRegion || atlasReadOnly) {
+    const regionToSave = selectedSourceRegion;
+
+    if (!initialData.activeTownPackage || !activeAtlas || !regionToSave || atlasReadOnly) {
       setSaveStatus("error");
-      setSaveMessage("Town Index region save failed: active town, atlas, region, or write access is unavailable.");
+      setSaveMessage("Source region save failed: active town, atlas, region, or write access is unavailable.");
       return;
     }
 
-    const validation = validateTownIndexRegionPolygon(selectedTownIndexRegion.sourcePolygon);
+    const validation = validateTownIndexRegionPolygon(regionToSave.sourcePolygon);
     if (!validation.ok) {
       setSaveStatus("error");
       setSaveMessage(validation.error);
@@ -3421,25 +3449,32 @@ export function HistoricalMapStudio({
     }
 
     setSaveStatus("saving");
-    setSaveMessage("Saving Town Index region...");
-    const response = await fetch("/api/community/historical-map-studio/town-index-regions", {
+    setSaveMessage("Saving source region...");
+    const response = await fetch("/api/community/historical-map-studio/source-regions", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         townPackageId: initialData.activeTownPackage.id,
         atlasId: activeAtlas.atlasId,
         region: {
-          regionId: selectedTownIndexRegion.regionId,
-          indexAtlasPageId: selectedTownIndexRegion.indexAtlasPageId,
-          linkedAtlasPageId: selectedTownIndexRegion.linkedAtlasPageId,
-          linkedSheetAssetId: selectedTownIndexRegion.linkedSheetAssetId,
-          regionLabel: selectedTownIndexRegion.regionLabel,
-          sheetReference: selectedTownIndexRegion.sheetReference,
-          regionType: selectedTownIndexRegion.regionType,
+          sourceRegionId: regionToSave.regionId,
+          regionId: regionToSave.regionId,
+          atlasPageId: regionToSave.indexAtlasPageId,
+          indexAtlasPageId: regionToSave.indexAtlasPageId,
+          sourceAssetId: regionToSave.sourceAssetId,
+          linkedAtlasPageId: regionToSave.linkedAtlasPageId,
+          linkedSheetAssetId: regionToSave.linkedSheetAssetId,
+          regionLabel: regionToSave.regionLabel,
+          printedReference: regionToSave.sheetReference,
+          sheetReference: regionToSave.sheetReference,
+          regionType: regionToSave.regionType,
+          normalizedPolygon: validation.polygon,
           sourcePolygon: validation.polygon,
-          workflowStatus: selectedTownIndexRegion.workflowStatus,
-          progressStatus: selectedTownIndexRegion.progressStatus,
-          notes: selectedTownIndexRegion.notes,
+          workflowStatus: regionToSave.workflowStatus,
+          progressStatus: regionToSave.progressStatus,
+          includeInTownIndex: regionToSave.includeInTownIndex,
+          availableToMapPieces: regionToSave.availableToMapPieces,
+          notes: regionToSave.notes,
         },
       }),
     });
@@ -3452,15 +3487,27 @@ export function HistoricalMapStudio({
 
     if (!response.ok || !payload?.ok) {
       setSaveStatus("error");
-      setSaveMessage(payload?.message ?? "Town Index region save failed.");
+      setSaveMessage(payload?.message ?? "Source region save failed.");
       return;
     }
 
     const savedRegion: SanbornTownIndexRegionRecord = {
-      ...selectedTownIndexRegion,
-      rowId: payload.region?.rowId ?? selectedTownIndexRegion.rowId,
-      reviewStatus: payload.region?.reviewStatus ?? selectedTownIndexRegion.reviewStatus,
-      evidenceClassification: payload.region?.evidenceClassification ?? selectedTownIndexRegion.evidenceClassification,
+      ...regionToSave,
+      rowId: payload.region?.rowId ?? regionToSave.rowId,
+      regionId: payload.region?.regionId ?? regionToSave.regionId,
+      sourceAssetId: payload.region?.sourceAssetId ?? regionToSave.sourceAssetId,
+      linkedAtlasPageId: payload.region?.linkedAtlasPageId ?? regionToSave.linkedAtlasPageId,
+      linkedSheetAssetId: payload.region?.linkedSheetAssetId ?? regionToSave.linkedSheetAssetId,
+      regionType: payload.region?.regionType ?? regionToSave.regionType,
+      regionLabel: payload.region?.regionLabel ?? regionToSave.regionLabel,
+      sheetReference: payload.region?.sheetReference ?? regionToSave.sheetReference,
+      workflowStatus: payload.region?.workflowStatus ?? regionToSave.workflowStatus,
+      progressStatus: payload.region?.progressStatus ?? regionToSave.progressStatus,
+      includeInTownIndex: payload.region?.includeInTownIndex ?? regionToSave.includeInTownIndex,
+      availableToMapPieces: payload.region?.availableToMapPieces ?? regionToSave.availableToMapPieces,
+      notes: payload.region?.notes ?? regionToSave.notes,
+      reviewStatus: payload.region?.reviewStatus ?? regionToSave.reviewStatus,
+      evidenceClassification: payload.region?.evidenceClassification ?? regionToSave.evidenceClassification,
       updatedAt: payload.region?.updatedAt ?? payload.savedAt ?? new Date().toISOString(),
       isPersisted: true,
     };
@@ -3468,61 +3515,64 @@ export function HistoricalMapStudio({
     setTownIndexRegions((current) => current.map((region) => (region.regionId === savedRegion.regionId ? savedRegion : region)));
     setSelectedIndexRegionId(savedRegion.regionId);
     setSaveStatus("saved");
-    setSaveMessage("Town Index region saved.");
+    setSaveMessage("Source region saved.");
     setLastSavedAt(payload.savedAt ?? new Date().toISOString());
     pendingStudioSelectionRef.current = {
       atlasId: activeAtlas.atlasId,
-      pageId: selectedAtlasPage?.pageId ?? "",
+      pageId: regionToSave.indexAtlasPageId,
       pieceId: selectedMapPiece?.pieceId,
-      assetId: selectedAssetId,
+      assetId: regionToSave.sourceAssetId ?? selectedAssetId,
       indexRegionId: savedRegion.regionId,
-      workflowStep: "town_index",
+      workflowStep: atlasWorkflowStep,
     };
     router.refresh();
   }
 
   async function deleteSelectedTownIndexRegion() {
-    if (!initialData.activeTownPackage || !activeAtlas || !selectedTownIndexRegion || atlasReadOnly) {
+    const regionToDelete = selectedSourceRegion;
+
+    if (!initialData.activeTownPackage || !activeAtlas || !regionToDelete || atlasReadOnly) {
       setSaveStatus("error");
-      setSaveMessage("Select a saved Town Index region before deleting it.");
+      setSaveMessage("Select a saved source region before deleting it.");
       return;
     }
 
-    if (!window.confirm(`Delete index region ${selectedTownIndexRegion.regionLabel || selectedTownIndexRegion.sheetReference || selectedTownIndexRegion.regionId}?`)) {
+    if (!window.confirm(`Delete source region ${regionToDelete.regionLabel || regionToDelete.sheetReference || regionToDelete.regionId}?`)) {
       return;
     }
 
-    if (!selectedTownIndexRegion.isPersisted) {
-      setTownIndexRegions((current) => current.filter((region) => region.regionId !== selectedTownIndexRegion.regionId));
+    if (!regionToDelete.isPersisted) {
+      setTownIndexRegions((current) => current.filter((region) => region.regionId !== regionToDelete.regionId));
       setSelectedIndexRegionId("");
       setSaveStatus("saved");
-      setSaveMessage("Unsaved Town Index region draft removed.");
+      setSaveMessage("Unsaved source region draft removed.");
       return;
     }
 
     setSaveStatus("saving");
-    setSaveMessage("Deleting Town Index region...");
-    const response = await fetch("/api/community/historical-map-studio/town-index-regions", {
+    setSaveMessage("Deleting source region...");
+    const response = await fetch("/api/community/historical-map-studio/source-regions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         townPackageId: initialData.activeTownPackage.id,
         atlasId: activeAtlas.atlasId,
-        regionId: selectedTownIndexRegion.regionId,
+        sourceRegionId: regionToDelete.regionId,
+        regionId: regionToDelete.regionId,
       }),
     });
     const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
 
     if (!response.ok || !payload?.ok) {
       setSaveStatus("error");
-      setSaveMessage(payload?.message ?? "Town Index region delete failed.");
+      setSaveMessage(payload?.message ?? "Source region delete failed.");
       return;
     }
 
-    setTownIndexRegions((current) => current.filter((region) => region.regionId !== selectedTownIndexRegion.regionId));
+    setTownIndexRegions((current) => current.filter((region) => region.regionId !== regionToDelete.regionId));
     setSelectedIndexRegionId("");
     setSaveStatus("saved");
-    setSaveMessage("Town Index region deleted.");
+    setSaveMessage("Source region deleted.");
     setLastSavedAt(payload.savedAt ?? new Date().toISOString());
   }
 
@@ -4061,21 +4111,42 @@ export function HistoricalMapStudio({
   function renderSourceWorkspace() {
     return (
       <section className="sanborn-station-panel sanborn-source-preview" aria-label="Source Record preview">
-        {selectedAtlasPageAsset?.signedUrl ? <img alt={selectedAtlasPageAsset.originalFilename} src={selectedAtlasPageAsset.signedUrl} /> : <div className="sanborn-atlas-empty">Select a page with an available signed image.</div>}
-        <dl className="sanborn-station-details">
-          <dt>Page type</dt>
-          <dd>{selectedAtlasPage ? getSanbornPageTypeLabel(selectedAtlasPage.pageType) : "Unavailable"}</dd>
-          <dt>Printed reference</dt>
-          <dd>{selectedAtlasPage ? getSanbornPagePrintedReference(selectedAtlasPage) ?? "Missing" : "Unavailable"}</dd>
-          <dt>Source ID</dt>
-          <dd>{selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "Missing source record"}</dd>
-          <dt>Repository</dt>
-          <dd>{selectedSourceRecord ? getSourceRepositoryLabel(selectedSourceRecord) : "Unavailable"}</dd>
-          <dt>Selected page</dt>
-          <dd>{selectedAtlasPageAsset?.originalFilename ?? "No page selected"}</dd>
-          <dt>Citation</dt>
-          <dd>{selectedSourceCitation || "Citation unavailable until a durable source record is linked."}</dd>
-        </dl>
+        <div className="sanborn-source-region-toolbar" aria-label="Functional source region tools">
+          <button className={`sanborn-button${townIndexMapMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("select")} type="button">Select</button>
+          <button
+            className={`sanborn-button${townIndexMapMode === "draw" ? " sanborn-button--primary" : ""}`}
+            disabled={atlasReadOnly || !selectedAtlasPage}
+            onClick={() => {
+              setTownIndexDraftPoints([]);
+              setTownIndexMapMode("draw");
+            }}
+            type="button"
+          >
+            Mark region
+          </button>
+          <button className="sanborn-button" disabled={atlasReadOnly || !selectedAtlasPage} onClick={() => setTownIndexMapMode("draw")} type="button">Add vertex</button>
+          <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || townIndexDraftPoints.length < 3} onClick={finishTownIndexRegionDraft} type="button">Finish region</button>
+          <button className="sanborn-button" disabled={townIndexDraftPoints.length === 0} onClick={() => { setTownIndexDraftPoints([]); setTownIndexMapMode("select"); }} type="button">Cancel</button>
+          <button className="sanborn-button" disabled={atlasReadOnly || !selectedSourceRegion} onClick={() => void deleteSelectedTownIndexRegion()} type="button">Delete region</button>
+          <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || !selectedSourceRegion || saveStatus === "saving"} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save regions</button>
+        </div>
+        {selectedAtlasPage && selectedAtlasPageAsset ? (
+          <TownIndexMissionMap
+            draftPoints={townIndexDraftPoints}
+            indexAsset={selectedAtlasPageAsset}
+            indexPage={selectedAtlasPage}
+            mode={townIndexMapMode}
+            readOnly={atlasReadOnly}
+            regions={selectedPageSourceRegions}
+            selectedRegionId={selectedSourceRegion?.regionId ?? selectedIndexRegionId}
+            onDraftPointsChange={setTownIndexDraftPoints}
+            onOpenLinkedRegion={(region) => openTownIndexRegionLink(region, "numbered_sheets")}
+            onSelectRegion={setSelectedIndexRegionId}
+            onUpdateRegionPolygon={(regionId, polygon) => patchTownIndexRegion(regionId, { sourcePolygon: polygon })}
+          />
+        ) : (
+          <div className="sanborn-atlas-empty">Select a page with an available signed image.</div>
+        )}
       </section>
     );
   }
@@ -4085,8 +4156,8 @@ export function HistoricalMapStudio({
       return (
         <section className="town-index-mission-map">
           <div className="town-index-mission-map__empty">
-            <strong>No graphic index is designated for this edition.</strong>
-            <span>Classify an uploaded page as Graphic Index and set it as the primary Town Index to enable coverage-region tools.</span>
+            <strong>No primary Town Index page is designated for this edition.</strong>
+            <span>Classify an uploaded page as Index or mixed, then explicitly set it as the primary Town Index.</span>
           </div>
           <div className="sanborn-sheet-inventory-workspace" aria-label="Eligible pages for Town Index designation">
             {activeAtlasPages.map((page) => {
@@ -4100,7 +4171,7 @@ export function HistoricalMapStudio({
                   <span>{getSanbornPageTypeLabel(page.pageType)}</span>
                   <div className="sanborn-station-actions">
                     <button className="sanborn-button" onClick={() => selectAtlasPage(page.pageId, "page_classification")} type="button">Select page</button>
-                    <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => patchAtlasPage(page.pageId, { pageType: "graphic_index" })} type="button">Classify as Graphic Index</button>
+                    <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => patchAtlasPage(page.pageId, { pageType: "index_or_mixed" })} type="button">Classify as Index or mixed</button>
                     <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled} onClick={() => setPrimaryTownIndexPage(page.pageId, { save: true })} type="button">Set as Primary Town Index</button>
                   </div>
                 </article>
@@ -4176,8 +4247,8 @@ export function HistoricalMapStudio({
         classificationBlockedMessage={selectedAtlasPage && !selectedPageSupportsMapPieces ? selectedPageToolBlockMessage : ""}
         repairClassificationAction={
           selectedAtlasPage && !selectedPageSupportsMapPieces ? (
-            <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep(selectedAtlasPage.pageType === "graphic_index" ? "town_index" : "page_classification")} type="button">
-              {selectedAtlasPage.pageType === "graphic_index" ? "Open Town Index" : "Review page classification"}
+            <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep("page_classification")} type="button">
+              {selectedAtlasPage.pageType === "index_or_mixed" ? "Mark geographic source region" : "Review page classification"}
             </button>
           ) : null
         }
@@ -4352,7 +4423,7 @@ export function HistoricalMapStudio({
                 <label>
                   <input
                     checked={selectedAtlasPage.isPrimaryTownIndex}
-                    disabled={atlasReadOnly || selectedAtlasPage.pageType !== "graphic_index"}
+                    disabled={atlasReadOnly || !pageTypeCanBePrimaryTownIndex(selectedAtlasPage.pageType)}
                     onChange={(event) => {
                       if (event.target.checked) {
                         setPrimaryTownIndexPage(selectedAtlasPage.pageId);
@@ -4364,7 +4435,7 @@ export function HistoricalMapStudio({
                   />
                   Is primary Town Index
                 </label>
-                {selectedAtlasPage.pageType !== "graphic_index" ? <p className="sanborn-atlas-empty">Only Graphic Index pages can become the primary Town Index.</p> : null}
+                {!pageTypeCanBePrimaryTownIndex(selectedAtlasPage.pageType) ? <p className="sanborn-atlas-empty">Only Index or mixed pages can become the primary Town Index.</p> : null}
                 <label>Notes<textarea disabled={atlasReadOnly} value={selectedAtlasPage.classificationNotes ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { classificationNotes: event.target.value })} /></label>
                 {selectedPageHasClassificationConflict ? (
                   <div className="sanborn-atlas-warning">
@@ -4375,12 +4446,62 @@ export function HistoricalMapStudio({
                 ) : null}
                 <div className="sanborn-station-actions">
                   <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled || !activeAtlas} onClick={() => void saveAtlasPages()} type="button">Save page classification</button>
-                  {selectedAtlasPage.pageType === "graphic_index" ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
+                  {pageTypeCanBePrimaryTownIndex(selectedAtlasPage.pageType) ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
                 </div>
               </>
             ) : (
               <p className="sanborn-atlas-empty">Select an uploaded page before classifying it.</p>
             )}
+          </section>
+          <section className="sanborn-station-subsection">
+            <strong>Functional Source Regions</strong>
+            <p className="sanborn-atlas-empty">Mark the page areas that support later work: town coverage, sheet coverage, printed index text, geographic map content, legend/key, or notes.</p>
+            {selectedPageSourceRegions.length > 0 ? (
+              <label>Selected region<select value={selectedSourceRegion?.regionId ?? ""} onChange={(event) => setSelectedIndexRegionId(event.target.value)}>
+                {selectedPageSourceRegions.map((region) => <option key={region.regionId} value={region.regionId}>{region.regionLabel || region.sheetReference || getSourceRegionTypeLabel(region.regionType)}</option>)}
+              </select></label>
+            ) : (
+              <p className="sanborn-atlas-empty">No functional regions have been marked on this page.</p>
+            )}
+            {selectedSourceRegion ? (
+              <>
+                <dl className="sanborn-station-details">
+                  <dt>Purpose</dt>
+                  <dd>{getSourceRegionTypeLabel(selectedSourceRegion.regionType)}</dd>
+                  <dt>Town Index</dt>
+                  <dd>{sourceRegionSupportsTownIndex(selectedSourceRegion) ? "Sheet coverage" : selectedSourceRegion.includeInTownIndex ? "Context only" : "Not included"}</dd>
+                  <dt>Map Pieces</dt>
+                  <dd>{sourceRegionSupportsMapPieces(selectedSourceRegion) ? "Available" : "Unavailable"}</dd>
+                </dl>
+                <label>Region label<input disabled={atlasReadOnly} value={selectedSourceRegion.regionLabel} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { regionLabel: event.target.value })} /></label>
+                <label>Region type<select disabled={atlasReadOnly} value={selectedSourceRegion.regionType} onChange={(event) => {
+                  const regionType = event.target.value as SanbornTownIndexRegionType;
+                  patchTownIndexRegion(selectedSourceRegion.regionId, {
+                    regionType,
+                    availableToMapPieces: sourceRegionSupportsMapPieces({ regionType, availableToMapPieces: selectedSourceRegion.availableToMapPieces }),
+                    includeInTownIndex: regionType === "sheet_coverage_region" ? true : selectedSourceRegion.includeInTownIndex,
+                  });
+                }}>{sanbornSourceRegionTypes.map((type) => <option key={type} value={type}>{getSourceRegionTypeLabel(type)}</option>)}</select></label>
+                <label>Printed reference<input disabled={atlasReadOnly} value={selectedSourceRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sheetReference: event.target.value })} placeholder="2, 2A, East inset, Business district" /></label>
+                <label>Linked sheet/page<select disabled={atlasReadOnly} value={selectedSourceRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
+                  const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
+                  patchTownIndexRegion(selectedSourceRegion.regionId, {
+                    linkedAtlasPageId: linkedPage?.pageId ?? null,
+                    linkedAtlasPageRowId: linkedPage?.rowId ?? null,
+                    linkedSheetAssetId: linkedPage?.sanbornSheetAssetId ?? null,
+                    linkedSheetAssetRowId: linkedPage?.sanbornSheetAssetRowId ?? null,
+                  });
+                }}><option value="">Unresolved / no link</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
+                <label>Status<select disabled={atlasReadOnly} value={selectedSourceRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+                <label><input checked={selectedSourceRegion.includeInTownIndex} disabled={atlasReadOnly} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { includeInTownIndex: event.target.checked })} type="checkbox" /> Include in Town Index</label>
+                <label><input checked={selectedSourceRegion.availableToMapPieces} disabled={atlasReadOnly || !sourceRegionSupportsMapPieces({ regionType: selectedSourceRegion.regionType, availableToMapPieces: true })} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { availableToMapPieces: event.target.checked })} type="checkbox" /> Available to Map Pieces</label>
+                <label>Notes<textarea disabled={atlasReadOnly} value={selectedSourceRegion.notes ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { notes: event.target.value })} /></label>
+                <div className="sanborn-station-actions">
+                  <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || saveStatus === "saving"} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save regions</button>
+                  <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => void deleteSelectedTownIndexRegion()} type="button">Delete region</button>
+                </div>
+              </>
+            ) : null}
           </section>
           <dl className="sanborn-station-details">
             <dt>Internal source ID</dt>
@@ -4419,7 +4540,7 @@ export function HistoricalMapStudio({
       return (
         <>
           <dl className="sanborn-station-details">
-            <dt>Primary graphic index</dt>
+            <dt>Primary Town Index</dt>
             <dd>{reconstructionModel.index.indexPage ? getSanbornPageDisplayLabel(reconstructionModel.index.indexPage) : "Not designated"}</dd>
             <dt>Index image</dt>
             <dd>{reconstructionModel.index.indexAsset?.signedUrl ? "Available" : reconstructionModel.index.indexAsset ? "Waiting for signed URL" : "Unavailable"}</dd>
@@ -4434,19 +4555,21 @@ export function HistoricalMapStudio({
             <dt>Edition index completion</dt>
             <dd>{reconstructionModel.index.completion.completionPercent}%</dd>
           </dl>
-          {!reconstructionModel.index.indexPage ? <p className="sanborn-atlas-warning">No graphic index is designated for this edition. Use the Town Index workspace repair list or Source Record classification to set one.</p> : null}
-          <p className="sanborn-atlas-empty">Outline the colored or bounded area on the Sanborn index that points to a sheet or inset. Do not trace each numbered city block here.</p>
+          {!reconstructionModel.index.indexPage ? <p className="sanborn-atlas-warning">No primary Town Index page is designated for this edition. Use the Town Index workspace repair list or Source Record classification to set one.</p> : null}
+          <p className="sanborn-atlas-empty">Town Index reviews saved Source Record coverage regions. Outline source regions in Source Record; do not redraw them here.</p>
           <div className="sanborn-station-actions">
-            <button className={`sanborn-button${townIndexMapMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !reconstructionModel.index.indexPage} onClick={() => setTownIndexMapMode("draw")} type="button">Add coverage region</button>
-            <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || townIndexDraftPoints.length < 3} onClick={finishTownIndexRegionDraft} type="button">Close polygon</button>
-            <button className="sanborn-button" disabled={townIndexDraftPoints.length === 0} onClick={() => { setTownIndexDraftPoints([]); setTownIndexMapMode("select"); }} type="button">Cancel drawing</button>
+            <button className="sanborn-button sanborn-button--primary" disabled={!reconstructionModel.index.indexPage} onClick={() => {
+              if (reconstructionModel.index.indexPage) {
+                selectAtlasPage(reconstructionModel.index.indexPage.pageId, "page_classification");
+              }
+            }} type="button">Edit source regions</button>
             <button className={`sanborn-button${townIndexMapMode === "move" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !selectedTownIndexRegion} onClick={() => setTownIndexMapMode("move")} type="button">Move region</button>
           </div>
           {selectedTownIndexRegion ? (
             <>
               <label>Region label<input disabled={atlasReadOnly} value={selectedTownIndexRegion.regionLabel} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionLabel: event.target.value })} /></label>
               <label>Printed sheet reference<input disabled={atlasReadOnly} value={selectedTownIndexRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { sheetReference: event.target.value })} /></label>
-              <label>Region type<select disabled={atlasReadOnly} value={selectedTownIndexRegion.regionType} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionType: event.target.value as SanbornTownIndexRegionType })}>{sanbornTownIndexRegionTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
+              <label>Region type<select disabled={atlasReadOnly} value={selectedTownIndexRegion.regionType} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionType: event.target.value as SanbornTownIndexRegionType })}>{sanbornSourceRegionTypes.map((type) => <option key={type} value={type}>{getSourceRegionTypeLabel(type)}</option>)}</select></label>
               <label>Linked sheet/page<select disabled={atlasReadOnly} value={selectedTownIndexRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
                 const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
                 patchTownIndexRegion(selectedTownIndexRegion.regionId, {
@@ -4467,6 +4590,7 @@ export function HistoricalMapStudio({
               <div className="sanborn-station-actions">
                 <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || saveStatus === "saving"} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save region</button>
                 <button className="sanborn-button" disabled={!selectedTownIndexRegion.linkedAtlasPageId && !selectedTownIndexRegion.linkedSheetAssetId} onClick={() => openTownIndexRegionLink(selectedTownIndexRegion, "piece_inventory")} type="button">Open linked sheet</button>
+                <button className="sanborn-button" onClick={() => selectAtlasPage(selectedTownIndexRegion.indexAtlasPageId, "page_classification")} type="button">Edit source regions</button>
                 <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => void deleteSelectedTownIndexRegion()} type="button">Delete region</button>
               </div>
             </>
@@ -4486,7 +4610,7 @@ export function HistoricalMapStudio({
               <label>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} /></label>
               <label>Display label<input disabled={atlasReadOnly} value={selectedAtlasPage.displayLabel ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { displayLabel: event.target.value })} /></label>
               <label>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
-              {selectedAtlasPage.pageType === "graphic_index" ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
+              {pageTypeCanBePrimaryTownIndex(selectedAtlasPage.pageType) ? <button className="sanborn-button" disabled={atlasReadOnly || selectedAtlasPage.isPrimaryTownIndex} onClick={() => setPrimaryTownIndexPage(selectedAtlasPage.pageId)} type="button">Set as Primary Town Index</button> : null}
               <dl className="sanborn-station-details">
                 <dt>Filename</dt>
                 <dd>{selectedAtlasPageAsset?.originalFilename ?? "Unavailable"}</dd>

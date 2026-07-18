@@ -92,9 +92,10 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - Source Info shows durable source identity and can create a Library of Congress source record when migration `0013` is present.
 - The Historical Map Studio station rail contains only Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, and Map Placement.
 - The Town Index mission map can save, reload, relink, and delete durable regions when migration `0014` is present.
-- Source Record classifies the selected uploaded page, saves printed references and display titles, and controls whether Town Index, Map Pieces, or Map Placement tools apply.
-- A Graphic Index page can be set as the primary Town Index; Town Index shows a repair flow when no primary Graphic Index is designated.
-- Cover, street-index, legend, advertisement, other, and unknown pages block Map Pieces and Map Placement with explanatory text instead of exposing the wrong editing tools.
+- Source Record classifies the selected uploaded page, saves printed references and display titles, and lets reviewers mark functional source regions directly on the page.
+- An Index or mixed page can be explicitly set as the primary Town Index; Town Index shows a repair flow when no primary Town Index is designated.
+- Town Index reuses saved sheet-coverage source regions instead of asking reviewers to redraw the same polygons.
+- Cover, street-index, legend, advertisement, other, and unknown pages block Map Pieces and Map Placement unless a saved geographic source region makes that work available, with explanatory text instead of exposing the wrong editing tools.
 - The Town Index, Sheet Inventory, Map Pieces, and Map Placement stations preserve atlas/page/piece/index-region selection through URL context.
 - Unplaced Sanborn sheets can be added directly to the modern map without using the optional prep canvas.
 - Georeference Sheets `Edit historical sheets` mode can move, corner-warp, rotate, scale, skew, flip, hide, lock, reorder, save, and reload individual sheets over the modern basemap.
