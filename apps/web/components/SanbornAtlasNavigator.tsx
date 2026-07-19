@@ -167,7 +167,7 @@ export function SanbornAtlasNavigator({
   };
 
   return (
-    <aside className="sanborn-atlas-navigator" aria-label="Town Reconstruction station rail">
+    <aside className="sanborn-atlas-navigator" id="sanborn-station-rail" aria-label="Town Reconstruction station rail">
       <header className="sanborn-atlas-navigator__header">
         <span>Town Reconstruction</span>
         <strong>{townProgress.completionPercent}%</strong>

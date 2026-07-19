@@ -223,6 +223,52 @@ type MapViewChangeSource =
 
 type MapInteractionStatus = "idle" | "panning" | "zooming" | "saved";
 
+type StudioLayoutPreference = {
+  leftRailCollapsed: boolean;
+  rightInspectorCollapsed: boolean;
+};
+
+type BooleanLayoutAction = boolean | ((value: boolean) => boolean);
+
+const studioLayoutPreferenceKey = "mindseye.historicalMapStudio.layout";
+const defaultStudioLayoutPreference: StudioLayoutPreference = {
+  leftRailCollapsed: false,
+  rightInspectorCollapsed: false,
+};
+
+function applyBooleanLayoutAction(action: BooleanLayoutAction, current: boolean): boolean {
+  return typeof action === "function" ? action(current) : action;
+}
+
+function readStudioLayoutPreference(): StudioLayoutPreference {
+  if (typeof window === "undefined") {
+    return defaultStudioLayoutPreference;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(studioLayoutPreferenceKey);
+    const parsed = stored ? JSON.parse(stored) : null;
+    return {
+      leftRailCollapsed: typeof parsed?.leftRailCollapsed === "boolean" ? parsed.leftRailCollapsed : false,
+      rightInspectorCollapsed: typeof parsed?.rightInspectorCollapsed === "boolean" ? parsed.rightInspectorCollapsed : false,
+    };
+  } catch {
+    return defaultStudioLayoutPreference;
+  }
+}
+
+function writeStudioLayoutPreference(preference: StudioLayoutPreference) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(studioLayoutPreferenceKey, JSON.stringify(preference));
+  } catch {
+    // Layout persistence is a convenience; the studio remains usable without it.
+  }
+}
+
 type PendingStudioSelection = {
   atlasId: string;
   pageId: string;
@@ -845,8 +891,22 @@ export function HistoricalMapStudio({
   const [showHistoricalLayers, setShowHistoricalLayers] = useState(true);
   const [comparisonMode, setComparisonMode] = useState<"both" | "modern_only" | "historical_only">("both");
   const [globalHistoricalOpacity, setGlobalHistoricalOpacity] = useState(initialData.geographicMap.globalHistoricalOpacity);
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [studioLayoutPreference, setStudioLayoutPreference] = useState<StudioLayoutPreference>(defaultStudioLayoutPreference);
+  const [studioLayoutPreferenceLoaded, setStudioLayoutPreferenceLoaded] = useState(false);
+  const leftPanelCollapsed = studioLayoutPreference.leftRailCollapsed;
+  const rightPanelCollapsed = studioLayoutPreference.rightInspectorCollapsed;
+  const setLeftPanelCollapsed = useCallback((action: BooleanLayoutAction) => {
+    setStudioLayoutPreference((current) => ({
+      ...current,
+      leftRailCollapsed: applyBooleanLayoutAction(action, current.leftRailCollapsed),
+    }));
+  }, []);
+  const setRightPanelCollapsed = useCallback((action: BooleanLayoutAction) => {
+    setStudioLayoutPreference((current) => ({
+      ...current,
+      rightInspectorCollapsed: applyBooleanLayoutAction(action, current.rightInspectorCollapsed),
+    }));
+  }, []);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [placementAnchorAssetId, setPlacementAnchorAssetId] = useState("");
   const [piecePlacementAnchorId, setPiecePlacementAnchorId] = useState("");
@@ -1019,6 +1079,19 @@ export function HistoricalMapStudio({
       })),
     [activeTownIndexRegions, townIndexProgressByRegionId],
   );
+
+  useEffect(() => {
+    setStudioLayoutPreference(readStudioLayoutPreference());
+    setStudioLayoutPreferenceLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!studioLayoutPreferenceLoaded) {
+      return;
+    }
+
+    writeStudioLayoutPreference(studioLayoutPreference);
+  }, [studioLayoutPreference, studioLayoutPreferenceLoaded]);
 
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
@@ -4842,60 +4915,58 @@ export function HistoricalMapStudio({
           onTownChange={(townPackageId) => router.push(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}&year=${initialData.activeMapYear ?? ""}&mapYear=${initialData.activeMapYear ?? ""}`)}
           onYearChange={(mapYear) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`)}
         />
-        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--primary" aria-label="Studio context">
-          <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
-          {isGpsAlignmentStep ? (
-            <div className="minimal-sanborn-gps__gps-workflow" aria-label="Map placement workflow navigation">
-              <button className="sanborn-button sanborn-button--primary" onClick={backToLastNonGpsWorkflowStep} type="button">
-                Back to {sanbornAtlasWorkflowSteps.find((step) => step.id === lastNonGpsWorkflowStep)?.label ?? "Map Pieces"}
-              </button>
-              <label className="minimal-sanborn-gps__workflow-select">
-                <span>Workflow</span>
-                <select aria-label="Atlas workflow step" value={atlasWorkflowStep} onChange={(event) => changeAtlasWorkflowStep(event.target.value as SanbornAtlasWorkflowStep)}>
-                  {sanbornAtlasWorkflowSteps.map((step, index) => (
-                    <option key={step.id} value={step.id}>{index + 1}. {step.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
-          <button className="sanborn-button" onClick={() => setLeftPanelCollapsed((value) => !value)} type="button">{leftPanelCollapsed ? "Show stations" : "Hide stations"}</button>
-          <button className="sanborn-button" onClick={() => setRightPanelCollapsed((value) => !value)} type="button">{rightPanelCollapsed ? "Show inspector" : "Hide inspector"}</button>
-        </div>
-        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--source" aria-label="Source and sheet controls">
-          <input
-            aria-label="Town, address, or ZIP"
-            className="minimal-sanborn-gps__location"
-            onChange={(event) => setLocationQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void findLocation(false);
-              }
-            }}
-            placeholder="Town, address, or ZIP"
-            value={locationQuery}
-          />
-          <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(false)} type="button">Find location</button>
-          {locationResult && initialData.activeTownPackage ? (
-            <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(true)} type="button">Use this location</button>
-          ) : null}
-          <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">Upload Sanborn sheets</button>
-          <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden multiple onChange={(event) => {
-            void uploadSheets(event.currentTarget.files);
-            event.currentTarget.value = "";
-          }} ref={uploadInputRef} type="file" />
-          <select aria-label="Sanborn sheet" className="minimal-sanborn-gps__sheet" value={selectedAssetId} onChange={(event) => selectAndCenter(event.target.value)}>
-            <option value="">Select sheet</option>
-            {sheets.map((sheet) => <option key={sheet.assetId} value={sheet.assetId}>Sheet {sheet.sheetNumber ?? "?"} - {sheet.originalFilename}</option>)}
-          </select>
-          {isGpsAlignmentStep ? <button className="sanborn-button sanborn-button--primary" disabled={!allMapPieceBounds} onClick={fitAllPlacedMapPieces} type="button">Fit all placed pieces</button> : null}
-        </div>
-        <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__status-row" aria-live="polite" aria-label="Map and save status">
-          <span className="minimal-sanborn-gps__map-status">{isGpsAlignmentStep ? modernMapStatusText : `${activeStationLabel}: ${selectedObjectLabel}`}</span>
-          {mapInteractionStatusText ? <span className="minimal-sanborn-gps__map-status">{mapInteractionStatusText}</span> : null}
-          <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
-          <div className="minimal-sanborn-gps__messages">
+        <div className="minimal-sanborn-gps__commandbar" aria-label="Studio commands and status">
+          <div className="minimal-sanborn-gps__command-group minimal-sanborn-gps__command-group--identity">
+            <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
+            {isGpsAlignmentStep ? (
+              <div className="minimal-sanborn-gps__gps-workflow" aria-label="Map placement workflow navigation">
+                <button className="sanborn-button sanborn-button--primary" onClick={backToLastNonGpsWorkflowStep} type="button">
+                  Back to {sanbornAtlasWorkflowSteps.find((step) => step.id === lastNonGpsWorkflowStep)?.label ?? "Map Pieces"}
+                </button>
+                <label className="minimal-sanborn-gps__workflow-select">
+                  <span>Workflow</span>
+                  <select aria-label="Atlas workflow step" value={atlasWorkflowStep} onChange={(event) => changeAtlasWorkflowStep(event.target.value as SanbornAtlasWorkflowStep)}>
+                    {sanbornAtlasWorkflowSteps.map((step, index) => (
+                      <option key={step.id} value={step.id}>{index + 1}. {step.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </div>
+          <div className="minimal-sanborn-gps__command-group minimal-sanborn-gps__command-group--source">
+            <input
+              aria-label="Town, address, or ZIP"
+              className="minimal-sanborn-gps__location"
+              onChange={(event) => setLocationQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void findLocation(false);
+                }
+              }}
+              placeholder="Town, address, or ZIP"
+              value={locationQuery}
+            />
+            <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(false)} type="button">Find location</button>
+            {locationResult && initialData.activeTownPackage ? (
+              <button className="sanborn-button" disabled={locationStatus === "searching"} onClick={() => void findLocation(true)} type="button">Use this location</button>
+            ) : null}
+            <button className="sanborn-button" onClick={() => uploadInputRef.current?.click()} type="button">Upload Sanborn sheets</button>
+            <input accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden multiple onChange={(event) => {
+              void uploadSheets(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }} ref={uploadInputRef} type="file" />
+            <select aria-label="Sanborn sheet" className="minimal-sanborn-gps__sheet" value={selectedAssetId} onChange={(event) => selectAndCenter(event.target.value)}>
+              <option value="">Select sheet</option>
+              {sheets.map((sheet) => <option key={sheet.assetId} value={sheet.assetId}>Sheet {sheet.sheetNumber ?? "?"} - {sheet.originalFilename}</option>)}
+            </select>
+            {isGpsAlignmentStep ? <button className="sanborn-button sanborn-button--primary" disabled={!allMapPieceBounds} onClick={fitAllPlacedMapPieces} type="button">Fit all placed pieces</button> : null}
+          </div>
+          <div className="minimal-sanborn-gps__command-group minimal-sanborn-gps__command-group--status" aria-live="polite" aria-label="Map and save status">
+            <span className="minimal-sanborn-gps__map-status">{isGpsAlignmentStep ? modernMapStatusText : `${activeStationLabel}: ${selectedObjectLabel}`}</span>
+            {mapInteractionStatusText ? <span className="minimal-sanborn-gps__map-status">{mapInteractionStatusText}</span> : null}
+            <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
             {initialData.warningMessage ? <span className="minimal-sanborn-gps__message">{initialData.warningMessage}</span> : null}
             {locationMessage ? <span className={`minimal-sanborn-gps__message ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</span> : null}
             {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
@@ -4906,6 +4977,17 @@ export function HistoricalMapStudio({
       </header>
 
       <div className={`sanborn-atlas-workflow sanborn-atlas-workflow--stations${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
+        <button
+          aria-controls="sanborn-station-rail"
+          aria-expanded={!leftPanelCollapsed}
+          className={`sanborn-layout-tab sanborn-layout-tab--left${leftPanelCollapsed ? " is-collapsed" : ""}`}
+          onClick={() => setLeftPanelCollapsed((value) => !value)}
+          title="Toggle stations ([)"
+          type="button"
+        >
+          <span aria-hidden="true">{leftPanelCollapsed ? ">" : "<"}</span>
+          <span>{leftPanelCollapsed ? "Show stations" : "Hide stations"}</span>
+        </button>
         {leftPanelCollapsed ? null : (
           <SanbornAtlasNavigator
             activeMapYear={initialData.activeMapYear}
@@ -4924,18 +5006,29 @@ export function HistoricalMapStudio({
           {renderStationWorkspace()}
         </main>
         {rightPanelCollapsed ? null : (
-          <aside className="sanborn-station-inspector" aria-label={`${activeStationLabel} inspector`}>
+          <aside className="sanborn-station-inspector" id="sanborn-station-inspector" aria-label={`${activeStationLabel} inspector`}>
             <header className="sanborn-station-inspector__header">
               <div>
                 <span>{activeStationLabel}</span>
                 <strong>{selectedObjectLabel}</strong>
               </div>
               <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
-              <button className="sanborn-station-inspector__close" onClick={() => setRightPanelCollapsed(true)} type="button">Collapse</button>
+              <button className="sanborn-station-inspector__close" onClick={() => setRightPanelCollapsed(true)} type="button">Hide inspector</button>
             </header>
             <div className="sanborn-station-inspector__body">{renderInspectorBody()}</div>
           </aside>
         )}
+        <button
+          aria-controls="sanborn-station-inspector"
+          aria-expanded={!rightPanelCollapsed}
+          className={`sanborn-layout-tab sanborn-layout-tab--right${rightPanelCollapsed ? " is-collapsed" : ""}`}
+          onClick={() => setRightPanelCollapsed((value) => !value)}
+          title="Toggle inspector (])"
+          type="button"
+        >
+          <span aria-hidden="true">{rightPanelCollapsed ? "<" : ">"}</span>
+          <span>{rightPanelCollapsed ? "Show inspector" : "Hide inspector"}</span>
+        </button>
       </div>
     </section>
   );
