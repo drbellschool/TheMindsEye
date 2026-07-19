@@ -61,6 +61,26 @@ python scripts/export_sanborn_image_metadata.py
 This writes a metadata-only manifest to `data/towns/texarkana/` without
 committing the image binaries.
 
+## Historical Map Studio Uploads
+
+Live uploads happen in `/community/historical-map-studio`, not through this
+local cache. A reviewer must create or select a saved Sanborn edition before
+uploading pages. The studio does not auto-create speculative years for a town;
+`+ Add year` creates a real atlas/edition record, and uploaded pages are scoped
+to that active town and edition.
+
+If a page is uploaded to the wrong edition, use page management to move it to
+another saved edition in the same town when linked work is compatible. The move
+preserves the uploaded image and source record. Replace Image preserves the
+page identity and old storage object until the replacement succeeds, and it
+warns reviewers to recheck source-region polygons and map pieces when image
+dimensions or aspect ratio change. Developed pages should be archived rather
+than hard-deleted.
+
+Map Pieces editing uses a sticky toolbar with image zoom and pan controls.
+Zoom/pan are viewport-only: source-region and map-piece polygons remain stored
+as normalized source-image coordinates.
+
 ## Boundary
 
 This local metadata workflow does not stitch, georeference, or extract

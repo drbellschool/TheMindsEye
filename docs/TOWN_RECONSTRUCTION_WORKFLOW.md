@@ -40,6 +40,14 @@ These stations are free navigation, not a rigid wizard. The left rail is station
 
 Building Reconstruction, People & Activity, and Sources & Evidence remain separate Community routes reached from the shared context bar. They carry the same Town / Edition / Sheet / Map Piece context but do not appear as Historical Map Studio stations.
 
+## Edition Management
+
+Town is the root context and editions are explicit saved Sanborn atlas records. The UI must not show speculative years for a town. A reviewer creates another edition through `+ Add year`, providing a four-digit year and optional edition date, title, volume, expected page count, and notes. Creation switches the active context to the new saved edition and opens an empty Sheet Inventory.
+
+Uploads attach to the active town and active edition. If no edition is selected, upload is disabled with a clear instruction to create or select a Sanborn edition first. Upload success messages include the edition year so accidental cross-edition uploads are easier to catch.
+
+Page management repairs mistakes without re-uploading when safe. Moving a page to another edition preserves the uploaded image and source record, validates that the destination atlas belongs to the same town, and blocks incompatible linked work unless the user confirms a compatible child-work move. Replacing an image preserves the page identity, classification, edition assignment, and source record; if dimensions or aspect ratio change, source regions and map pieces must be reviewed. Pages or editions with reconstruction work should be archived rather than casually hard-deleted. Archive fields preserve the relationships and hide archived records from normal selectors.
+
 ## Page Classification Workflow
 
 Every imported Sanborn page should be classified once in the Source Record station before reconstruction tools are used. The canonical page types are:
@@ -182,6 +190,12 @@ Example tasks:
 - prepare building or people review once those engines expand.
 
 Completed placement work is removed from the queue automatically by the next calculation.
+
+## Map Pieces Editing Viewport
+
+Map Pieces uses normalized source-image polygons as the stored geometry. Zoom and pan are viewport-only editing aids. They do not mark data dirty, do not alter polygon coordinates, and should survive ordinary tool switches and saves.
+
+The Map Pieces toolbar remains sticky above the source image and includes Select, Draw, Pan, vertex controls, Save pieces, zoom in/out, Fit image, 100%, Reset view, and Fit selected piece. When a page type or unsaved page assignment blocks editing, the toolbar remains visible but disables invalid actions with explanatory text.
 
 ## Durable Source Identity
 

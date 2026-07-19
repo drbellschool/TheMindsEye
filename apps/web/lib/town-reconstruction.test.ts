@@ -101,6 +101,9 @@ function atlas(overrides: Partial<SanbornAtlasRecord> = {}): SanbornAtlasRecord 
     editionDate: null,
     volumeLabel: null,
     expectedPageCount: null,
+    notes: null,
+    archivedAt: null,
+    archiveReason: null,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     updatedAt: null,
@@ -125,6 +128,8 @@ function page(pageId: string, overrides: Partial<SanbornAtlasPageRecord> = {}): 
     displayLabel: null,
     isPrimaryTownIndex: false,
     classificationNotes: null,
+    archivedAt: null,
+    archiveReason: null,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     updatedAt: null,
@@ -799,6 +804,13 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
     townReconstruction?: {
       demoLabel?: string;
       sourceIdentity?: Record<string, string>;
+      editionManagement?: {
+        demoOnly?: boolean;
+        note?: string;
+        savedEditions?: Array<{ year: number; pageCount: number; archived: boolean }>;
+        pageManagementExamples?: string[];
+        mapPiecesViewport?: { zoomRange?: string };
+      };
       pageClassification?: {
         totalPages?: number;
         unknownPages?: number;
@@ -817,6 +829,12 @@ test("demo fallback includes reconstruction overview and durable LOC provenance"
   assert.equal(demo.townReconstruction?.sourceIdentity?.repository, "Library of Congress");
   assert.equal(demo.townReconstruction?.sourceIdentity?.collection, "Sanborn Fire Insurance Maps");
   assert.match(demo.townReconstruction?.sourceIdentity?.citation ?? "", /Standard historical citation|Sanborn Map Company/);
+  assert.equal(demo.townReconstruction?.editionManagement?.demoOnly, true);
+  assert.equal(demo.townReconstruction?.editionManagement?.note, "These are saved demo editions, not automatic production year suggestions.");
+  assert.equal(demo.townReconstruction?.editionManagement?.savedEditions?.some((edition) => edition.year === 1888 && edition.pageCount === 0), true);
+  assert.equal(demo.townReconstruction?.editionManagement?.savedEditions?.some((edition) => edition.archived === true), true);
+  assert.equal(demo.townReconstruction?.editionManagement?.pageManagementExamples?.some((example) => /Move misplaced 1888 upload/.test(example)), true);
+  assert.equal(demo.townReconstruction?.editionManagement?.mapPiecesViewport?.zoomRange, "25%-800%");
   assert.equal(demo.townReconstruction?.pageClassification?.totalPages, 9);
   assert.equal(demo.townReconstruction?.pageClassification?.unknownPages, 1);
   assert.equal(demo.townReconstruction?.pageClassification?.conflicts, 1);

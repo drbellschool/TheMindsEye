@@ -89,6 +89,9 @@ export type SanbornAtlasRecord = {
   editionDate: string | null;
   volumeLabel: string | null;
   expectedPageCount: number | null;
+  notes: string | null;
+  archivedAt: string | null;
+  archiveReason: string | null;
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
   updatedAt: string | null;
@@ -110,6 +113,8 @@ export type SanbornAtlasPageRecord = {
   displayLabel: string | null;
   isPrimaryTownIndex: boolean;
   classificationNotes: string | null;
+  archivedAt: string | null;
+  archiveReason: string | null;
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
   updatedAt: string | null;
@@ -304,6 +309,91 @@ export function normalizeOptionalSanbornText(value: string | null | undefined, m
 export function normalizePositiveInteger(value: unknown): number | null {
   const numeric = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+export function normalizeSanbornEditionYear(value: unknown): number | null {
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d{4}$/.test(value.trim())
+        ? Number.parseInt(value.trim(), 10)
+        : null;
+
+  if (numeric === null || !Number.isInteger(numeric) || numeric < 1000 || numeric > 9999) {
+    return null;
+  }
+
+  return numeric;
+}
+
+export function getSavedSanbornEditionYears(atlases: Array<Pick<SanbornAtlasRecord, "editionYear" | "archivedAt">>): number[] {
+  return [...new Set(atlases.filter((atlas) => !atlas.archivedAt).map((atlas) => atlas.editionYear))]
+    .filter((year) => Number.isInteger(year) && year > 0)
+    .sort((left, right) => right - left);
+}
+
+export function findDuplicateSanbornEdition(input: {
+  atlases: Array<Pick<SanbornAtlasRecord, "atlasId" | "editionYear" | "volumeLabel" | "archivedAt">>;
+  editionYear: number;
+  volumeLabel?: string | null;
+  excludeAtlasId?: string | null;
+}): Pick<SanbornAtlasRecord, "atlasId" | "editionYear" | "volumeLabel" | "archivedAt"> | null {
+  const normalizedVolume = normalizeOptionalSanbornText(input.volumeLabel, 80) ?? "";
+
+  return (
+    input.atlases.find(
+      (atlas) =>
+        !atlas.archivedAt &&
+        atlas.atlasId !== input.excludeAtlasId &&
+        atlas.editionYear === input.editionYear &&
+        (normalizeOptionalSanbornText(atlas.volumeLabel, 80) ?? "") === normalizedVolume,
+    ) ?? null
+  );
+}
+
+export type SanbornPageDependencySummary = {
+  sourceRegions: number;
+  mapPieces: number;
+  mapPiecePlacements: number;
+  wholeSheetPlacements: number;
+  sourceLinks: number;
+  reviewRecords: number;
+};
+
+export function summarizeSanbornPageDependencies(input: {
+  pageId: string | null | undefined;
+  assetId: string | null | undefined;
+  pieces: Array<Pick<SanbornMapPieceRecord, "atlasPageId" | "pieceId">>;
+  placedPieceIds?: Iterable<string>;
+  sourceRegions?: Array<{ indexAtlasPageId?: string | null; linkedAtlasPageId?: string | null; linkedSheetAssetId?: string | null; sourceAssetId?: string | null }>;
+  sourceRecordId?: string | null;
+  wholeSheetPlacementCount?: number;
+  reviewRecordCount?: number;
+}): SanbornPageDependencySummary {
+  const pageId = input.pageId ?? "";
+  const assetId = input.assetId ?? "";
+  const pagePieces = input.pieces.filter((piece) => piece.atlasPageId === pageId);
+  const placedPieceIds = new Set(input.placedPieceIds ?? []);
+  const sourceRegions = (input.sourceRegions ?? []).filter(
+    (region) =>
+      region.indexAtlasPageId === pageId ||
+      region.linkedAtlasPageId === pageId ||
+      region.linkedSheetAssetId === assetId ||
+      region.sourceAssetId === assetId,
+  ).length;
+
+  return {
+    sourceRegions,
+    mapPieces: pagePieces.length,
+    mapPiecePlacements: pagePieces.filter((piece) => placedPieceIds.has(piece.pieceId)).length,
+    wholeSheetPlacements: Math.max(0, input.wholeSheetPlacementCount ?? 0),
+    sourceLinks: input.sourceRecordId ? 1 : 0,
+    reviewRecords: Math.max(0, input.reviewRecordCount ?? 0),
+  };
+}
+
+export function hasBlockingSanbornPageDependencies(summary: SanbornPageDependencySummary): boolean {
+  return summary.sourceRegions + summary.mapPieces + summary.mapPiecePlacements + summary.wholeSheetPlacements + summary.sourceLinks + summary.reviewRecords > 0;
 }
 
 export function calculateSourceBoundingBox(points: SanbornNormalizedPoint[]): SanbornSourceBBox {

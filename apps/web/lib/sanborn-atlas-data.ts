@@ -28,6 +28,9 @@ type SanbornAtlasRow = {
   edition_date: string | null;
   volume_label: string | null;
   expected_page_count: number | null;
+  notes?: string | null;
+  archived_at?: string | null;
+  archive_reason?: string | null;
   review_status: string | null;
   evidence_classification: string | null;
   updated_at: string | null;
@@ -46,6 +49,8 @@ type SanbornAtlasPageRow = {
   display_label: string | null;
   is_primary_town_index?: boolean | null;
   classification_notes?: string | null;
+  archived_at?: string | null;
+  archive_reason?: string | null;
   review_status: string | null;
   evidence_classification: string | null;
   updated_at: string | null;
@@ -81,6 +86,9 @@ function mapAtlas(row: SanbornAtlasRow): SanbornAtlasRecord {
     editionDate: row.edition_date,
     volumeLabel: row.volume_label,
     expectedPageCount: row.expected_page_count,
+    notes: row.notes ?? null,
+    archivedAt: row.archived_at ?? null,
+    archiveReason: row.archive_reason ?? null,
     reviewStatus: normalizeSanbornReviewStatus(row.review_status),
     evidenceClassification: normalizeSanbornReviewStatus(row.evidence_classification),
     updatedAt: row.updated_at,
@@ -111,6 +119,8 @@ function mapPage(row: SanbornAtlasPageRow, atlasByRowId: Map<string, SanbornAtla
     displayLabel: row.display_label,
     isPrimaryTownIndex: row.is_primary_town_index === true,
     classificationNotes: row.classification_notes ?? null,
+    archivedAt: row.archived_at ?? null,
+    archiveReason: row.archive_reason ?? null,
     reviewStatus: normalizeSanbornReviewStatus(row.review_status),
     evidenceClassification: normalizeSanbornReviewStatus(row.evidence_classification),
     updatedAt: row.updated_at,
@@ -189,26 +199,42 @@ export async function loadSanbornAtlasInventory(input: {
   mapYear: number;
 }): Promise<SanbornAtlasInventoryState> {
   const { supabase, town, assets, mapYear } = input;
-  const atlasResult = await supabase
+  const atlasSelectWithArchive = "id, atlas_id, town_package_id, source_record_id, title, edition_year, edition_date, volume_label, expected_page_count, notes, archived_at, archive_reason, review_status, evidence_classification, updated_at";
+  const atlasSelectBase = "id, atlas_id, town_package_id, source_record_id, title, edition_year, edition_date, volume_label, expected_page_count, review_status, evidence_classification, updated_at";
+  let atlasResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
     .from("sanborn_atlases")
-    .select("id, atlas_id, town_package_id, source_record_id, title, edition_year, edition_date, volume_label, expected_page_count, review_status, evidence_classification, updated_at")
+    .select(atlasSelectWithArchive)
     .eq("town_package_id", town.id)
+    .is("archived_at", null)
     .order("edition_year", { ascending: false })
     .order("volume_label", { ascending: true });
+
+  if (atlasResult.error && /notes|archived_at|archive_reason/i.test(atlasResult.error.message)) {
+    console.warn("[HistoricalMapStudio] Atlas archive columns are unavailable; falling back to active atlas select.", {
+      message: atlasResult.error.message,
+    });
+    atlasResult = await supabase
+      .from("sanborn_atlases")
+      .select(atlasSelectBase)
+      .eq("town_package_id", town.id)
+      .order("edition_year", { ascending: false })
+      .order("volume_label", { ascending: true });
+  }
 
   if (atlasResult.error) {
     return unavailableState(`Sanborn atlas inventory is unavailable: ${atlasResult.error.message}. Apply migration 0010 to enable atlas/page/piece workflow.`, assets);
   }
 
-  const atlases = ((atlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
+  const atlases = ((atlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas).filter((atlas) => !atlas.archivedAt);
   const atlasByRowId = new Map(atlases.map((atlas) => [atlas.rowId, atlas]));
   const activeAtlas = atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
+  let allPages: SanbornAtlasPageRecord[] = [];
   let pages: SanbornAtlasPageRecord[] = [];
   let pieces: SanbornMapPieceRecord[] = [];
 
   if (atlases.length > 0) {
     const pageSelectWithClassification =
-      "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, review_status, evidence_classification, updated_at";
+      "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, archived_at, archive_reason, review_status, evidence_classification, updated_at";
     const pageSelectBase = "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at";
     let pageResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
       .from("sanborn_atlas_pages")
@@ -218,7 +244,7 @@ export async function loadSanbornAtlasInventory(input: {
 
     if (
       pageResult.error &&
-      /printed_reference|is_primary_town_index|classification_notes/i.test(pageResult.error.message)
+      /printed_reference|is_primary_town_index|classification_notes|archived_at|archive_reason/i.test(pageResult.error.message)
     ) {
       console.warn("[HistoricalMapStudio] Page classification columns are unavailable; falling back to legacy atlas page select.", {
         message: pageResult.error.message,
@@ -235,9 +261,11 @@ export async function loadSanbornAtlasInventory(input: {
     }
 
     const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
-    pages = ((pageResult.data ?? []) as SanbornAtlasPageRow[])
+    const mappedPages = ((pageResult.data ?? []) as SanbornAtlasPageRow[])
       .map((row) => mapPage(row, atlasByRowId, assetByRowId))
       .filter((page): page is SanbornAtlasPageRecord => Boolean(page));
+    allPages = mappedPages;
+    pages = mappedPages.filter((page) => !page.archivedAt);
 
     if (pages.length > 0) {
       const pieceResult = await supabase
@@ -268,7 +296,7 @@ export async function loadSanbornAtlasInventory(input: {
     atlases,
     pages,
     pieces,
-    unassignedAssetIds: getUnassignedSanbornUploads(assets, pages).map((asset) => asset.assetId),
+    unassignedAssetIds: getUnassignedSanbornUploads(assets, allPages).map((asset) => asset.assetId),
     activeAtlasId: activeAtlas?.atlasId ?? null,
     activePageId: activePage?.pageId ?? null,
     lastLoadedAt: new Date().toISOString(),

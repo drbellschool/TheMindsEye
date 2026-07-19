@@ -7,11 +7,15 @@ import {
   calculateNormalizedPolygonArea,
   calculateSourceBoundingBox,
   countDistinctNormalizedPolygonVertices,
+  findDuplicateSanbornEdition,
   getPageTypeToolBlockMessage,
+  getSavedSanbornEditionYears,
   getSanbornPageTypeLabel,
   getUnassignedSanbornUploads,
+  hasBlockingSanbornPageDependencies,
   isSanbornMapPieceType,
   isSanbornPageType,
+  normalizeSanbornEditionYear,
   normalizeSanbornPageType,
   normalizedToPixelPoint,
   pageTypeSupportsMapPieces,
@@ -22,6 +26,7 @@ import {
   reorderMapPieces,
   sanbornMapPieceTypes,
   sanbornPageTypes,
+  summarizeSanbornPageDependencies,
   validateMapPieceSaveTownScope,
   validateNormalizedPolygon,
   type SanbornMapPieceRecord,
@@ -30,10 +35,14 @@ import {
 const migrationPath = "../../supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql";
 const pageClassificationMigrationPath = "../../supabase/migrations/0015_page_classification_workflow.sql";
 const functionalSourceRegionsMigrationPath = "../../supabase/migrations/0016_functional_source_regions.sql";
+const atlasManagementMigrationPath = "../../supabase/migrations/0017_atlas_edition_management.sql";
 const atlasRoutePath = "app/api/community/historical-map-studio/atlases/route.ts";
 const pageRoutePath = "app/api/community/historical-map-studio/atlas-pages/route.ts";
 const pieceRoutePath = "app/api/community/historical-map-studio/map-pieces/route.ts";
 const piecePlacementRoutePath = "app/api/community/historical-map-studio/map-piece-georeferences/route.ts";
+const uploadRoutePath = "app/api/community/sanborn-sheets/route.ts";
+const deleteRoutePath = "app/api/community/historical-map-studio/delete/route.ts";
+const replaceRoutePath = "app/api/community/historical-map-studio/replace/route.ts";
 
 function readMigration(): string {
   return readFileSync(migrationPath, "utf8");
@@ -45,6 +54,10 @@ function readPageClassificationMigration(): string {
 
 function readFunctionalSourceRegionsMigration(): string {
   return readFileSync(functionalSourceRegionsMigrationPath, "utf8");
+}
+
+function readAtlasManagementMigration(): string {
+  return readFileSync(atlasManagementMigrationPath, "utf8");
 }
 
 function readRoute(path: string): string {
@@ -211,6 +224,76 @@ test("keeps legacy uploaded Sanborn sheets visible as unassigned uploads", () =>
   assert.deepEqual(getUnassignedSanbornUploads(assets, pages).map((asset) => asset.assetId), ["asset-1", "asset-3"]);
 });
 
+test("edition helpers list only saved non-archived editions and reject duplicate years", () => {
+  const atlases = [
+    { atlasId: "atlas-1885", editionYear: 1885, volumeLabel: null, archivedAt: null },
+    { atlasId: "atlas-1888", editionYear: 1888, volumeLabel: null, archivedAt: null },
+    { atlasId: "atlas-1892-archived", editionYear: 1892, volumeLabel: null, archivedAt: "2026-07-18T00:00:00.000Z" },
+    { atlasId: "atlas-1888-vol-2", editionYear: 1888, volumeLabel: "Vol. 2", archivedAt: null },
+  ];
+
+  assert.deepEqual(getSavedSanbornEditionYears(atlases), [1888, 1885]);
+  assert.equal(normalizeSanbornEditionYear("1888"), 1888);
+  assert.equal(normalizeSanbornEditionYear("88"), null);
+  assert.equal(normalizeSanbornEditionYear("1888 edition"), null);
+  assert.equal(findDuplicateSanbornEdition({ atlases, editionYear: 1888, volumeLabel: null })?.atlasId, "atlas-1888");
+  assert.equal(findDuplicateSanbornEdition({ atlases, editionYear: 1888, volumeLabel: "Vol. 2" })?.atlasId, "atlas-1888-vol-2");
+  assert.equal(findDuplicateSanbornEdition({ atlases, editionYear: 1892, volumeLabel: null }), null);
+});
+
+test("page dependency summaries distinguish empty pages from pages that should be archived", () => {
+  const emptySummary = summarizeSanbornPageDependencies({
+    pageId: "page-empty",
+    assetId: "asset-empty",
+    pieces: [],
+    placedPieceIds: [],
+    sourceRegions: [],
+    sourceRecordId: null,
+    wholeSheetPlacementCount: 0,
+  });
+
+  assert.deepEqual(emptySummary, {
+    sourceRegions: 0,
+    mapPieces: 0,
+    mapPiecePlacements: 0,
+    wholeSheetPlacements: 0,
+    sourceLinks: 0,
+    reviewRecords: 0,
+  });
+  assert.equal(hasBlockingSanbornPageDependencies(emptySummary), false);
+
+  const linkedSummary = summarizeSanbornPageDependencies({
+    pageId: "page-1",
+    assetId: "asset-1",
+    pieces: [
+      {
+        pieceId: "piece-1",
+        atlasPageId: "page-1",
+      },
+    ],
+    placedPieceIds: ["piece-1"],
+    sourceRegions: [
+      {
+        indexAtlasPageId: "page-1",
+        linkedAtlasPageId: null,
+        linkedSheetAssetId: "asset-1",
+      },
+    ],
+    sourceRecordId: "source-1",
+    wholeSheetPlacementCount: 1,
+  });
+
+  assert.deepEqual(linkedSummary, {
+    sourceRegions: 1,
+    mapPieces: 1,
+    mapPiecePlacements: 1,
+    wholeSheetPlacements: 1,
+    sourceLinks: 1,
+    reviewRecords: 0,
+  });
+  assert.equal(hasBlockingSanbornPageDependencies(linkedSummary), true);
+});
+
 test("rejects map-piece saves for atlas pages outside the active town package", () => {
   assert.equal(validateMapPieceSaveTownScope({ pageTownPackageId: "town-1", activeTownPackageId: "town-1" }).ok, true);
   const rejected = validateMapPieceSaveTownScope({ pageTownPackageId: "town-2", activeTownPackageId: "town-1" });
@@ -229,10 +312,73 @@ test("atlas saves reject cross-town atlas IDs and avoid global-ID upserts", () =
   const route = readRoute(atlasRoutePath);
 
   assert.match(route, /Atlas ID belongs to another town package/);
+  assert.match(route, /createNew/);
+  assert.match(route, /A Sanborn edition for this year and volume already exists/);
+  assert.match(route, /That Sanborn edition already exists/);
   assert.match(route, /\.update\(record\)/);
   assert.match(route, /\.eq\("id", existingAtlas\.id\)/);
   assert.match(route, /\.insert\(\{/);
   assert.doesNotMatch(route, /\.upsert\(/);
+});
+
+test("migration 0017 adds service-role-only edition archive and scoped page move functions", () => {
+  const migration = readAtlasManagementMigration();
+  const archiveAtlas = readSqlFunction(migration, "archive_sanborn_atlas");
+  const archivePage = readSqlFunction(migration, "archive_sanborn_atlas_page");
+  const movePage = readSqlFunction(migration, "move_sanborn_atlas_page_to_atlas");
+
+  assert.match(migration, /add column if not exists notes text/);
+  assert.match(migration, /add column if not exists archived_at timestamptz/);
+  assert.match(migration, /idx_sanborn_atlases_active_town_edition/);
+  assert.match(migration, /idx_sanborn_atlas_pages_active_atlas_sequence/);
+  assert.match(archiveAtlas, /if not found then[\s\S]*Sanborn atlas was not found/);
+  assert.match(archivePage, /if not found then[\s\S]*Sanborn atlas page was not found/);
+  assert.match(movePage, /if not found then[\s\S]*Sanborn atlas page was not found/);
+  assert.match(movePage, /if not found then[\s\S]*Destination Sanborn atlas was not found/);
+  assert.match(movePage, /Destination atlas belongs to another town package/);
+  assert.match(movePage, /Page has edition-scoped child work/);
+  assert.match(movePage, /Other index regions link to this page/);
+  assert.match(movePage, /Map-piece placements must be reviewed before moving this page/);
+  assert.match(movePage, /Whole-sheet placements must be reviewed before moving this page/);
+  assert.match(movePage, /update public\.sanborn_atlas_pages as page_row/);
+  assert.match(movePage, /update public\.sanborn_source_regions as region_row/);
+  assert.doesNotMatch(migration, /security definer/i);
+  assertSqlIncludes(migration, "alter table public.sanborn_atlases enable row level security;");
+  assertSqlIncludes(migration, "alter table public.sanborn_atlas_pages enable row level security;");
+  assertSqlIncludes(migration, "revoke all on table public.sanborn_atlases from PUBLIC, anon, authenticated;");
+  assertSqlIncludes(migration, "grant select, insert, update, delete on table public.sanborn_atlases to service_role;");
+  assertSqlIncludes(migration, "revoke all on table public.sanborn_atlas_pages from PUBLIC, anon, authenticated;");
+  assertSqlIncludes(migration, "grant select, insert, update, delete on table public.sanborn_atlas_pages to service_role;");
+  assertSqlIncludes(migration, "grant execute on function public.archive_sanborn_atlas(uuid, text, text) to service_role;");
+  assertSqlIncludes(migration, "grant execute on function public.archive_sanborn_atlas_page(uuid, text, text) to service_role;");
+  assertSqlIncludes(migration, "grant execute on function public.move_sanborn_atlas_page_to_atlas(uuid, text, text, boolean) to service_role;");
+});
+
+test("edition and page management routes preserve scope and linked source safety", () => {
+  const atlasRoute = readRoute(atlasRoutePath);
+  const pageRoute = readRoute(pageRoutePath);
+  const uploadRoute = readRoute(uploadRoutePath);
+  const deleteRoute = readRoute(deleteRoutePath);
+  const replaceRoute = readRoute(replaceRoutePath);
+
+  assert.match(atlasRoute, /\.is\("archived_at", null\)/);
+  assert.match(atlasRoute, /\.rpc\("archive_sanborn_atlas"/);
+  assert.match(atlasRoute, /Developed editions must be archived instead of deleted/);
+  assert.match(pageRoute, /\.rpc\("move_sanborn_atlas_page_to_atlas"/);
+  assert.match(pageRoute, /\.rpc\("archive_sanborn_atlas_page"/);
+  assert.match(uploadRoute, /readFormString\(formData, "atlasId"\)/);
+  assert.match(uploadRoute, /Create or select a Sanborn edition before uploading pages/);
+  assert.match(uploadRoute, /\.from\("sanborn_atlas_pages"\)/);
+  assert.match(uploadRoute, /buildDefaultSanbornPageId/);
+  assert.match(uploadRoute, /editionYear: atlasScope\?\.edition_year/);
+  assert.match(deleteRoute, /Delete blocked because this page has linked reconstruction work/);
+  assert.match(deleteRoute, /sourceLinks/);
+  assert.match(deleteRoute, /sanborn_source_regions/);
+  assert.match(deleteRoute, /sanborn_map_pieces/);
+  assert.match(deleteRoute, /sanborn_map_piece_georeferences/);
+  assert.match(replaceRoute, /Dimensions and aspect ratio changed/);
+  assert.match(replaceRoute, /dimensionWarning/);
+  assert.match(replaceRoute, /source-region polygons and map pieces/);
 });
 
 test("page saves resolve existing page IDs under the selected atlas before writing", () => {

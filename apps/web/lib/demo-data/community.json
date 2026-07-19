@@ -31,6 +31,48 @@
       "iiifManifestUrl": "https://www.loc.gov/item/sanborn-demo-texarkana-1885/?fo=json",
       "citation": "Sanborn Map Company. Sanborn Fire Insurance Map from Texarkana, Bowie County, Texas. 1885. Sheet 2. Sanborn Fire Insurance Maps, Library of Congress. https://www.loc.gov/item/sanborn-demo-texarkana-1885/. Accessed 2026-07-18."
     },
+    "editionManagement": {
+      "demoOnly": true,
+      "note": "These are saved demo editions, not automatic production year suggestions.",
+      "savedEditions": [
+        {
+          "year": 1885,
+          "title": "Texarkana 1885 Sanborn Atlas",
+          "pageCount": 9,
+          "status": "in progress",
+          "archived": false,
+          "lastUpdated": "2026-07-18T00:00:00Z"
+        },
+        {
+          "year": 1888,
+          "title": "Texarkana 1888 Sanborn Atlas",
+          "pageCount": 0,
+          "status": "empty edition created",
+          "archived": false,
+          "lastUpdated": "2026-07-18T00:00:00Z"
+        },
+        {
+          "year": 1886,
+          "title": "Archived duplicate-import demo edition",
+          "pageCount": 1,
+          "status": "archived",
+          "archived": true,
+          "lastUpdated": "2026-07-18T00:00:00Z"
+        }
+      ],
+      "pageManagementExamples": [
+        "Move misplaced 1888 upload from 1885 to 1888 while preserving the storage object and source record.",
+        "Archive developed pages instead of deleting source regions, map pieces, placements, or source links.",
+        "Replace an uploaded image only after preserving the previous image until the replacement succeeds."
+      ],
+      "mapPiecesViewport": {
+        "stickyToolbar": true,
+        "zoomRange": "25%-800%",
+        "panWhileZoomed": true,
+        "fitSelectedPiece": true,
+        "storedGeometry": "normalized source-image coordinates"
+      }
+    },
     "pageClassification": {
       "totalPages": 9,
       "classifiedPages": 8,

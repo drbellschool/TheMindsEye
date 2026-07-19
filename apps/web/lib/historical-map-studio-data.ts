@@ -56,7 +56,7 @@ import {
   type StudioWorkspace,
 } from "./historical-map-studio.ts";
 import { sanbornSheetBucket } from "./sanborn-intake.ts";
-import { createEmptySanbornAtlasInventoryState } from "./sanborn-atlas.ts";
+import { createEmptySanbornAtlasInventoryState, getSavedSanbornEditionYears } from "./sanborn-atlas.ts";
 import { loadSanbornAtlasInventory } from "./sanborn-atlas-data.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
@@ -1221,7 +1221,10 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     }
   }
 
-  const workspace = mapWorkspace(workspaceRow, activeTownPackage, activeMapYear);
+  const savedEditionYears = getSavedSanbornEditionYears(atlasInventory.atlases);
+  const activeAtlasForYear = atlasInventory.atlases.find((atlas) => atlas.atlasId === atlasInventory.activeAtlasId) ?? null;
+  const resolvedActiveMapYear = activeAtlasForYear?.editionYear ?? null;
+  const workspace = mapWorkspace(workspaceRow, activeTownPackage, resolvedActiveMapYear ?? activeMapYear);
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
   const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);
@@ -1262,8 +1265,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     dataSource: "supabase",
     townPackages,
     activeTownPackage,
-    activeMapYear,
-    availableMapYears: [...new Set([activeTownPackage.year, activeMapYear])].sort((a, b) => b - a),
+    activeMapYear: resolvedActiveMapYear,
+    availableMapYears: savedEditionYears,
     expectedSheetCount,
     uploadedSheetCount: assets.length,
     missingSheetNumbers: findMissingStudioSheetNumbers(assets, expectedSheetCount),

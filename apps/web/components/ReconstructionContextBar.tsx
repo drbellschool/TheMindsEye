@@ -34,9 +34,12 @@ type ReconstructionContextBarProps = {
   compact?: boolean;
   onTownChange?: (townPackageId: string) => void;
   onYearChange?: (mapYear: number) => void;
+  onAddEdition?: () => void;
   onSheetChange?: (sheetAssetId: string) => void;
   onPieceChange?: (mapPieceId: string) => void;
 };
+
+const addEditionSelectValue = "__add_sanborn_edition__";
 
 const recentTownStorageKey = "mindseye.reconstruction.recentTownIds";
 
@@ -116,6 +119,10 @@ function sourceOptionToRecord(source: StudioSourceOption | null | undefined) {
     : null;
 }
 
+function getTownOptionLabel(town: StudioTownPackage): string {
+  return town.region ? `${town.name} - ${town.region}` : town.name;
+}
+
 export function ReconstructionContextBar({
   currentRoute,
   context,
@@ -130,6 +137,7 @@ export function ReconstructionContextBar({
   compact = false,
   onTownChange,
   onYearChange,
+  onAddEdition,
   onSheetChange,
   onPieceChange,
 }: ReconstructionContextBarProps) {
@@ -147,7 +155,7 @@ export function ReconstructionContextBar({
   });
   const [sourceSaveMessage, setSourceSaveMessage] = useState("");
   const activeTown = towns.find((town) => town.id === context.townPackageId || town.packageId === context.townPackageId) ?? towns[0] ?? null;
-  const activeYear = numericYear(context.mapYear) ?? activeTown?.year ?? null;
+  const activeYear = numericYear(context.mapYear);
   const activeYearValue = activeYear && years.includes(activeYear) ? activeYear : "";
   const activeSheet = sheets.find((sheet) => sheet.sheetAssetId === context.sheetAssetId || sheet.pageId === context.atlasPageId) ?? sheets[0] ?? null;
   const activePiece = pieces.find((piece) => piece.pieceId === context.mapPieceId) ?? pieces[0] ?? null;
@@ -234,7 +242,7 @@ export function ReconstructionContextBar({
       <div className="reconstruction-context__selectors">
         <div className="reconstruction-context__identity">
           <span>Town Reconstruction</span>
-          <strong>{activeTown ? `${activeTown.name} ${activeYear ?? activeTown.year}` : "No town selected"}</strong>
+          <strong>{activeTown ? `${activeTown.name} ${activeYearValue || "No edition"}` : "No town selected"}</strong>
         </div>
 
         <label>
@@ -245,12 +253,12 @@ export function ReconstructionContextBar({
             onChange={(event) => {
               const value = event.target.value;
               setTownQuery(value);
-              const selected = sortedTowns.find((town) => town.id === value || town.name === value || `${town.name} ${town.year}` === value);
+              const selected = sortedTowns.find((town) => town.id === value || town.name === value || getTownOptionLabel(town) === value || `${town.name} ${town.year}` === value);
               if (!selected) return;
               if (onTownChange) {
                 onTownChange(selected.id);
               } else {
-                navigate({ townPackageId: selected.id, mapYear: selected.year });
+                navigate({ townPackageId: selected.id, mapYear: null, atlasId: null, atlasPageId: null, sheetAssetId: null, mapPieceId: null, blockId: null });
               }
             }}
             placeholder="Search towns"
@@ -258,7 +266,7 @@ export function ReconstructionContextBar({
           />
           <datalist id="reconstruction-town-options">
             {sortedTowns.map((town) => (
-              <option key={town.id} value={`${town.name} ${town.year}`} />
+              <option key={town.id} value={getTownOptionLabel(town)} />
             ))}
           </datalist>
         </label>
@@ -269,6 +277,10 @@ export function ReconstructionContextBar({
             aria-label="Edition year"
             value={activeYearValue}
             onChange={(event) => {
+              if (event.target.value === addEditionSelectValue) {
+                onAddEdition?.();
+                return;
+              }
               const year = numericYear(event.target.value);
               if (!year) return;
               if (onYearChange) {
@@ -284,6 +296,7 @@ export function ReconstructionContextBar({
                 {year}
               </option>
             ))}
+            {onAddEdition ? <option value={addEditionSelectValue}>+ Add year</option> : null}
           </select>
         </label>
 
@@ -434,11 +447,11 @@ export function ReconstructionContextBar({
                 if (onTownChange) {
                   onTownChange(town.id);
                 } else {
-                  navigate({ townPackageId: town.id, mapYear: town.year });
+                  navigate({ townPackageId: town.id, mapYear: null, atlasId: null, atlasPageId: null, sheetAssetId: null, mapPieceId: null, blockId: null });
                 }
               }}
             >
-              {town.name} {town.year}
+              {getTownOptionLabel(town)}
             </button>
           ))}
         </div>

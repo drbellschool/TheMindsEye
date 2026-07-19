@@ -77,11 +77,14 @@ export type StudioAssetLookupRow = {
   id: string;
   asset_id: string;
   town_package_id: string;
+  source_record_id: string | null;
   storage_bucket: string;
   storage_path: string;
   original_filename: string;
   sha256_checksum: string;
   sheet_number: number | null;
+  width: number;
+  height: number;
 };
 
 export async function getStudioAssetByAssetId(
@@ -90,7 +93,7 @@ export async function getStudioAssetByAssetId(
 ) {
   return supabase
     .from("sanborn_sheet_assets")
-    .select("id, asset_id, town_package_id, storage_bucket, storage_path, original_filename, sha256_checksum, sheet_number")
+    .select("id, asset_id, town_package_id, source_record_id, storage_bucket, storage_path, original_filename, sha256_checksum, sheet_number, width, height")
     .eq("asset_id", assetId)
     .maybeSingle();
 }

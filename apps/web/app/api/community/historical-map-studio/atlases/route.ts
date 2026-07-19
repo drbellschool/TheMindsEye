@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildDefaultSanbornAtlasId,
   normalizeOptionalSanbornText,
+  normalizeSanbornEditionYear,
   normalizePositiveInteger,
 } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
@@ -19,6 +20,8 @@ type AtlasSaveBody = {
   editionDate?: string | null;
   volumeLabel?: string | null;
   expectedPageCount?: number | string | null;
+  notes?: string | null;
+  createNew?: boolean | null;
 };
 
 type SourceRecordRow = {
@@ -55,12 +58,14 @@ export async function POST(request: NextRequest) {
   }
 
   const townPackage = townPackageResult.data;
-  const mapYear = normalizePositiveInteger(body.mapYear) ?? townPackage.year;
-  const editionYear = normalizePositiveInteger(body.editionYear) ?? mapYear;
+  const mapYear = normalizeSanbornEditionYear(body.mapYear) ?? townPackage.year;
+  const editionYear = normalizeSanbornEditionYear(body.editionYear) ?? mapYear;
   const volumeLabel = normalizeOptionalSanbornText(body.volumeLabel, 80);
   const expectedPageCount = normalizePositiveInteger(body.expectedPageCount);
   const title = normalizeOptionalSanbornText(body.title, 240) ?? `${townPackage.name} ${editionYear} Sanborn Atlas`;
+  const notes = normalizeOptionalSanbornText(body.notes, 4000);
   const requestedAtlasId = normalizeOptionalSanbornText(body.atlasId, 160);
+  const createNew = body.createNew === true;
   let atlasId =
     requestedAtlasId ??
     buildDefaultSanbornAtlasId({
@@ -107,6 +112,7 @@ export async function POST(request: NextRequest) {
     .select("id, atlas_id, town_package_id, updated_at")
     .eq("town_package_id", townPackage.id)
     .eq("edition_year", editionYear)
+    .is("archived_at", null)
     .limit(1);
 
   existingAtlasQuery = volumeLabel ? existingAtlasQuery.eq("volume_label", volumeLabel) : existingAtlasQuery.is("volume_label", null);
@@ -124,7 +130,15 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "Atlas edition and volume already belong to another Sanborn atlas.");
   }
 
-  const existingAtlas = suppliedAtlasResult.data ?? existingAtlasResult.data ?? null;
+  if (createNew && existingAtlasResult.data) {
+    return jsonError(409, "A Sanborn edition for this year and volume already exists. Select it, or confirm a distinct volume before creating another edition.");
+  }
+
+  if (createNew && suppliedAtlasResult.data) {
+    return jsonError(409, "That Sanborn edition already exists. Select it instead of creating a duplicate year.");
+  }
+
+  const existingAtlas = createNew ? suppliedAtlasResult.data ?? null : suppliedAtlasResult.data ?? existingAtlasResult.data ?? null;
   atlasId = existingAtlas?.atlas_id ?? atlasId;
 
   const record = {
@@ -134,6 +148,7 @@ export async function POST(request: NextRequest) {
     edition_date: editionDate,
     volume_label: volumeLabel,
     expected_page_count: expectedPageCount,
+    notes,
   };
 
   const saveResult = existingAtlas
@@ -163,4 +178,90 @@ export async function POST(request: NextRequest) {
     rowId: saveResult.data.id,
     savedAt: saveResult.data.updated_at ?? new Date().toISOString(),
   });
+}
+
+export async function PATCH(request: NextRequest) {
+  const access = await requireMapStudioWriteAccess();
+  if (!access.ok) return access.response;
+
+  const body = (await request.json().catch(() => null)) as { townPackageId?: string; atlasId?: string; archiveReason?: string | null } | null;
+  const atlasId = normalizeOptionalSanbornText(body?.atlasId, 160);
+
+  if (!body || !atlasId) {
+    return jsonError(400, "Atlas archive payload is invalid.");
+  }
+
+  const townPackageResult = await getRequestedTownPackage(access.supabase, body.townPackageId);
+
+  if (townPackageResult.error || !townPackageResult.data) {
+    return jsonError(400, "The requested town package could not be loaded.");
+  }
+
+  const archiveResult = await access.supabase.rpc("archive_sanborn_atlas", {
+    p_town_package_id: townPackageResult.data.id,
+    p_atlas_id: atlasId,
+    p_archive_reason: normalizeOptionalSanbornText(body.archiveReason, 1000) ?? "Archived from Historical Map Studio.",
+  });
+
+  if (archiveResult.error) {
+    const status = archiveResult.error.code === "P0001" ? 400 : 503;
+    return jsonError(status, `Sanborn atlas could not be archived: ${archiveResult.error.message}`);
+  }
+
+  return NextResponse.json({ ok: true, result: archiveResult.data ?? null, savedAt: new Date().toISOString() });
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await requireMapStudioWriteAccess();
+  if (!access.ok) return access.response;
+
+  const body = (await request.json().catch(() => null)) as { townPackageId?: string; atlasId?: string } | null;
+  const atlasId = normalizeOptionalSanbornText(body?.atlasId, 160);
+
+  if (!body || !atlasId) {
+    return jsonError(400, "Atlas delete payload is invalid.");
+  }
+
+  const { supabase } = access;
+  const townPackageResult = await getRequestedTownPackage(supabase, body.townPackageId);
+
+  if (townPackageResult.error || !townPackageResult.data) {
+    return jsonError(400, "The requested town package could not be loaded.");
+  }
+
+  const atlasResult = await supabase
+    .from("sanborn_atlases")
+    .select("id, atlas_id, town_package_id")
+    .eq("atlas_id", atlasId)
+    .maybeSingle<{ id: string; atlas_id: string; town_package_id: string }>();
+
+  if (atlasResult.error) {
+    return jsonError(503, "Sanborn atlas could not be checked before deletion.");
+  }
+
+  if (!atlasResult.data) {
+    return jsonError(404, "Sanborn atlas was not found.");
+  }
+
+  if (atlasResult.data.town_package_id !== townPackageResult.data.id) {
+    return jsonError(400, "Atlas ID belongs to another town package.");
+  }
+
+  const pageResult = await supabase.from("sanborn_atlas_pages").select("id").eq("atlas_id", atlasResult.data.id).limit(1);
+
+  if (pageResult.error) {
+    return jsonError(503, "Sanborn atlas dependencies could not be checked.");
+  }
+
+  if ((pageResult.data ?? []).length > 0) {
+    return jsonError(409, "Developed editions must be archived instead of deleted.", { dependencySummary: { pages: pageResult.data?.length ?? 0 } });
+  }
+
+  const deleteResult = await supabase.from("sanborn_atlases").delete().eq("id", atlasResult.data.id);
+
+  if (deleteResult.error) {
+    return jsonError(503, "Empty Sanborn edition could not be deleted.");
+  }
+
+  return NextResponse.json({ ok: true, atlasId });
 }

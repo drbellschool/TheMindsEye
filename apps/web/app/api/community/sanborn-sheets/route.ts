@@ -14,6 +14,7 @@ import {
   sanitizeSanbornFilename,
   validateSanbornFileInput,
 } from "@/lib/sanborn-intake";
+import { buildDefaultSanbornPageId, normalizeOptionalSanbornText } from "@/lib/sanborn-atlas";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ type TownPackageRow = { id: string; package_id: string };
 type SourceRecordRow = { id: string; source_url: string | null; archive_name: string | null; rights_note: string | null };
 type MapLayerRow = { id: string };
 type SanbornDuplicateRow = { asset_id: string; original_filename: string; sheet_number: number | null };
+type AtlasScopeRow = { id: string; atlas_id: string; town_package_id: string; edition_year: number; volume_label: string | null };
 
 function getMaxUploadBytes(): number {
   const configured = Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10);
@@ -87,6 +89,22 @@ export async function POST(request: NextRequest) {
   if (townPackageResult.error || !townPackageResult.data) return jsonError(503, "No active town package is available for Sanborn intake.");
 
   const townPackage = townPackageResult.data as TownPackageRow;
+  const requestedAtlasId = normalizeOptionalSanbornText(readFormString(formData, "atlasId"), 160);
+  let atlasScope: AtlasScopeRow | null = null;
+
+  if (requestedAtlasId) {
+    const atlasResult = await supabase
+      .from("sanborn_atlases")
+      .select("id, atlas_id, town_package_id, edition_year, volume_label")
+      .eq("atlas_id", requestedAtlasId)
+      .maybeSingle<AtlasScopeRow>();
+
+    if (atlasResult.error) return jsonError(503, "The selected Sanborn edition could not be verified before upload.");
+    if (!atlasResult.data) return jsonError(400, "Create or select a Sanborn edition before uploading pages.");
+    if (atlasResult.data.town_package_id !== townPackage.id) return jsonError(400, "The selected Sanborn edition belongs to another town package.");
+    atlasScope = atlasResult.data;
+  }
+
   const checksum = createHash("sha256").update(Buffer.from(arrayBuffer)).digest("hex");
 
   const duplicateChecksumResult = await supabase
@@ -99,13 +117,21 @@ export async function POST(request: NextRequest) {
   if (duplicateChecksumResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate checksums.");
   if (duplicateChecksumResult.data) return jsonError(409, "This Sanborn image already exists in the intake workspace.", { code: "duplicate_checksum", duplicate: duplicateChecksumResult.data });
 
-  const duplicateSheetResult = await supabase
-    .from("sanborn_sheet_assets")
-    .select("asset_id, original_filename, sheet_number")
-    .eq("town_package_id", townPackage.id)
-    .eq("sheet_number", sheetNumber)
-    .limit(1)
-    .maybeSingle();
+  const duplicateSheetResult = atlasScope
+    ? await supabase
+        .from("sanborn_atlas_pages")
+        .select("page_id, sheet_number, sanborn_sheet_assets(asset_id, original_filename, sheet_number)")
+        .eq("atlas_id", atlasScope.id)
+        .eq("sheet_number", sheetNumber)
+        .limit(1)
+        .maybeSingle()
+    : await supabase
+        .from("sanborn_sheet_assets")
+        .select("asset_id, original_filename, sheet_number")
+        .eq("town_package_id", townPackage.id)
+        .eq("sheet_number", sheetNumber)
+        .limit(1)
+        .maybeSingle();
   if (duplicateSheetResult.error) return jsonError(503, "Sanborn metadata could not be checked for duplicate sheet numbers.");
   if (duplicateSheetResult.data) return jsonError(409, "A Sanborn image is already stored for this sheet number.", { code: "duplicate_sheet_number", duplicate: duplicateSheetResult.data });
 
@@ -152,7 +178,7 @@ export async function POST(request: NextRequest) {
       intake_notes: intakeNotes,
       uploaded_at: new Date().toISOString(),
     })
-    .select("asset_id, uploaded_at")
+    .select("id, asset_id, uploaded_at")
     .single();
 
   if (insertResult.error) {
@@ -160,8 +186,48 @@ export async function POST(request: NextRequest) {
     return jsonError(502, "The Sanborn image uploaded, but metadata could not be saved. The uncommitted upload was removed.");
   }
 
+  let assignedPageId: string | null = null;
+
+  if (atlasScope) {
+    const sequenceResult = await supabase
+      .from("sanborn_atlas_pages")
+      .select("page_sequence")
+      .eq("atlas_id", atlasScope.id)
+      .order("page_sequence", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ page_sequence: number }>();
+
+    if (sequenceResult.error) {
+      await supabase.from("sanborn_sheet_assets").delete().eq("id", insertResult.data.id);
+      await supabase.storage.from(sanbornSheetBucket).remove([storagePath]);
+      return jsonError(502, "The Sanborn image uploaded, but atlas page sequence could not be assigned. The upload was removed.");
+    }
+
+    assignedPageId = buildDefaultSanbornPageId({ atlasId: atlasScope.atlas_id, assetId });
+    const pageInsertResult = await supabase.from("sanborn_atlas_pages").insert({
+      page_id: assignedPageId,
+      atlas_id: atlasScope.id,
+      sanborn_sheet_asset_id: insertResult.data.id,
+      page_sequence: (sequenceResult.data?.page_sequence ?? 0) + 1,
+      page_type: "unknown",
+      sheet_number: sheetNumber,
+      printed_reference: String(sheetNumber),
+      volume_label: atlasScope.volume_label,
+      display_label: fileEntry.name,
+    });
+
+    if (pageInsertResult.error) {
+      await supabase.from("sanborn_sheet_assets").delete().eq("id", insertResult.data.id);
+      await supabase.storage.from(sanbornSheetBucket).remove([storagePath]);
+      return jsonError(502, "The Sanborn image uploaded, but it could not be assigned to the active edition. The upload was removed.");
+    }
+  }
+
   return NextResponse.json({
     ok: true,
+    atlasId: atlasScope?.atlas_id ?? null,
+    editionYear: atlasScope?.edition_year ?? null,
+    pageId: assignedPageId,
     asset: {
       assetId,
       sheetNumber,
