@@ -89,6 +89,12 @@ import {
   clientPointToContainerPoint,
   maxMapPieceMaskRasterDimension,
 } from "./sanborn-map-piece-rendering.ts";
+import {
+  clampSanbornSourceImageZoom,
+  getSanbornSourceImagePanDelta,
+  planFitSelectedSanbornPolygon,
+  stepSanbornSourceImageZoom,
+} from "./sanborn-source-image-viewport.ts";
 import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 
 function placement(assetId: string, overrides: Partial<StudioPlacement> = {}): StudioPlacement {
@@ -146,6 +152,8 @@ function atlasPage(pageId: string, overrides: Partial<SanbornAtlasPageRecord> = 
     displayLabel: null,
     isPrimaryTownIndex: false,
     classificationNotes: null,
+    archivedAt: null,
+    archiveReason: null,
     reviewStatus: "unknown",
     evidenceClassification: "unknown",
     updatedAt: null,
@@ -604,6 +612,48 @@ test("draft atlas pages block piece inventory until page assignments are saved",
   assert.match(studioComponent, /sanborn-station-inspector/);
 });
 
+test("Map Pieces workbench keeps editing tools sticky and treats zoom pan as viewport state", () => {
+  const workbenchComponent = readFileSync("components/SanbornPageWorkbench.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(workbenchComponent, /type EditorMode = "select" \| "draw" \| "add_vertex" \| "pan"/);
+  assert.match(workbenchComponent, /sourceZoom/);
+  assert.match(workbenchComponent, /Zoom out/);
+  assert.match(workbenchComponent, /Zoom in/);
+  assert.match(workbenchComponent, /100%/);
+  assert.match(workbenchComponent, /Fit image/);
+  assert.match(workbenchComponent, /Reset view/);
+  assert.match(workbenchComponent, /Fit selected piece/);
+  assert.match(workbenchComponent, /handleViewportWheel/);
+  assert.match(workbenchComponent, /ctrlKey/);
+  assert.match(workbenchComponent, /metaKey/);
+  assert.match(workbenchComponent, /event\.code === "Space"/);
+  assert.match(workbenchComponent, /panActive \|\| event\.button !== 0/);
+  assert.match(studioComponent, /setSaveStatus\("idle"\);\s*setSaveMessage\("Map pieces have unsaved changes\."\);/s);
+  assert.match(css, /\.sanborn-page-workbench__header\s*\{[\s\S]*position: sticky;[\s\S]*z-index: 20;/);
+  assert.match(css, /\.sanborn-page-workbench__source\s*\{[\s\S]*grid-template-rows: auto auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/);
+  assert.match(css, /\.sanborn-page-workbench__viewport\s*\{[\s\S]*overflow: auto;[\s\S]*overscroll-behavior: contain;/);
+  assert.match(css, /\.sanborn-page-workbench__viewport\.is-panning\s*\{[\s\S]*cursor: grabbing;/);
+  assert.match(css, /\.sanborn-page-workbench__image-frame\s*\{[\s\S]*max-width: none;/);
+});
+
+test("edition controls do not synthesize town-package years as saved Sanborn editions", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const contextBar = readFileSync("components/ReconstructionContextBar.tsx", "utf8");
+  const activeShellStart = studioComponent.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyShellStart = studioComponent.indexOf("Legacy pre-station");
+  const activeShell = studioComponent.slice(activeShellStart, legacyShellStart > activeShellStart ? legacyShellStart : undefined);
+
+  assert.match(contextBar, /No editions loaded/);
+  assert.match(contextBar, /\+ Add year/);
+  assert.match(activeShell, /Create or select a Sanborn edition before uploading pages/);
+  assert.match(activeShell, /Uploading to \$\{initialData\.activeTownPackage\.name\} \$\{activeAtlas\.editionYear\}/);
+  assert.doesNotMatch(contextBar, /mapYear: selected\.year/);
+  assert.doesNotMatch(contextBar, /mapYear: town\.year/);
+  assert.doesNotMatch(activeShell, /townPackageId=\$\{townPackageId\}&year=\$\{initialData\.activeMapYear/);
+});
+
 test("historical map studio uses compact chrome and sticky atlas actions", () => {
   const shell = readFileSync("components/CommunityShell.tsx", "utf8");
   const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
@@ -817,6 +867,52 @@ test("map piece layer construction spans active atlas pages and resolves each so
   });
 
   assert.deepEqual(currentPageOnly.map((layer) => layer.pieceId), ["piece-3a", "piece-3b"]);
+});
+
+test("source image viewport helpers clamp zoom, pan, and fit selected polygons without changing source geometry", () => {
+  const polygon = [
+    { x: 0.45, y: 0.42 },
+    { x: 0.51, y: 0.42 },
+    { x: 0.51, y: 0.48 },
+    { x: 0.45, y: 0.48 },
+  ];
+  const originalPolygon = JSON.stringify(polygon);
+  const plan = planFitSelectedSanbornPolygon({
+    polygon,
+    imageWidth: 1200,
+    imageHeight: 800,
+    viewportWidth: 600,
+    viewportHeight: 360,
+  });
+
+  assert.equal(clampSanbornSourceImageZoom(0.01), 0.25);
+  assert.equal(clampSanbornSourceImageZoom(12), 8);
+  assert.equal(stepSanbornSourceImageZoom(1, "in"), 1.25);
+  assert.equal(stepSanbornSourceImageZoom(1, "out"), 0.8);
+  assert.deepEqual(
+    getSanbornSourceImagePanDelta({
+      startClientX: 100,
+      startClientY: 80,
+      currentClientX: 130,
+      currentClientY: 65,
+    }),
+    { deltaX: 30, deltaY: -15 },
+  );
+  assert.ok(plan);
+  assert.ok(plan!.zoom > 1);
+  assert.ok(plan!.scrollLeft > 0);
+  assert.ok(plan!.scrollTop > 0);
+  assert.equal(JSON.stringify(polygon), originalPolygon);
+  assert.equal(
+    planFitSelectedSanbornPolygon({
+      polygon: [],
+      imageWidth: 1200,
+      imageHeight: 800,
+      viewportWidth: 600,
+      viewportHeight: 360,
+    }),
+    null,
+  );
 });
 
 test("map piece layer helpers support cross-page selection, fit-all bounds, auto-fit gating, and signed URL dedupe", () => {

@@ -78,7 +78,7 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 
 ## Deployment Checklist
 
-- Supabase migrations `0001` through `0015` have been applied.
+- Supabase migrations `0001` through `0017` have been applied.
 - `supabase/seed.sql` has been run if seed review data is desired.
 - Private Storage bucket `sanborn-sheets` exists.
 - Vercel has the public Supabase URL and publishable key.
@@ -96,12 +96,16 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - An Index or mixed page can be explicitly set as the primary Town Index; Town Index shows a repair flow when no primary Town Index is designated.
 - Town Index reuses saved sheet-coverage source regions instead of asking reviewers to redraw the same polygons.
 - Cover, street-index, legend, advertisement, other, and unknown pages block Map Pieces and Map Placement unless a saved geographic source region makes that work available, with explanatory text instead of exposing the wrong editing tools.
+- Town & Edition lists only saved editions for the active town; new editions are created explicitly with `+ Add year`.
+- Uploads are disabled until an edition is active and saved uploads are assigned to that edition.
+- Page management can move an uploaded page to another saved edition, replace an image without dropping the old image on failure, archive developed pages, and block hard deletes when reconstruction work or source links exist.
 - The Town Index, Sheet Inventory, Map Pieces, and Map Placement stations preserve atlas/page/piece/index-region selection through URL context.
 - Unplaced Sanborn sheets can be added directly to the modern map without using the optional prep canvas.
 - Georeference Sheets `Edit historical sheets` mode can move, corner-warp, rotate, scale, skew, flip, hide, lock, reorder, save, and reload individual sheets over the modern basemap.
 - Modern Overlay renders the saved independent geographic sheet layers.
 - Historical Map Studio opens near the town-package center; Texarkana 1885 should resolve near `33.425, -94.047`, not `0,0`.
 - Selected Sanborn sheets show signed image load diagnostics and can be dragged by the image body in `Edit Sheet` mode.
+- Map Pieces keeps the source-image editing toolbar sticky while zooming and panning; source polygons remain normalized image coordinates, not screen coordinates.
 - Map Placement displays all visible saved placed map pieces for the active atlas, while saving remains scoped to the selected piece.
 
 ## Public Review Routes

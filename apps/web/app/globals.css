@@ -3702,22 +3702,26 @@ body:has(.minimal-sanborn-gps) {
 .sanborn-page-workbench__source,
 .sanborn-page-workbench__pieces {
   min-height: 0;
-  overflow: auto;
 }
 
 .sanborn-page-workbench__source {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   background: #20211f;
+  overflow: hidden;
 }
 
 .sanborn-page-workbench__pieces {
   border-left: 1px solid rgba(226, 190, 126, 0.18);
   background: #141a19;
+  overflow: auto;
   padding: 8px;
 }
 
 .sanborn-page-workbench__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3746,6 +3750,19 @@ body:has(.minimal-sanborn-gps) {
   gap: 5px;
 }
 
+.sanborn-page-workbench__zoom {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid rgba(226, 190, 126, 0.24);
+  border-radius: 999px;
+  background: rgba(246, 231, 203, 0.08);
+  color: #f6e7cb;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0 8px;
+}
+
 .sanborn-page-workbench__blocker {
   display: flex;
   flex-wrap: wrap;
@@ -3764,9 +3781,30 @@ body:has(.minimal-sanborn-gps) {
   position: relative;
   align-self: start;
   width: min(100%, 1400px);
+  max-width: none;
+  min-width: 240px;
   margin: 8px auto;
   border: 1px solid rgba(226, 190, 126, 0.22);
   background: #ede9dd;
+  transform-origin: 0 0;
+}
+
+.sanborn-page-workbench__viewport {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 8px;
+  scrollbar-gutter: stable both-edges;
+  cursor: crosshair;
+}
+
+.sanborn-page-workbench__viewport:focus-visible {
+  outline: 2px solid rgba(226, 190, 126, 0.72);
+  outline-offset: -2px;
+}
+
+.sanborn-page-workbench__viewport.is-panning {
+  cursor: grabbing;
 }
 
 .sanborn-page-workbench__image-frame img {
@@ -4123,6 +4161,51 @@ body:has(.minimal-sanborn-gps) {
   display: grid;
   gap: 9px;
   min-width: 0;
+}
+
+.sanborn-station-subsection__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sanborn-edition-manager,
+.sanborn-page-management {
+  border: 1px solid rgba(226, 190, 126, 0.18);
+  border-radius: 7px;
+  background: rgba(9, 9, 8, 0.24);
+  padding: 8px;
+}
+
+.sanborn-edition-list,
+.sanborn-edition-create {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sanborn-edition-list__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  border: 1px solid rgba(226, 190, 126, 0.16);
+  border-radius: 7px;
+  background: rgba(246, 231, 203, 0.04);
+  color: rgba(246, 231, 203, 0.68);
+  font-size: 0.72rem;
+  padding: 7px;
+}
+
+.sanborn-edition-list__item.is-selected {
+  border-color: rgba(109, 159, 103, 0.48);
+  background: rgba(109, 159, 103, 0.12);
+}
+
+.sanborn-edition-create {
+  border-top: 1px solid rgba(226, 190, 126, 0.16);
+  padding-top: 8px;
 }
 
 .sanborn-station-panel {

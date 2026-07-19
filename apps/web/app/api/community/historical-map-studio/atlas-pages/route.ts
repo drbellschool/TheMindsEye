@@ -30,6 +30,19 @@ type AtlasPageSaveBody = {
   }>;
 };
 
+type AtlasPageMoveBody = {
+  townPackageId?: string;
+  pageId?: string | null;
+  destinationAtlasId?: string | null;
+  moveChildWork?: boolean | null;
+};
+
+type AtlasPageArchiveBody = {
+  townPackageId?: string;
+  pageId?: string | null;
+  archiveReason?: string | null;
+};
+
 type LimitedTextResult = { ok: true; value: string | null } | { ok: false; error: string };
 
 function normalizeLimitedText(
@@ -191,6 +204,84 @@ export async function PUT(request: NextRequest) {
     atlasId,
     pageCount: pages.length,
     result: saveResult.data ?? null,
+    savedAt: new Date().toISOString(),
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const access = await requireMapStudioWriteAccess();
+  if (!access.ok) return access.response;
+
+  const body = (await request.json().catch(() => null)) as AtlasPageMoveBody | null;
+  const pageId = normalizeOptionalSanbornText(body?.pageId, 220);
+  const destinationAtlasId = normalizeOptionalSanbornText(body?.destinationAtlasId, 160);
+
+  if (!body || !pageId || !destinationAtlasId) {
+    return jsonError(400, "Atlas page move payload is invalid.");
+  }
+
+  const townPackageResult = await getRequestedTownPackage(access.supabase, body.townPackageId);
+
+  if (townPackageResult.error || !townPackageResult.data) {
+    return jsonError(400, "The requested town package could not be loaded.");
+  }
+
+  const moveResult = await access.supabase.rpc("move_sanborn_atlas_page_to_atlas", {
+    p_town_package_id: townPackageResult.data.id,
+    p_page_id: pageId,
+    p_destination_atlas_id: destinationAtlasId,
+    p_move_child_work: body.moveChildWork === true,
+  });
+
+  if (moveResult.error) {
+    const status = moveResult.error.code === "P0001" ? 400 : 503;
+    return jsonError(status, `Sanborn atlas page could not be moved: ${moveResult.error.message}`);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    result: moveResult.data ?? null,
+    savedAt: new Date().toISOString(),
+  });
+}
+
+export async function PATCH(request: NextRequest) {
+  const access = await requireMapStudioWriteAccess();
+  if (!access.ok) return access.response;
+
+  const body = (await request.json().catch(() => null)) as AtlasPageArchiveBody | null;
+  const pageId = normalizeOptionalSanbornText(body?.pageId, 220);
+
+  if (!body || !pageId) {
+    return jsonError(400, "Atlas page archive payload is invalid.");
+  }
+
+  const townPackageResult = await getRequestedTownPackage(access.supabase, body.townPackageId);
+
+  if (townPackageResult.error || !townPackageResult.data) {
+    return jsonError(400, "The requested town package could not be loaded.");
+  }
+
+  const archiveReason = normalizeLimitedText(body.archiveReason, 1000, "Archive reason", { allowLineBreaks: true });
+
+  if (!archiveReason.ok) {
+    return jsonError(400, archiveReason.error);
+  }
+
+  const archiveResult = await access.supabase.rpc("archive_sanborn_atlas_page", {
+    p_town_package_id: townPackageResult.data.id,
+    p_page_id: pageId,
+    p_archive_reason: archiveReason.value ?? "Archived from Historical Map Studio.",
+  });
+
+  if (archiveResult.error) {
+    const status = archiveResult.error.code === "P0001" ? 400 : 503;
+    return jsonError(status, `Sanborn atlas page could not be archived: ${archiveResult.error.message}`);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    result: archiveResult.data ?? null,
     savedAt: new Date().toISOString(),
   });
 }

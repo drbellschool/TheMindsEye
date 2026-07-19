@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 type DeleteBody = {
   assetId?: string;
+  confirmDeleteEligible?: boolean;
 };
 
 export async function DELETE(request: NextRequest) {
@@ -30,6 +31,83 @@ export async function DELETE(request: NextRequest) {
   }
 
   const asset = assetResult.data;
+  const pageLookupResult = await supabase
+    .from("sanborn_atlas_pages")
+    .select("id, page_id, is_primary_town_index")
+    .eq("sanborn_sheet_asset_id", asset.id);
+
+  if (pageLookupResult.error) {
+    return jsonError(503, "Atlas page dependencies could not be checked before deletion.");
+  }
+
+  const atlasPages = pageLookupResult.data ?? [];
+  const atlasPageRowIds = atlasPages.map((page) => page.id);
+  const atlasPageIds = atlasPages.map((page) => page.page_id);
+  const primaryIndexCount = atlasPages.filter((page) => page.is_primary_town_index).length;
+
+  const sourceRegionsByAssetResult = await supabase.from("sanborn_source_regions").select("id", { count: "exact", head: true }).eq("source_asset_id", asset.id);
+  if (sourceRegionsByAssetResult.error) {
+    return jsonError(503, "Source-region dependencies could not be checked before deletion.");
+  }
+
+  const sourceRegionsByPageResult = atlasPageRowIds.length
+    ? await supabase.from("sanborn_source_regions").select("id", { count: "exact", head: true }).in("atlas_page_id", atlasPageRowIds)
+    : { count: 0, error: null };
+  if (sourceRegionsByPageResult.error) {
+    return jsonError(503, "Atlas-page source-region dependencies could not be checked before deletion.");
+  }
+
+  const mapPiecesResult = atlasPageRowIds.length
+    ? await supabase.from("sanborn_map_pieces").select("id", { count: "exact" }).in("atlas_page_id", atlasPageRowIds)
+    : { data: [], count: 0, error: null };
+  if (mapPiecesResult.error) {
+    return jsonError(503, "Map-piece dependencies could not be checked before deletion.");
+  }
+
+  const mapPieceRowIds = (mapPiecesResult.data ?? []).map((piece) => piece.id);
+  const mapPiecePlacementsResult = mapPieceRowIds.length
+    ? await supabase.from("sanborn_map_piece_georeferences").select("id", { count: "exact", head: true }).in("map_piece_id", mapPieceRowIds)
+    : { count: 0, error: null };
+  if (mapPiecePlacementsResult.error) {
+    return jsonError(503, "Map-piece placement dependencies could not be checked before deletion.");
+  }
+
+  const sheetGeoreferencesResult = await supabase.from("historical_map_sheet_georeferences").select("id", { count: "exact", head: true }).eq("sanborn_sheet_asset_id", asset.id);
+  if (sheetGeoreferencesResult.error) {
+    return jsonError(503, "Whole-sheet georeference dependencies could not be checked before deletion.");
+  }
+
+  const sheetPlacementsResult = await supabase.from("historical_map_sheet_placements").select("id", { count: "exact", head: true }).eq("sanborn_sheet_asset_id", asset.id);
+  if (sheetPlacementsResult.error) {
+    return jsonError(503, "Workspace placement dependencies could not be checked before deletion.");
+  }
+
+  const dependencyCounts = {
+    atlasPages: atlasPages.length,
+    sourceRegions: (sourceRegionsByAssetResult.count ?? 0) + (sourceRegionsByPageResult.count ?? 0),
+    mapPieces: mapPiecesResult.count ?? 0,
+    mapPiecePlacements: mapPiecePlacementsResult.count ?? 0,
+    wholeSheetGeoreferences: sheetGeoreferencesResult.count ?? 0,
+    workspacePlacements: sheetPlacementsResult.count ?? 0,
+    primaryTownIndexPages: primaryIndexCount,
+    sourceLinks: asset.source_record_id ? 1 : 0,
+  };
+  const linkedWorkCount =
+    dependencyCounts.sourceRegions +
+    dependencyCounts.mapPieces +
+    dependencyCounts.mapPiecePlacements +
+    dependencyCounts.wholeSheetGeoreferences +
+    dependencyCounts.workspacePlacements +
+    dependencyCounts.primaryTownIndexPages +
+    dependencyCounts.sourceLinks;
+
+  if (linkedWorkCount > 0 && body.confirmDeleteEligible !== true) {
+    return jsonError(409, "Delete blocked because this page has linked reconstruction work. Archive the page instead.", {
+      dependencyCounts,
+      pageIds: atlasPageIds,
+    });
+  }
+
   const placementsDeleteResult = await supabase.from("historical_map_sheet_placements").delete().eq("sanborn_sheet_asset_id", asset.id);
 
   if (placementsDeleteResult.error) {

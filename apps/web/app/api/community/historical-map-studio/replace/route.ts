@@ -85,6 +85,11 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "The replacement image dimensions could not be read safely.");
   }
 
+  const dimensionsChanged = dimensions.width !== asset.width || dimensions.height !== asset.height;
+  const previousAspectRatio = asset.width / asset.height;
+  const nextAspectRatio = dimensions.width / dimensions.height;
+  const aspectRatioChanged = Math.abs(previousAspectRatio - nextAspectRatio) > 0.0005;
+
   const checksum = createHash("sha256").update(Buffer.from(arrayBuffer)).digest("hex");
   const duplicateChecksumResult = await supabase
     .from("sanborn_sheet_assets")
@@ -155,6 +160,22 @@ export async function POST(request: NextRequest) {
       checksum,
     },
     previousStorageCleanup: cleanupResult.error ? "failed" : "removed",
-    warningMessage: cleanupResult.error ? "Replacement succeeded, but the previous storage object could not be removed automatically." : undefined,
+    warningMessage:
+      cleanupResult.error
+        ? "Replacement succeeded, but the previous storage object could not be removed automatically."
+        : dimensionsChanged
+          ? aspectRatioChanged
+            ? "Image replaced. Dimensions and aspect ratio changed; review source-region polygons and map pieces."
+            : "Image replaced. Dimensions changed; review source-region polygons and map pieces."
+          : undefined,
+    dimensionWarning: dimensionsChanged
+      ? {
+          previousWidth: asset.width,
+          previousHeight: asset.height,
+          nextWidth: dimensions.width,
+          nextHeight: dimensions.height,
+          aspectRatioChanged,
+        }
+      : null,
   });
 }

@@ -48,6 +48,8 @@ Run these SQL files in order from the Supabase SQL Editor:
 13. `supabase/migrations/0013_town_reconstruction_source_provenance.sql`
 14. `supabase/migrations/0014_town_index_regions.sql`
 15. `supabase/migrations/0015_page_classification_workflow.sql`
+16. `supabase/migrations/0016_functional_source_regions.sql`
+17. `supabase/migrations/0017_atlas_edition_management.sql`
 
 The migrations create:
 
@@ -68,6 +70,7 @@ The migrations create:
 - Durable Town Index mission-map regions with normalized source-image polygons, non-sequential sheet references, scoped page/sheet links, explicit workflow statuses, RLS, and service-role-only save/delete RPCs.
 - Page Classification workflow fields on Sanborn atlas pages, including canonical page types, printed references, display titles, classification notes, explicit primary Town Index designation, safe backfill from legacy page types, and a service-role-only atlas-page save RPC.
 - Functional Sanborn source regions with normalized source-image polygons, region-purpose types, source-page/sheet links, optional Town Index inclusion, optional Map Pieces availability for geographic regions, scoped save/delete RPCs, RLS, and service-role-only access.
+- Sanborn edition-management archive fields and service-role-only RPCs for archiving editions/pages and moving pages between saved editions without cross-town mutations.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -112,6 +115,8 @@ The compatibility route redirects to the Historical Map Studio.
 The studio supports:
 
 - Sanborn sheet upload to private Supabase Storage.
+- Explicit Sanborn edition creation through `+ Add year`; towns show only saved atlas/edition records and do not receive automatic year suggestions.
+- Upload scoping to the active town and active Sanborn edition, with upload disabled until an edition is selected or created.
 - Stored sheet gallery with signed image previews.
 - Konva-based stitching workspace with drag, scale, rotate, opacity, visibility, lock state, and layer order.
 - Manual save plus debounced autosave for layout transforms and viewport.
@@ -120,7 +125,9 @@ The studio supports:
 - Six Historical Map Studio stations: Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, and Map Placement.
 - Town Index mission-map region drawing, editing, linking, deletion, legend, and status/progress summaries.
 - Image replacement and deletion through server routes that keep Supabase service-role credentials server-only.
+- Page management actions for moving pages to another edition, replacing images, archiving pages, and blocking hard deletes when source regions, map pieces, placements, source links, or primary-index work exist.
 - Piece-first Map Placement for saved Sanborn map pieces, with all visible placed pieces shown on a shared town canvas.
+- Sticky Map Pieces source-image toolbar with select/draw/pan tools, zoom in/out, fit image, 100%, reset view, and fit selected piece while keeping source polygons in normalized coordinates.
 - Optional advanced whole-sheet reference alignment for backward-compatible sheet-level georeferencing.
 - Authoritative sheet-level geographic placement in Georeferencing mode.
 - Modern Leaflet overlay mode using saved independent Sanborn sheet transforms.
@@ -156,6 +163,8 @@ The studio reuses `center_latitude`, `center_longitude`, and `default_zoom` for 
 Migration `0013_town_reconstruction_source_provenance.sql` is required for creating new durable source records from the Source Info drawer. Migration `0014_town_index_regions.sql` is required for legacy persistent Town Index region save/delete behavior. Migration `0016_functional_source_regions.sql` is required for PR #73 functional source regions, canonical page-type repair, Source Record region saves, and Town Index reuse of saved sheet-coverage regions. Until `0016` is applied, the studio falls back to legacy Town Index region reads where possible and shows visible database errors for source-region writes rather than fabricating data.
 
 Migration `0015_page_classification_workflow.sql` is required for page-type-driven station behavior. Until `0015` is applied, older atlas pages still load through the compatibility query, but page classification fields cannot persist and the Source Record classification controls will return visible database errors instead of silently pretending to save.
+
+Migration `0017_atlas_edition_management.sql` is required for PR #75 edition/page management. Until `0017` is applied, saved editions still load, but edition notes, archive states, page archive, and page move actions cannot persist.
 
 ## Georeferencing Accuracy
 
@@ -207,9 +216,15 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 22. In Source Record, classify a cover page and confirm Map Pieces explains that cover pages do not use map pieces.
 23. Classify one uploaded page as Index or mixed, explicitly set it as the primary Town Index, and confirm Town Index loads that page immediately.
 24. In Source Record, mark functional regions for town coverage, sheet coverage, printed index, and geographic map content; save regions and confirm Town Index reuses the sheet-coverage regions without redrawing.
-24. Confirm Map Pieces and Map Placement are enabled only for Sanborn Sheet or Inset / Special Sheet pages.
-25. Confirm direct anon table/RPC access to `sanborn_town_index_regions` and atlas-page classification writes fails, while the Next.js service-role APIs work.
-26. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
+25. Confirm Map Pieces and Map Placement are enabled only for Sanborn Sheet or Inset / Special Sheet pages.
+26. Open Town & Edition, confirm the edition selector lists only saved editions, create a new year with `+ Add year`, and confirm the active context switches to the new empty edition.
+27. Confirm upload is disabled when no edition is active and successful uploads report the active town and edition.
+28. Move a misplaced page to another edition, confirm source metadata and storage identity are preserved, and confirm cross-town destination moves are rejected.
+29. Replace an uploaded image and confirm failed replacements keep the old image; when dimensions change, review source-region polygons and map pieces.
+30. Archive pages or editions that contain reconstruction work; hard delete only empty pages or empty editions after warnings.
+31. In Map Pieces, zoom in/out, fit image, reset view, pan while zoomed, fit the selected piece, edit a polygon, save, and confirm zoom/pan did not alter normalized source coordinates.
+32. Confirm direct anon table/RPC access to `sanborn_town_index_regions` and atlas-page classification writes fails, while the Next.js service-role APIs work.
+33. Switch from Map to Buildings, People, and Sources and confirm URL context is preserved.
 
 ## Local Validation
 
