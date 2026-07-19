@@ -266,10 +266,33 @@ textarea {
 .community-shell--studio-focus .community-shell__topbar {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(220px, auto) minmax(180px, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 5px 10px;
-  padding: 7px 10px;
+  min-height: 36px;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.community-shell__compact-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #f6e7cb;
+}
+
+.community-shell__compact-brand strong {
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.community-shell__compact-brand span {
+  max-width: 24vw;
+  overflow: hidden;
+  color: rgba(246, 231, 203, 0.68);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .community-shell--studio-focus .community-shell__brand {
@@ -305,10 +328,11 @@ textarea {
   min-width: 0;
   align-items: center;
   gap: 6px;
+  justify-content: flex-end;
 }
 
 .community-shell--studio-focus .community-shell__status .source-warning {
-  max-width: 46vw;
+  max-width: 28vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -316,13 +340,18 @@ textarea {
 }
 
 .community-shell--studio-focus .community-shell__nav {
-  grid-column: 1 / -1;
-  gap: 5px;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  min-width: 0;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .community-shell--studio-focus .nav-pill {
-  padding: 0.36rem 0.52rem;
+  padding: 0.3rem 0.5rem;
   font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .community-shell--studio-focus .community-shell__main {
@@ -685,7 +714,10 @@ textarea {
   border-color: rgba(226, 190, 126, 0.18);
   background: rgba(15, 13, 10, 0.54);
   color: #f6e7cb;
-  padding: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 5px 7px;
 }
 
 .reconstruction-context__selectors,
@@ -697,6 +729,24 @@ textarea {
   align-items: center;
   gap: 7px;
   min-width: 0;
+}
+
+.reconstruction-context--compact .reconstruction-context__selectors,
+.reconstruction-context--compact .reconstruction-context__tabs,
+.reconstruction-context--compact .reconstruction-context__progress {
+  gap: 5px;
+}
+
+.reconstruction-context--compact .reconstruction-context__selectors {
+  flex-wrap: nowrap;
+}
+
+.reconstruction-context--compact .reconstruction-context__tabs {
+  justify-content: flex-end;
+}
+
+.reconstruction-context--compact .reconstruction-context__recent {
+  display: none;
 }
 
 .reconstruction-context__identity {
@@ -734,6 +784,18 @@ textarea {
   min-width: clamp(130px, 16vw, 230px);
 }
 
+.reconstruction-context--compact label {
+  min-width: clamp(100px, 11vw, 170px);
+}
+
+.reconstruction-context--compact label:has([aria-label="Active sheet or page"]) {
+  min-width: clamp(150px, 18vw, 260px);
+}
+
+.reconstruction-context--compact label:has([aria-label="Active block or map piece"]) {
+  min-width: clamp(132px, 14vw, 220px);
+}
+
 .reconstruction-context input,
 .reconstruction-context select {
   min-width: 0;
@@ -748,6 +810,7 @@ textarea {
 
 .reconstruction-context--compact input,
 .reconstruction-context--compact select {
+  height: 26px;
   border-color: rgba(226, 190, 126, 0.26);
   background: rgba(10, 9, 7, 0.92);
   color: #f6e7cb;
@@ -794,6 +857,7 @@ textarea {
   border-color: rgba(226, 190, 126, 0.24);
   background: rgba(10, 9, 7, 0.74);
   color: #f6e7cb;
+  padding: 0.34rem 0.46rem;
 }
 
 .reconstruction-context__tab.is-active {
@@ -2658,8 +2722,8 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps .sanborn-button {
-  min-height: 30px;
-  padding: 0.22rem 0.48rem;
+  min-height: 28px;
+  padding: 0.18rem 0.42rem;
   border-radius: 7px;
   font-size: 0.72rem;
   white-space: nowrap;
@@ -2668,12 +2732,38 @@ body:has(.minimal-sanborn-gps) {
 .minimal-sanborn-gps__toolbar {
   display: grid;
   align-content: start;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   overflow: visible;
   border-bottom: 1px solid rgba(226, 190, 126, 0.18);
   background: linear-gradient(180deg, rgba(24, 19, 13, 0.98), rgba(35, 28, 18, 0.94));
-  padding: 7px 8px;
+  padding: 5px 7px;
+}
+
+.minimal-sanborn-gps__commandbar,
+.minimal-sanborn-gps__command-group {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.minimal-sanborn-gps__commandbar {
+  justify-content: space-between;
+}
+
+.minimal-sanborn-gps__command-group--identity {
+  flex: 0 1 auto;
+}
+
+.minimal-sanborn-gps__command-group--source {
+  flex: 1 1 430px;
+}
+
+.minimal-sanborn-gps__command-group--status {
+  flex: 1 1 300px;
+  justify-content: flex-end;
 }
 
 .minimal-sanborn-gps__toolbar-row,
@@ -2722,7 +2812,7 @@ body:has(.minimal-sanborn-gps) {
 
 .minimal-sanborn-gps__workflow-select select,
 .minimal-sanborn-gps__display-scope select {
-  height: 30px;
+  height: 28px;
   max-width: 100%;
   border: 1px solid rgba(226, 190, 126, 0.28);
   border-radius: 7px;
@@ -2752,7 +2842,7 @@ body:has(.minimal-sanborn-gps) {
 .minimal-sanborn-gps__sheet,
 .minimal-sanborn-gps__basemap,
 .minimal-sanborn-gps__location {
-  height: 30px;
+  height: 28px;
   border: 1px solid rgba(226, 190, 126, 0.28);
   border-radius: 7px;
   background: rgba(10, 9, 7, 0.92);
@@ -2772,7 +2862,7 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__sheet {
-  width: clamp(220px, 28vw, 390px);
+  width: clamp(190px, 22vw, 340px);
   max-width: 100%;
 }
 
@@ -2782,7 +2872,7 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .minimal-sanborn-gps__location {
-  width: clamp(190px, 22vw, 320px);
+  width: clamp(170px, 18vw, 280px);
   max-width: 100%;
 }
 
@@ -2905,11 +2995,11 @@ body:has(.minimal-sanborn-gps) {
   background: rgba(10, 9, 7, 0.68);
   color: #f6e7cb;
   font-size: 0.68rem;
-  padding: 0.3rem 0.55rem;
+  padding: 0.24rem 0.5rem;
 }
 
 .minimal-sanborn-gps__map-status {
-  min-width: 150px;
+  min-width: 132px;
   max-width: 100%;
   overflow-wrap: anywhere;
   border: 1px solid rgba(109, 159, 103, 0.34);
@@ -2917,7 +3007,7 @@ body:has(.minimal-sanborn-gps) {
   background: rgba(10, 9, 7, 0.68);
   color: #dbeecf;
   font-size: 0.68rem;
-  padding: 0.3rem 0.55rem;
+  padding: 0.24rem 0.5rem;
 }
 
 .minimal-sanborn-gps__status.is-error {
@@ -2941,7 +3031,7 @@ body:has(.minimal-sanborn-gps) {
   font-size: 0.68rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
-  padding: 0.28rem 0.55rem;
+  padding: 0.23rem 0.5rem;
 }
 
 .minimal-sanborn-gps__message.is-error {
@@ -3740,6 +3830,7 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .sanborn-atlas-workflow--stations {
+  position: relative;
   grid-template-columns: clamp(190px, 16vw, 230px) minmax(0, 1fr) clamp(300px, 24vw, 360px);
   height: 100%;
 }
@@ -3756,6 +3847,55 @@ body:has(.minimal-sanborn-gps) {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.sanborn-layout-tab {
+  position: absolute;
+  top: 50%;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 112px;
+  max-height: calc(100% - 24px);
+  border: 1px solid rgba(226, 190, 126, 0.32);
+  background: rgba(18, 18, 16, 0.96);
+  color: #f6e7cb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 8px 4px;
+  text-orientation: mixed;
+  writing-mode: vertical-rl;
+}
+
+.sanborn-layout-tab span:first-child {
+  color: #dbeecf;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-orientation: mixed;
+  writing-mode: horizontal-tb;
+}
+
+.sanborn-layout-tab:focus-visible {
+  outline: 2px solid #f6e7cb;
+  outline-offset: 2px;
+}
+
+.sanborn-layout-tab--left {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  transform: translateY(-50%);
+}
+
+.sanborn-layout-tab--right {
+  right: 0;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  transform: translateY(-50%);
+}
+
 .sanborn-atlas-navigator__header {
   position: sticky;
   top: 0;
@@ -3768,7 +3908,7 @@ body:has(.minimal-sanborn-gps) {
   background: #15130f;
   color: #f6e7cb;
   font-size: 0.76rem;
-  padding: 9px 10px;
+  padding: 7px 9px;
 }
 
 .sanborn-atlas-navigator__header strong {
@@ -3777,8 +3917,8 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-atlas-navigator__step {
   grid-template-columns: 24px minmax(0, 1fr) auto 9px;
-  min-height: 42px;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 5px 7px;
 }
 
 .sanborn-atlas-navigator__step span {
@@ -3872,7 +4012,7 @@ body:has(.minimal-sanborn-gps) {
   gap: 8px;
   border-bottom: 1px solid rgba(226, 190, 126, 0.18);
   background: rgba(18, 18, 16, 0.98);
-  padding: 8px 10px;
+  padding: 7px 9px;
 }
 
 .sanborn-station-inspector__header div {
@@ -3912,11 +4052,11 @@ body:has(.minimal-sanborn-gps) {
 .sanborn-station-inspector__body {
   display: grid;
   align-content: start;
-  gap: 9px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 8px;
 }
 
 .sanborn-station-inspector label,
@@ -3986,7 +4126,7 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .sanborn-station-panel {
-  margin: 10px;
+  margin: 8px;
 }
 
 .sanborn-station-panel header,
@@ -4005,7 +4145,7 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .sanborn-station-overview {
-  padding: 14px;
+  padding: 10px;
 }
 
 .sanborn-station-overview__hero h2 {
@@ -4040,7 +4180,7 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-source-preview > img {
   width: min(100%, 980px);
-  max-height: 58vh;
+  max-height: calc(100vh - 230px);
   object-fit: contain;
   border: 1px solid rgba(226, 190, 126, 0.2);
   background: #ede9dd;

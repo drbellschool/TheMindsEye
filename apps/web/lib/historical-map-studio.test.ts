@@ -535,7 +535,7 @@ test("minimal Map placement workflow renders upload controls inside the early-re
   assert.match(minimalInterface, /void uploadSheets\(event\.currentTarget\.files\)/);
 });
 
-test("minimal Map placement toolbar uses grouped wrapping rows and gates placement controls", () => {
+test("minimal Map placement toolbar uses a compact command bar and gates placement controls", () => {
   const component = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
   const minimalStart = component.indexOf("minimal-sanborn-gps--station-shell");
@@ -545,9 +545,13 @@ test("minimal Map placement toolbar uses grouped wrapping rows and gates placeme
   const toolbarCssEnd = css.indexOf(".minimal-sanborn-gps__toolbar-row,", toolbarCssStart);
   const toolbarCss = css.slice(toolbarCssStart, toolbarCssEnd);
 
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--primary/);
-  assert.match(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
-  assert.match(minimalInterface, /minimal-sanborn-gps__status-row/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__commandbar/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__command-group--identity/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__command-group--source/);
+  assert.match(minimalInterface, /minimal-sanborn-gps__command-group--status/);
+  assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__toolbar-row--primary/);
+  assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__toolbar-row--source/);
+  assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__status-row/);
   assert.doesNotMatch(minimalInterface, /minimal-sanborn-gps__workflow-switch/);
   assert.match(minimalInterface, /minimal-sanborn-gps__gps-workflow/);
   assert.match(minimalInterface, /Back to \{sanbornAtlasWorkflowSteps\.find/);
@@ -560,7 +564,7 @@ test("minimal Map placement toolbar uses grouped wrapping rows and gates placeme
   assert.match(minimalInterface, /renderStationWorkspace\(\)/);
   assert.match(component, /renderMapPlacementWorkspace/);
   assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\);/);
-  assert.match(css, /\.minimal-sanborn-gps__toolbar-row,[\s\S]*?flex-wrap: wrap;/);
+  assert.match(css, /\.minimal-sanborn-gps__commandbar,\s*\.minimal-sanborn-gps__command-group\s*\{[\s\S]*?flex-wrap: wrap;/);
   assert.doesNotMatch(toolbarCss, /grid-auto-flow/);
   assert.doesNotMatch(toolbarCss, /grid-auto-columns/);
   assert.doesNotMatch(toolbarCss, /height:\s*44px/);
@@ -617,6 +621,49 @@ test("historical map studio uses compact chrome and sticky atlas actions", () =>
   assert.match(css, /\.sanborn-atlas-workflow--stations\s*\{[\s\S]*grid-template-columns: clamp\(190px, 16vw, 230px\) minmax\(0, 1fr\) clamp\(300px, 24vw, 360px\);/);
   assert.match(css, /\.sanborn-station-inspector\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);/);
   assert.match(css, /\.sanborn-page-workbench--center-only\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+});
+
+test("Historical Map Studio uses recoverable persisted rail collapse controls", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+
+  assert.match(studioComponent, /type StudioLayoutPreference = \{[\s\S]*leftRailCollapsed: boolean;[\s\S]*rightInspectorCollapsed: boolean;/);
+  assert.match(studioComponent, /studioLayoutPreferenceKey = "mindseye\.historicalMapStudio\.layout"/);
+  assert.match(studioComponent, /const leftPanelCollapsed = studioLayoutPreference\.leftRailCollapsed/);
+  assert.match(studioComponent, /const rightPanelCollapsed = studioLayoutPreference\.rightInspectorCollapsed/);
+  assert.match(studioComponent, /readStudioLayoutPreference\(\)/);
+  assert.match(studioComponent, /writeStudioLayoutPreference\(studioLayoutPreference\)/);
+  assert.match(studioComponent, /aria-controls="sanborn-station-rail"[\s\S]*Show stations/s);
+  assert.match(studioComponent, /aria-controls="sanborn-station-inspector"[\s\S]*Show inspector/s);
+  assert.match(studioComponent, /title="Toggle stations \(\[\)"/);
+  assert.match(studioComponent, /title="Toggle inspector \(\]\)"/);
+  assert.match(studioComponent, /Hide inspector/);
+  assert.match(navigator, /id="sanborn-station-rail"/);
+  assert.match(css, /\.sanborn-layout-tab\s*\{[\s\S]*position: absolute;[\s\S]*z-index: 900;/);
+  assert.match(css, /\.sanborn-layout-tab--left\s*\{[\s\S]*left: 0;/);
+  assert.match(css, /\.sanborn-layout-tab--right\s*\{[\s\S]*right: 0;/);
+});
+
+test("Historical Map Studio compresses global chrome and command status rows", () => {
+  const shell = readFileSync("components/CommunityShell.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  const activeShellStart = studioComponent.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyShellStart = studioComponent.indexOf("Legacy pre-station");
+  const activeShell = studioComponent.slice(activeShellStart, legacyShellStart > activeShellStart ? legacyShellStart : undefined);
+
+  assert.match(shell, /community-shell__topbar community-shell__topbar--studio-app/);
+  assert.match(shell, /Minds Eye \/ Community/);
+  assert.match(shell, /compactRouteLabels/);
+  assert.match(activeShell, /minimal-sanborn-gps__commandbar/);
+  assert.match(activeShell, /minimal-sanborn-gps__command-group--source/);
+  assert.match(activeShell, /minimal-sanborn-gps__command-group--status/);
+  assert.doesNotMatch(activeShell, /minimal-sanborn-gps__toolbar-row--primary/);
+  assert.doesNotMatch(activeShell, /minimal-sanborn-gps__status-row/);
+  assert.match(css, /\.community-shell--studio-focus \.community-shell__topbar\s*\{[\s\S]*min-height: 36px;[\s\S]*padding: 4px 8px;/);
+  assert.match(css, /\.minimal-sanborn-gps__commandbar,\s*\.minimal-sanborn-gps__command-group\s*\{[\s\S]*flex-wrap: wrap;/);
+  assert.match(css, /\.minimal-sanborn-gps__toolbar\s*\{[\s\S]*padding: 5px 7px;/);
 });
 
 test("Historical Map Studio uses six reconstruction stations with right-side inspectors", () => {
