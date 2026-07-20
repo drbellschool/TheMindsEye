@@ -104,16 +104,17 @@ import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
   compareSanbornAtlasPagesForWorkflow,
-  findDuplicateSanbornEdition,
   getPageTypeToolBlockMessage,
   getSanbornPageDisplayLabel,
   getSanbornPagePrintedReference,
   getSanbornPageTypeDescription,
   getSanbornPageTypeLabel,
+  getSavedSanbornEditionYears,
   getUnassignedSanbornUploads,
   hasBlockingSanbornPageDependencies,
   hasSanbornPageClassificationConflict,
   normalizeOptionalSanbornText,
+  normalizePositiveInteger,
   normalizeSanbornEditionYear,
   pageTypeCanBePrimaryTownIndex,
   pageTypeSupportsMapPieces,
@@ -123,6 +124,7 @@ import {
   summarizeSanbornPageDependencies,
   sanbornPageTypeLabels,
   sanbornPageTypes,
+  validateSanbornEditionCreation,
   type SanbornAtlasPageRecord,
   type SanbornAtlasRecord,
   type SanbornNormalizedPoint,
@@ -1009,7 +1011,30 @@ export function HistoricalMapStudio({
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
-  const atlasReadOnly = initialData.mode === "read_only" || atlasInventory.mode === "read_only";
+  const atlasSaveActionsDisabled = saveStatus === "saving";
+  const studioWriteUnavailable = initialData.mode === "read_only";
+  const atlasDataUnavailable = atlasInventory.mode === "read_only";
+  const atlasReadOnly = studioWriteUnavailable || atlasDataUnavailable;
+  const availableEditionYears = getSavedSanbornEditionYears(atlasInventory.atlases);
+  const archivedSanbornEditions = atlasInventory.archivedAtlases ?? [];
+  const editionCreationValidation = useMemo(
+    () =>
+      validateSanbornEditionCreation({
+        townPackageId: initialData.activeTownPackage?.id,
+        year: editionDraft.year,
+        editionDate: editionDraft.editionDate,
+        expectedPageCount: editionDraft.expectedPageCount,
+        volumeLabel: editionDraft.volumeLabel,
+        atlases: atlasInventory.atlases,
+      }),
+    [atlasInventory.atlases, editionDraft.editionDate, editionDraft.expectedPageCount, editionDraft.volumeLabel, editionDraft.year, initialData.activeTownPackage?.id],
+  );
+  const editionCreationControlsDisabled = studioWriteUnavailable || atlasSaveActionsDisabled;
+  const editionCreationDisabledReason = studioWriteUnavailable
+    ? "Studio write access is unavailable."
+    : atlasSaveActionsDisabled
+      ? "Saving Sanborn edition..."
+      : editionCreationValidation.reason;
   const activeEditionAssets = activeAtlas
     ? activeAtlasPages
         .map((page) => sheets.find((sheet) => sheet.assetId === page.sanbornSheetAssetId) ?? null)
@@ -1026,7 +1051,6 @@ export function HistoricalMapStudio({
   });
   const selectedPageHasBlockingDependencies = hasBlockingSanbornPageDependencies(selectedPageDependencySummary);
   const pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean(selectedAtlasPage && !selectedAtlasPage.isPersisted);
-  const atlasSaveActionsDisabled = saveStatus === "saving";
   const isGpsAlignmentStep = atlasWorkflowStep === "gps_alignment";
   const allOperationalMapPieceLayers = useMemo(
     () =>
@@ -1973,7 +1997,7 @@ export function HistoricalMapStudio({
   function getCurrentReconstructionContext(workflowStep: SanbornAtlasWorkflowStep = atlasWorkflowStep) {
     return {
       townPackageId: initialData.activeTownPackage?.id ?? null,
-      mapYear: initialData.activeMapYear ?? null,
+      mapYear: activeAtlas?.editionYear ?? null,
       atlasId: activeAtlas?.atlasId ?? selectedAtlasId,
       atlasPageId: selectedAtlasPage?.pageId ?? selectedAtlasPageId,
       sheetAssetId: selectedAtlasPage?.sanbornSheetAssetId ?? selectedAssetId,
@@ -3209,7 +3233,9 @@ export function HistoricalMapStudio({
       return;
     }
 
-    if (!window.confirm(`Archive ${activeAtlas.editionYear} for ${initialData.activeTownPackage.name}? Developed work remains in the database but is hidden from normal selectors.`)) {
+    const atlasToArchive = activeAtlas;
+
+    if (!window.confirm(`Archive ${atlasToArchive.editionYear} for ${initialData.activeTownPackage.name}? Developed work remains in the database but is hidden from normal selectors.`)) {
       return;
     }
 
@@ -3220,19 +3246,107 @@ export function HistoricalMapStudio({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         townPackageId: initialData.activeTownPackage.id,
-        atlasId: activeAtlas.atlasId,
+        atlasId: atlasToArchive.atlasId,
         archiveReason: "Archived from Historical Map Studio edition manager.",
       }),
     });
     const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
 
     setSaveStatus(response.ok && payload?.ok ? "saved" : "error");
-    setSaveMessage(response.ok && payload?.ok ? "Sanborn edition archived." : payload?.message ?? "Sanborn edition archive failed.");
+    setSaveMessage(response.ok && payload?.ok ? "Sanborn edition archived. No active Sanborn edition." : payload?.message ?? "Sanborn edition archive failed.");
 
     if (response.ok && payload?.ok) {
-      setLastSavedAt(payload.savedAt ?? new Date().toISOString());
-      router.refresh();
+      const savedAt = payload.savedAt ?? new Date().toISOString();
+      setLastSavedAt(savedAt);
+      setSelectedAtlasId("");
+      setSelectedAtlasPageId("");
+      setSelectedMapPieceId("");
+      setSelectedAssetId("");
+      setEditionManagerOpen(true);
+      changeAtlasWorkflowStep("source");
+      setAtlasInventory((current) => {
+        const archivedPageIds = new Set(current.pages.filter((page) => page.atlasId === atlasToArchive.atlasId).map((page) => page.pageId));
+
+        return {
+          ...current,
+          atlases: current.atlases.filter((atlas) => atlas.atlasId !== atlasToArchive.atlasId),
+          archivedAtlases: [
+            {
+              ...atlasToArchive,
+              archivedAt: savedAt,
+              archiveReason: "Archived from Historical Map Studio edition manager.",
+              updatedAt: savedAt,
+            },
+            ...(current.archivedAtlases ?? []).filter((atlas) => atlas.atlasId !== atlasToArchive.atlasId),
+          ],
+          pages: current.pages.filter((page) => page.atlasId !== atlasToArchive.atlasId),
+          pieces: current.pieces.filter((piece) => !archivedPageIds.has(piece.atlasPageId)),
+          activeAtlasId: null,
+          activePageId: null,
+        };
+      });
+      router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&workflow=source`);
     }
+  }
+
+  async function restoreArchivedEdition(atlasId: string) {
+    if (!initialData.activeTownPackage) {
+      return;
+    }
+
+    const archivedAtlas = (atlasInventory.archivedAtlases ?? []).find((atlas) => atlas.atlasId === atlasId) ?? null;
+
+    if (!archivedAtlas || !window.confirm(`Restore ${archivedAtlas.editionYear} for ${initialData.activeTownPackage.name}?`)) {
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage("Restoring Sanborn edition...");
+    const response = await fetch("/api/community/historical-map-studio/atlases", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        townPackageId: initialData.activeTownPackage.id,
+        atlasId,
+        restore: true,
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; atlasId?: string; message?: string; savedAt?: string } | null;
+
+    if (!response.ok || !payload?.ok || !payload.atlasId) {
+      setSaveStatus("error");
+      setSaveMessage(payload?.message ?? "Sanborn edition restore failed.");
+      return;
+    }
+
+    const restoredAtlasId = payload.atlasId;
+    const savedAt = payload.savedAt ?? new Date().toISOString();
+    const restoredAtlas: SanbornAtlasRecord = {
+      ...archivedAtlas,
+      archivedAt: null,
+      archiveReason: null,
+      updatedAt: savedAt,
+    };
+
+    setAtlasInventory((current) => ({
+      ...current,
+      atlases: [
+        ...current.atlases.filter((atlas) => atlas.atlasId !== restoredAtlasId),
+        restoredAtlas,
+      ].sort((left, right) => right.editionYear - left.editionYear),
+      archivedAtlases: (current.archivedAtlases ?? []).filter((atlas) => atlas.atlasId !== restoredAtlasId),
+      activeAtlasId: restoredAtlasId,
+      activePageId: null,
+    }));
+    setSelectedAtlasId(restoredAtlasId);
+    setSelectedAtlasPageId("");
+    setSelectedMapPieceId("");
+    setEditionManagerOpen(false);
+    setSaveStatus("saved");
+    setSaveMessage(`${restoredAtlas.editionYear} edition restored.`);
+    setLastSavedAt(savedAt);
+    router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&year=${restoredAtlas.editionYear}&mapYear=${restoredAtlas.editionYear}&atlasId=${restoredAtlasId}&atlas=${restoredAtlasId}&workflow=numbered_sheets`);
+    router.refresh();
   }
 
   async function deleteEmptyEdition(atlasId: string) {
@@ -3311,9 +3425,15 @@ export function HistoricalMapStudio({
     createNew?: boolean;
     switchToEdition?: boolean;
   }) {
-    if (!initialData.activeTownPackage || atlasReadOnly) {
+    const createNewAtlas = draft.createNew === true;
+
+    if (!initialData.activeTownPackage || studioWriteUnavailable || (!createNewAtlas && atlasDataUnavailable)) {
       setSaveStatus("error");
-      setSaveMessage("Atlas save failed: active town package or write access is unavailable.");
+      setSaveMessage(
+        !initialData.activeTownPackage || studioWriteUnavailable
+          ? "Atlas save failed: active town package or write access is unavailable."
+          : "Atlas save failed: atlas data is unavailable.",
+      );
       return;
     }
 
@@ -3336,7 +3456,7 @@ export function HistoricalMapStudio({
         createNew: draft.createNew === true,
       }),
     });
-    const payload = (await response.json().catch(() => null)) as { ok?: boolean; atlasId?: string; message?: string; savedAt?: string } | null;
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; atlasId?: string; rowId?: string; message?: string; savedAt?: string } | null;
 
     if (!response.ok || !payload?.ok || !payload.atlasId) {
       setSaveStatus("error");
@@ -3344,16 +3464,63 @@ export function HistoricalMapStudio({
       return;
     }
 
-    setSelectedAtlasId(payload.atlasId);
+    const savedAtlasId = payload.atlasId;
+    const savedAt = payload.savedAt ?? new Date().toISOString();
+    setSelectedAtlasId(savedAtlasId);
     setSaveStatus("saved");
     setSaveMessage(draft.createNew ? `${draft.editionYear} edition created.` : "Sanborn atlas saved.");
-    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+    setLastSavedAt(savedAt);
+
+    if (createNewAtlas) {
+      const editionYear = normalizeSanbornEditionYear(draft.editionYear) ?? Number(draft.editionYear);
+      const newAtlas: SanbornAtlasRecord = {
+        rowId: payload.rowId ?? "",
+        atlasId: savedAtlasId,
+        townPackageId: initialData.activeTownPackage.id,
+        sourceRecordId: draft.sourceRecordId || null,
+        title: draft.title,
+        editionYear,
+        editionDate: normalizeOptionalSanbornText(draft.editionDate, 10),
+        volumeLabel: normalizeOptionalSanbornText(draft.volumeLabel, 80),
+        expectedPageCount: normalizePositiveInteger(draft.expectedPageCount),
+        notes: normalizeOptionalSanbornText(draft.notes, 4000),
+        archivedAt: null,
+        archiveReason: null,
+        reviewStatus: "unknown",
+        evidenceClassification: "unknown",
+        updatedAt: savedAt,
+        isPersisted: true,
+      };
+
+      setAtlasInventory((current) => ({
+        ...current,
+        mode: "public",
+        dataSource: "supabase",
+        atlases: [
+          ...current.atlases.filter((atlas) => atlas.atlasId !== savedAtlasId),
+          newAtlas,
+        ].sort((left, right) => right.editionYear - left.editionYear),
+        archivedAtlases: (current.archivedAtlases ?? []).filter((atlas) => atlas.atlasId !== savedAtlasId),
+        activeAtlasId: savedAtlasId,
+        activePageId: null,
+      }));
+      setEditionManagerOpen(false);
+      setEditionDraft({
+        year: "",
+        editionDate: "",
+        title: "",
+        volumeLabel: "",
+        expectedPageCount: "",
+        notes: "",
+      });
+    }
 
     if (draft.switchToEdition) {
       setSelectedAtlasPageId("");
+      setSelectedAssetId("");
       setSelectedMapPieceId("");
       changeAtlasWorkflowStep("numbered_sheets");
-      router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&year=${draft.editionYear}&mapYear=${draft.editionYear}&atlasId=${payload.atlasId}&atlas=${payload.atlasId}&workflow=numbered_sheets`);
+      router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&year=${draft.editionYear}&mapYear=${draft.editionYear}&atlasId=${savedAtlasId}&atlas=${savedAtlasId}&workflow=numbered_sheets`);
       return;
     }
 
@@ -3361,29 +3528,15 @@ export function HistoricalMapStudio({
   }
 
   async function createSanbornEdition() {
-    const editionYear = normalizeSanbornEditionYear(editionDraft.year);
-
-    if (!editionYear) {
+    if (!editionCreationValidation.valid || !editionCreationValidation.editionYear) {
       setSaveStatus("error");
-      setSaveMessage("Enter a valid four-digit Sanborn edition year.");
-      return;
-    }
-
-    const duplicateEdition = findDuplicateSanbornEdition({
-      atlases: atlasInventory.atlases,
-      editionYear,
-      volumeLabel: editionDraft.volumeLabel,
-    });
-
-    if (duplicateEdition) {
-      setSaveStatus("error");
-      setSaveMessage("That Sanborn edition already exists for this town and volume. Select the saved edition instead.");
+      setSaveMessage(editionCreationValidation.reason ?? "Sanborn edition creation details are invalid.");
       return;
     }
 
     await saveAtlas({
-      title: editionDraft.title || `${initialData.activeTownPackage?.name ?? "Town"} ${editionYear} Sanborn Atlas`,
-      editionYear: String(editionYear),
+      title: editionDraft.title || `${initialData.activeTownPackage?.name ?? "Town"} ${editionCreationValidation.editionYear} Sanborn Atlas`,
+      editionYear: String(editionCreationValidation.editionYear),
       editionDate: editionDraft.editionDate,
       volumeLabel: editionDraft.volumeLabel,
       expectedPageCount: editionDraft.expectedPageCount,
@@ -4404,7 +4557,7 @@ export function HistoricalMapStudio({
       <section className="sanborn-station-overview" aria-label="Town Package dashboard">
         <div className="sanborn-station-overview__hero">
           <p className="panel__eyebrow">Town Package</p>
-          <h2>{initialData.activeTownPackage ? `${initialData.activeTownPackage.name} ${initialData.activeMapYear ?? "No edition selected"}` : "No town selected"}</h2>
+          <h2>{initialData.activeTownPackage ? `${initialData.activeTownPackage.name} ${activeAtlas?.editionYear ?? "No active Sanborn edition"}` : "No town selected"}</h2>
           <p>{initialData.activeTownPackage?.region ?? "Select a town package to begin reconstruction."}</p>
         </div>
         <div className="sanborn-station-metrics" aria-label="Reconstruction progress metrics">
@@ -4708,6 +4861,7 @@ export function HistoricalMapStudio({
               </button>
             </div>
             <p className="sanborn-atlas-empty">Only saved Sanborn editions are listed. New years are created explicitly.</p>
+            {!activeAtlas ? <p className="sanborn-atlas-warning">No active Sanborn edition</p> : null}
             <div className="sanborn-edition-list" aria-label="Saved Sanborn editions">
               {atlasInventory.atlases.length === 0 ? <p className="sanborn-atlas-empty">No saved editions exist for this town yet.</p> : null}
               {atlasInventory.atlases.map((atlas) => {
@@ -4742,19 +4896,41 @@ export function HistoricalMapStudio({
                 );
               })}
             </div>
+            {archivedSanbornEditions.length > 0 ? (
+              <div className="sanborn-edition-list" aria-label="Archived Sanborn editions">
+                <strong>Archived editions</strong>
+                {archivedSanbornEditions.map((atlas) => (
+                  <article className="sanborn-edition-list__item is-archived" key={atlas.atlasId}>
+                    <span>{atlas.editionYear}{atlas.volumeLabel ? ` ${atlas.volumeLabel}` : ""}</span>
+                    <span>Archived {formatDate(atlas.archivedAt)}</span>
+                    <button className="sanborn-button" disabled={studioWriteUnavailable || atlasSaveActionsDisabled} onClick={() => void restoreArchivedEdition(atlas.atlasId)} type="button">Restore edition</button>
+                  </article>
+                ))}
+              </div>
+            ) : null}
             {editionManagerOpen ? (
               <div className="sanborn-edition-create" aria-label="Add Sanborn edition">
                 <strong>+ Add year</strong>
-                <label>Year<input inputMode="numeric" value={editionDraft.year} onChange={(event) => setEditionDraft({ ...editionDraft, year: event.target.value })} placeholder="1888" /></label>
-                <label>Edition date<input value={editionDraft.editionDate} onChange={(event) => setEditionDraft({ ...editionDraft, editionDate: event.target.value })} placeholder="YYYY-MM-DD" /></label>
-                <label>Atlas title<input value={editionDraft.title} onChange={(event) => setEditionDraft({ ...editionDraft, title: event.target.value })} placeholder="Texarkana 1888 Sanborn Atlas" /></label>
-                <label>Volume<input value={editionDraft.volumeLabel} onChange={(event) => setEditionDraft({ ...editionDraft, volumeLabel: event.target.value })} /></label>
-                <label>Expected pages<input min="1" type="number" value={editionDraft.expectedPageCount} onChange={(event) => setEditionDraft({ ...editionDraft, expectedPageCount: event.target.value })} /></label>
-                <label>Notes<textarea value={editionDraft.notes} onChange={(event) => setEditionDraft({ ...editionDraft, notes: event.target.value })} /></label>
-                <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled} onClick={() => void createSanbornEdition()} type="button">Create edition</button>
+                <label>Year<input disabled={editionCreationControlsDisabled} inputMode="numeric" value={editionDraft.year} onChange={(event) => setEditionDraft({ ...editionDraft, year: event.target.value })} placeholder="1888" /></label>
+                <label>Edition date<input disabled={editionCreationControlsDisabled} value={editionDraft.editionDate} onChange={(event) => setEditionDraft({ ...editionDraft, editionDate: event.target.value })} placeholder="YYYY-MM-DD" /></label>
+                <label>Atlas title<input disabled={editionCreationControlsDisabled} value={editionDraft.title} onChange={(event) => setEditionDraft({ ...editionDraft, title: event.target.value })} placeholder="Texarkana 1888 Sanborn Atlas" /></label>
+                <label>Volume<input disabled={editionCreationControlsDisabled} value={editionDraft.volumeLabel} onChange={(event) => setEditionDraft({ ...editionDraft, volumeLabel: event.target.value })} /></label>
+                <label>Expected pages<input disabled={editionCreationControlsDisabled} min="1" type="number" value={editionDraft.expectedPageCount} onChange={(event) => setEditionDraft({ ...editionDraft, expectedPageCount: event.target.value })} /></label>
+                <label>Notes<textarea disabled={editionCreationControlsDisabled} value={editionDraft.notes} onChange={(event) => setEditionDraft({ ...editionDraft, notes: event.target.value })} /></label>
+                {editionCreationDisabledReason ? <p className="sanborn-atlas-warning">{editionCreationDisabledReason}</p> : null}
+                <button
+                  className="sanborn-button sanborn-button--primary"
+                  disabled={studioWriteUnavailable || atlasSaveActionsDisabled || !editionCreationValidation.valid}
+                  onClick={() => void createSanbornEdition()}
+                  type="button"
+                >
+                  Create edition
+                </button>
               </div>
             ) : null}
           </section>
+          {activeAtlas ? (
+            <>
           <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&townPackageId=${event.target.value}`)}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name}</option>)}</select></label>
           <label>Edition/year<select value={initialData.activeMapYear ?? ""} onChange={(event) => {
             if (event.target.value === "__add_year__") {
@@ -4762,7 +4938,7 @@ export function HistoricalMapStudio({
               return;
             }
             router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}&mapYear=${event.target.value}`);
-          }}>{initialData.availableMapYears.map((year) => <option key={year} value={year}>{year}</option>)}<option value="__add_year__">+ Add year</option></select></label>
+          }}>{availableEditionYears.map((year) => <option key={year} value={year}>{year}</option>)}<option value="__add_year__">+ Add year</option></select></label>
           <label>Year<input disabled={!activeAtlas || atlasReadOnly} inputMode="numeric" value={activeAtlas?.editionYear ?? ""} onChange={(event) => {
             const year = normalizeSanbornEditionYear(event.target.value);
             if (year) patchActiveAtlas({ editionYear: year });
@@ -4804,6 +4980,8 @@ export function HistoricalMapStudio({
             <dt>Edition progress</dt>
             <dd>{reconstructionModel.edition.completionPercent}%</dd>
           </dl>
+            </>
+          ) : null}
         </>
       );
     }
@@ -5256,7 +5434,7 @@ export function HistoricalMapStudio({
           activeSourceRecordId={selectedAsset?.sourceRecordId ?? activeAtlas?.sourceRecordId ?? null}
           townProgress={reconstructionModel.town}
           towns={initialData.townPackages}
-          years={initialData.availableMapYears}
+          years={availableEditionYears}
           onAddEdition={() => {
             setEditionManagerOpen(true);
             changeAtlasWorkflowStep("source");
@@ -5363,7 +5541,7 @@ export function HistoricalMapStudio({
         </button>
         {leftPanelCollapsed ? null : (
           <SanbornAtlasNavigator
-            activeMapYear={initialData.activeMapYear}
+            activeMapYear={activeAtlas?.editionYear ?? null}
             activeTownPackage={initialData.activeTownPackage}
             assets={sheets}
             inventory={atlasInventory}
@@ -5424,7 +5602,7 @@ export function HistoricalMapStudio({
           activeSourceRecordId={selectedAsset?.sourceRecordId ?? activeAtlas?.sourceRecordId ?? null}
           townProgress={reconstructionModel.town}
           towns={initialData.townPackages}
-          years={initialData.availableMapYears}
+          years={availableEditionYears}
           onPieceChange={(pieceId) => {
             if (isGpsAlignmentStep) {
               selectMapPieceForPlacement(pieceId);

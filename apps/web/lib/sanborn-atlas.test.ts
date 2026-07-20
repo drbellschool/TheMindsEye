@@ -29,6 +29,7 @@ import {
   summarizeSanbornPageDependencies,
   validateMapPieceSaveTownScope,
   validateNormalizedPolygon,
+  validateSanbornEditionCreation,
   type SanbornMapPieceRecord,
 } from "./sanborn-atlas.ts";
 
@@ -241,6 +242,62 @@ test("edition helpers list only saved non-archived editions and reject duplicate
   assert.equal(findDuplicateSanbornEdition({ atlases, editionYear: 1892, volumeLabel: null }), null);
 });
 
+test("edition creation validation allows valid drafts without an active atlas", () => {
+  const valid = validateSanbornEditionCreation({
+    townPackageId: "town-texarkana",
+    year: "1888",
+    editionDate: "1888-02-01",
+    expectedPageCount: "8",
+    volumeLabel: "1",
+    atlases: [
+      { atlasId: "atlas-1885-archived", editionYear: 1885, volumeLabel: "1", archivedAt: "2026-07-19T00:00:00.000Z" },
+    ],
+  });
+
+  assert.equal(valid.valid, true);
+  assert.equal(valid.reason, null);
+  assert.equal(valid.editionYear, 1888);
+  assert.equal(valid.expectedPageCount, 8);
+
+  assert.match(
+    validateSanbornEditionCreation({
+      townPackageId: "town-texarkana",
+      year: "88",
+      atlases: [],
+    }).reason ?? "",
+    /four-digit/,
+  );
+  assert.match(
+    validateSanbornEditionCreation({
+      townPackageId: "town-texarkana",
+      year: "1888",
+      editionDate: "1888-02-31",
+      atlases: [],
+    }).reason ?? "",
+    /valid edition date/,
+  );
+  assert.match(
+    validateSanbornEditionCreation({
+      townPackageId: "town-texarkana",
+      year: "1888",
+      expectedPageCount: "0",
+      atlases: [],
+    }).reason ?? "",
+    /positive whole number/,
+  );
+  assert.match(
+    validateSanbornEditionCreation({
+      townPackageId: "town-texarkana",
+      year: "1888",
+      volumeLabel: "1",
+      atlases: [
+        { atlasId: "atlas-1888", editionYear: 1888, volumeLabel: "1", archivedAt: null },
+      ],
+    }).reason ?? "",
+    /already exists/,
+  );
+});
+
 test("page dependency summaries distinguish empty pages from pages that should be archived", () => {
   const emptySummary = summarizeSanbornPageDependencies({
     pageId: "page-empty",
@@ -363,6 +420,9 @@ test("edition and page management routes preserve scope and linked source safety
 
   assert.match(atlasRoute, /\.is\("archived_at", null\)/);
   assert.match(atlasRoute, /\.rpc\("archive_sanborn_atlas"/);
+  assert.match(atlasRoute, /body\.restore === true/);
+  assert.match(atlasRoute, /\.update\(\{ archived_at: null, archive_reason: null \}\)/);
+  assert.match(atlasRoute, /An active Sanborn edition already uses this year and volume/);
   assert.match(atlasRoute, /Developed editions must be archived instead of deleted/);
   assert.match(pageRoute, /\.rpc\("move_sanborn_atlas_page_to_atlas"/);
   assert.match(pageRoute, /\.rpc\("archive_sanborn_atlas_page"/);
