@@ -3262,6 +3262,16 @@ export function HistoricalMapStudio({
       setSelectedAtlasPageId("");
       setSelectedMapPieceId("");
       setSelectedAssetId("");
+      setSelectedIndexRegionId("");
+      setPlacementAnchorAssetId("");
+      setPiecePlacementAnchorId("");
+      setTownIndexDraftPoints([]);
+      setMapPieceGeoreferences([]);
+      setTownIndexRegions([]);
+      setSheets([]);
+      setHistory(buildInitialHistory(createPresentFromState({ ...initialData, sheets: [], placements: [] })));
+      setGeoHistory(buildInitialSheetGeographicHistory(createSheetGeographicPresentFromState({ ...initialData, sheets: [], placements: [], sheetGeoreferences: [], georeferences: [] })));
+      setGeoreferenceDraft(createGeoreferenceDraft({ ...initialData, sheets: [], placements: [], sheetGeoreferences: [], georeferences: [] }, null));
       setEditionManagerOpen(true);
       changeAtlasWorkflowStep("source");
       setAtlasInventory((current) => {
@@ -5569,17 +5579,19 @@ export function HistoricalMapStudio({
             <div className="sanborn-station-inspector__body">{renderInspectorBody()}</div>
           </aside>
         )}
-        <button
-          aria-controls="sanborn-station-inspector"
-          aria-expanded={!rightPanelCollapsed}
-          className={`sanborn-layout-tab sanborn-layout-tab--right${rightPanelCollapsed ? " is-collapsed" : ""}`}
-          onClick={() => setRightPanelCollapsed((value) => !value)}
-          title="Toggle inspector (])"
-          type="button"
-        >
-          <span aria-hidden="true">{rightPanelCollapsed ? "<" : ">"}</span>
-          <span>{rightPanelCollapsed ? "Show inspector" : "Hide inspector"}</span>
-        </button>
+        {rightPanelCollapsed ? (
+          <button
+            aria-controls="sanborn-station-inspector"
+            aria-expanded={false}
+            className="sanborn-layout-tab sanborn-layout-tab--right is-collapsed"
+            onClick={() => setRightPanelCollapsed(false)}
+            title="Show inspector (])"
+            type="button"
+          >
+            <span aria-hidden="true">&lt;</span>
+            <span>Show inspector</span>
+          </button>
+        ) : null}
       </div>
     </section>
   );

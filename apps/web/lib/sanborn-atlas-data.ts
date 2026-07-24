@@ -205,6 +205,7 @@ export async function loadSanbornAtlasInventory(input: {
     .from("sanborn_atlases")
     .select(atlasSelectWithArchive)
     .eq("town_package_id", town.id)
+    .is("archived_at", null)
     .order("edition_year", { ascending: false })
     .order("volume_label", { ascending: true });
 
@@ -216,6 +217,7 @@ export async function loadSanbornAtlasInventory(input: {
       .from("sanborn_atlases")
       .select(atlasSelectBase)
       .eq("town_package_id", town.id)
+      .is("archived_at", null)
       .order("edition_year", { ascending: false })
       .order("volume_label", { ascending: true });
   }
@@ -224,24 +226,30 @@ export async function loadSanbornAtlasInventory(input: {
     return unavailableState(`Sanborn atlas inventory is unavailable: ${atlasResult.error.message}. Apply migration 0010 to enable atlas/page/piece workflow.`, assets);
   }
 
-  const allAtlases = ((atlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
-  const atlases = allAtlases.filter((atlas) => !atlas.archivedAt);
-  const archivedAtlases = allAtlases.filter((atlas) => Boolean(atlas.archivedAt));
-  const atlasByRowId = new Map(allAtlases.map((atlas) => [atlas.rowId, atlas]));
-  const activeAtlasIds = new Set(atlases.map((atlas) => atlas.atlasId));
+  const atlases = ((atlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas).filter((atlas) => !atlas.archivedAt);
+  const archivedAtlasResult = await supabase
+    .from("sanborn_atlases")
+    .select(atlasSelectWithArchive)
+    .eq("town_package_id", town.id)
+    .not("archived_at", "is", null)
+    .order("edition_year", { ascending: false })
+    .order("volume_label", { ascending: true });
+  const archivedAtlases = archivedAtlasResult.error ? [] : ((archivedAtlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
+  const atlasByRowId = new Map(atlases.map((atlas) => [atlas.rowId, atlas]));
   const activeAtlas = atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
   let allPages: SanbornAtlasPageRecord[] = [];
   let pages: SanbornAtlasPageRecord[] = [];
   let pieces: SanbornMapPieceRecord[] = [];
 
-  if (allAtlases.length > 0) {
+  if (atlases.length > 0) {
     const pageSelectWithClassification =
       "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, archived_at, archive_reason, review_status, evidence_classification, updated_at";
     const pageSelectBase = "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at";
     let pageResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
       .from("sanborn_atlas_pages")
       .select(pageSelectWithClassification)
-      .in("atlas_id", allAtlases.map((atlas) => atlas.rowId))
+      .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+      .is("archived_at", null)
       .order("page_sequence", { ascending: true });
 
     if (
@@ -254,7 +262,8 @@ export async function loadSanbornAtlasInventory(input: {
       pageResult = await supabase
         .from("sanborn_atlas_pages")
         .select(pageSelectBase)
-        .in("atlas_id", allAtlases.map((atlas) => atlas.rowId))
+        .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+        .is("archived_at", null)
         .order("page_sequence", { ascending: true });
     }
 
@@ -267,7 +276,7 @@ export async function loadSanbornAtlasInventory(input: {
       .map((row) => mapPage(row, atlasByRowId, assetByRowId))
       .filter((page): page is SanbornAtlasPageRecord => Boolean(page));
     allPages = mappedPages;
-    pages = mappedPages.filter((page) => !page.archivedAt && activeAtlasIds.has(page.atlasId));
+    pages = mappedPages.filter((page) => !page.archivedAt);
 
     if (pages.length > 0) {
       const pieceResult = await supabase
