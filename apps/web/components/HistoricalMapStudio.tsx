@@ -3231,6 +3231,24 @@ export function HistoricalMapStudio({
 
     if (response.ok && payload?.ok) {
       setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+      setSelectedAtlasId("");
+      setSelectedAtlasPageId("");
+      setSelectedAssetId("");
+      setSelectedMapPieceId("");
+      setSelectedIndexRegionId("");
+      setPlacementAnchorAssetId("");
+      setPiecePlacementAnchorId("");
+      setTownIndexDraftPoints([]);
+      setMapPieceGeoreferences([]);
+      setTownIndexRegions([]);
+      setSheets([]);
+      setHistory(buildInitialHistory(createPresentFromState({ ...initialData, sheets: [], placements: [] })));
+      setGeoHistory(buildInitialSheetGeographicHistory(createSheetGeographicPresentFromState({ ...initialData, sheets: [], placements: [], sheetGeoreferences: [], georeferences: [] })));
+      setGeoreferenceDraft(createGeoreferenceDraft({ ...initialData, sheets: [], placements: [], sheetGeoreferences: [], georeferences: [] }, null));
+      setSaveStatus("idle");
+      setSaveMessage("");
+      setAtlasInventory((current) => ({ ...current, pages: [], pieces: [], activeAtlasId: null, activePageId: null }));
+      router.replace(`/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&workflow=source`);
       router.refresh();
     }
   }

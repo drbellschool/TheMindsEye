@@ -1097,13 +1097,27 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const sourceRows = (sourceRecordsResult.data ?? []) as SourceRecordRow[];
   const mapLayerRows = (mapLayersResult.data ?? []) as MapLayerRow[];
   const assetRows = (assetsResult.data ?? []) as SanbornAssetRow[];
-  const assets = await mapAssets(supabase, activeTownPackage, assetRows, sourceRows);
+  const allAssets = await mapAssets(supabase, activeTownPackage, assetRows, sourceRows);
   const atlasInventory = await loadSanbornAtlasInventory({
     supabase,
     town: activeTownPackage,
-    assets,
+    assets: allAssets,
     mapYear: activeMapYear,
   });
+  const activeAssetIds = [...new Set(atlasInventory.pages.map((page) => page.sanbornSheetAssetId))];
+  let activeAssetRows: SanbornAssetRow[] = [];
+  if (activeAssetIds.length > 0) {
+    const activeAssetsResult = await supabase
+      .from("sanborn_sheet_assets")
+      .select("id, asset_id, town_package_id, source_record_id, map_layer_id, sheet_number, original_filename, storage_bucket, storage_path, mime_type, byte_size, width, height, sha256_checksum, source_url, archive_name, rights_note, evidence_classification, review_status, intake_notes, uploaded_at, updated_at")
+      .eq("town_package_id", activeTownPackage.id)
+      .in("asset_id", activeAssetIds);
+    if (activeAssetsResult.error) {
+      return createEmptyState({ mode: "read_only", warningMessage: `Active Sanborn sheet query failed: ${activeAssetsResult.error.message}`, townPackages, activeTownPackage, activeMapYear: null });
+    }
+    activeAssetRows = (activeAssetsResult.data ?? []) as SanbornAssetRow[];
+  }
+  const assets = await mapAssets(supabase, activeTownPackage, activeAssetRows, sourceRows);
   let townIndexRegionRows: TownIndexRegionRow[] = [];
   let workspaceWarning: string | undefined;
   let townIndexWarning: string | undefined;
@@ -1153,7 +1167,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   } else {
     workspaceRow = workspaceResult.data;
 
-    if (workspaceRow) {
+    if (workspaceRow && assets.length > 0) {
       const placementsResult = await supabase
         .from("historical_map_sheet_placements")
         .select("sanborn_sheet_asset_id, x, y, scale_x, scale_y, skew_x, skew_y, rotation, opacity, layer_order, is_visible, is_locked, is_flipped_horizontally, is_flipped_vertically")
@@ -1224,7 +1238,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const savedEditionYears = getSavedSanbornEditionYears(atlasInventory.atlases);
   const activeAtlasForYear = atlasInventory.atlases.find((atlas) => atlas.atlasId === atlasInventory.activeAtlasId) ?? null;
   const resolvedActiveMapYear = activeAtlasForYear?.editionYear ?? null;
-  const workspace = mapWorkspace(workspaceRow, activeTownPackage, resolvedActiveMapYear ?? activeMapYear);
+  const workspace = activeAtlasForYear ? mapWorkspace(workspaceRow, activeTownPackage, resolvedActiveMapYear ?? activeMapYear) : null;
   const savedPlacements = mapPlacements(placementRows, assets);
   const placements = mergeSavedAndDefaultPlacements(assets, savedPlacements);
   const savedSheetGeoreferences = mapSheetGeoreferences(sheetGeoreferenceRows, assets);

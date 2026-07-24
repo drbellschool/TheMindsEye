@@ -356,12 +356,18 @@ test("migration 0017 adds service-role-only edition archive and scoped page move
 
 test("edition and page management routes preserve scope and linked source safety", () => {
   const atlasRoute = readRoute(atlasRoutePath);
+  const atlasDataLoader = readFileSync("./lib/sanborn-atlas-data.ts", "utf8");
+  const studioDataLoader = readFileSync("./lib/historical-map-studio-data.ts", "utf8");
   const pageRoute = readRoute(pageRoutePath);
   const uploadRoute = readRoute(uploadRoutePath);
   const deleteRoute = readRoute(deleteRoutePath);
   const replaceRoute = readRoute(replaceRoutePath);
 
   assert.match(atlasRoute, /\.is\("archived_at", null\)/);
+  assert.match(atlasDataLoader, /\.is\("archived_at", null\)/);
+  assert.match(studioDataLoader, /activeAssetIds = \[\.\.\.new Set\(atlasInventory\.pages\.map/);
+  assert.match(studioDataLoader, /\.in\("asset_id", activeAssetIds\)/);
+  assert.match(studioDataLoader, /if \(workspaceRow && assets\.length > 0\)/);
   assert.match(atlasRoute, /\.rpc\("archive_sanborn_atlas"/);
   assert.match(atlasRoute, /Developed editions must be archived instead of deleted/);
   assert.match(pageRoute, /\.rpc\("move_sanborn_atlas_page_to_atlas"/);

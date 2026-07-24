@@ -217,6 +217,7 @@ export async function loadSanbornAtlasInventory(input: {
       .from("sanborn_atlases")
       .select(atlasSelectBase)
       .eq("town_package_id", town.id)
+      .is("archived_at", null)
       .order("edition_year", { ascending: false })
       .order("volume_label", { ascending: true });
   }
@@ -240,6 +241,7 @@ export async function loadSanbornAtlasInventory(input: {
       .from("sanborn_atlas_pages")
       .select(pageSelectWithClassification)
       .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+      .is("archived_at", null)
       .order("page_sequence", { ascending: true });
 
     if (
@@ -253,6 +255,7 @@ export async function loadSanbornAtlasInventory(input: {
         .from("sanborn_atlas_pages")
         .select(pageSelectBase)
         .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+        .is("archived_at", null)
         .order("page_sequence", { ascending: true });
     }
 
