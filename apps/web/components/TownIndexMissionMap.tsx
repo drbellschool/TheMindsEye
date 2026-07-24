@@ -30,6 +30,8 @@ type TownIndexMissionMapProps = {
   onDraftPointsChange: (points: SanbornNormalizedPoint[]) => void;
   onUpdateRegionPolygon: (regionId: string, polygon: SanbornNormalizedPoint[]) => void;
   onOpenLinkedRegion: (region: SanbornTownIndexRegionRecord) => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 };
 
 const statusLabels: Record<SanbornTownIndexStatus, string> = {
@@ -103,6 +105,8 @@ export function TownIndexMissionMap({
   onDraftPointsChange,
   onUpdateRegionPolygon,
   onOpenLinkedRegion,
+  zoom = 1,
+  onZoomChange,
 }: TownIndexMissionMapProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingVertex, setDraggingVertex] = useState<{ regionId: string; vertexIndex: number } | null>(null);
@@ -134,6 +138,12 @@ export function TownIndexMissionMap({
     if (point) {
       onDraftPointsChange([...draftPoints, point]);
     }
+  }
+
+  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+    if (!onZoomChange) return;
+    event.preventDefault();
+    onZoomChange(Math.max(0.5, Math.min(4, Number((zoom + (event.deltaY < 0 ? 0.1 : -0.1)).toFixed(2)))));
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
@@ -184,13 +194,14 @@ export function TownIndexMissionMap({
         </div>
       </header>
 
-      <div className="town-index-mission-map__frame">
-        {indexAsset.signedUrl ? (
-          <img alt={`Town Index source page ${indexPage.displayLabel || indexPage.pageSequence}`} src={indexAsset.signedUrl} />
-        ) : (
-          <div className="town-index-mission-map__missing-image">Signed index image unavailable.</div>
-        )}
-        <svg
+      <div className="town-index-mission-map__frame" onWheel={handleWheel}>
+        <div className="town-index-mission-map__canvas" style={{ transform: `scale(${zoom})` }}>
+          {indexAsset.signedUrl ? (
+            <img alt={`Town Index source page ${indexPage.displayLabel || indexPage.pageSequence}`} src={indexAsset.signedUrl} />
+          ) : (
+            <div className="town-index-mission-map__missing-image">Signed index image unavailable.</div>
+          )}
+          <svg
           aria-label="Manual source region editor"
           className="town-index-mission-map__overlay"
           onPointerDown={handlePointerDown}
@@ -200,7 +211,7 @@ export function TownIndexMissionMap({
           preserveAspectRatio="none"
           ref={svgRef}
           viewBox={`0 0 ${indexAsset.width} ${indexAsset.height}`}
-        >
+          >
           {sortedRegions.map((region) => {
             const selected = region.regionId === selectedRegionId;
             const center = centroid(region.sourcePolygon);
@@ -281,7 +292,8 @@ export function TownIndexMissionMap({
               })}
             </>
           ) : null}
-        </svg>
+          </svg>
+        </div>
       </div>
 
       <footer className="town-index-mission-map__legend" aria-label="Town Index status legend">

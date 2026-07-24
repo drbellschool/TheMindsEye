@@ -20,6 +20,7 @@ import {
   type SanbornAtlasWorkflowStep,
 } from "@/components/SanbornAtlasNavigator";
 import { ReconstructionContextBar } from "@/components/ReconstructionContextBar";
+import { SanbornEditionSheetNavigator } from "@/components/SanbornEditionSheetNavigator";
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { SanbornPieceList } from "@/components/SanbornPieceList";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
@@ -907,6 +908,7 @@ export function HistoricalMapStudio({
   const [selectedIndexRegionId, setSelectedIndexRegionId] = useState(initialSelection.indexRegionId ?? "");
   const [townIndexMapMode, setTownIndexMapMode] = useState<TownIndexMissionMapMode>("select");
   const [townIndexDraftPoints, setTownIndexDraftPoints] = useState<SanbornNormalizedPoint[]>([]);
+  const [sourceZoom, setSourceZoom] = useState(1);
   const [lastNonGpsWorkflowStep, setLastNonGpsWorkflowStep] = useState<Exclude<SanbornAtlasWorkflowStep, "gps_alignment">>("source");
   const pendingStudioSelectionRef = useRef<PendingStudioSelection | null>(null);
   const initialSelectionAppliedRef = useRef(false);
@@ -4615,6 +4617,7 @@ export function HistoricalMapStudio({
   function renderSourceWorkspace() {
     return (
       <section className="sanborn-station-panel sanborn-source-preview" aria-label="Source Record preview">
+        <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "page_classification")} />
         <div className="sanborn-source-region-toolbar" aria-label="Functional source region tools">
           <button className={`sanborn-button${townIndexMapMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("select")} type="button">Select</button>
           <button
@@ -4633,6 +4636,13 @@ export function HistoricalMapStudio({
           <button className="sanborn-button" disabled={townIndexDraftPoints.length === 0} onClick={() => { setTownIndexDraftPoints([]); setTownIndexMapMode("select"); }} type="button">Cancel</button>
           <button className="sanborn-button" disabled={atlasReadOnly || !selectedSourceRegion} onClick={() => void deleteSelectedTownIndexRegion()} type="button">Delete region</button>
           <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || !selectedSourceRegion || saveStatus === "saving"} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save regions</button>
+          <button className="sanborn-button" onClick={() => setSourceZoom((value) => Math.max(0.5, Number((value - 0.1).toFixed(2))))} type="button">Zoom out</button>
+          <span className="sanborn-source-region-toolbar__zoom" aria-label="Source image zoom">{Math.round(sourceZoom * 100)}%</span>
+          <button className="sanborn-button" onClick={() => setSourceZoom((value) => Math.min(4, Number((value + 0.1).toFixed(2))))} type="button">Zoom in</button>
+          <button className="sanborn-button" onClick={() => setSourceZoom(1)} type="button">Fit image</button>
+          <button className="sanborn-button" disabled={!selectedSourceRegion} onClick={() => setSourceZoom(1.5)} type="button">Fit selected region</button>
+          <button className="sanborn-button" onClick={() => setSourceZoom(1)} type="button">Reset view</button>
+          <span className={`sanborn-source-region-toolbar__status is-${saveStatus}`} aria-live="polite">{isDirty ? "Unsaved" : saveStatusText}</span>
         </div>
         {selectedAtlasPage && selectedAtlasPageAsset ? (
           <TownIndexMissionMap
@@ -4647,6 +4657,8 @@ export function HistoricalMapStudio({
             onOpenLinkedRegion={(region) => openTownIndexRegionLink(region, "numbered_sheets")}
             onSelectRegion={setSelectedIndexRegionId}
             onUpdateRegionPolygon={(regionId, polygon) => patchTownIndexRegion(regionId, { sourcePolygon: polygon })}
+            onZoomChange={setSourceZoom}
+            zoom={sourceZoom}
           />
         ) : (
           <div className="sanborn-atlas-empty">Select a page with an available signed image.</div>
@@ -4659,6 +4671,7 @@ export function HistoricalMapStudio({
     if (!reconstructionModel.index.indexPage) {
       return (
         <section className="town-index-mission-map">
+          <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} onSelectIndex={() => undefined} onSelectPage={(pageId) => selectAtlasPage(pageId, "town_index")} />
           <div className="town-index-mission-map__empty">
             <strong>No primary Town Index page is designated for this edition.</strong>
             <span>Classify an uploaded page as Index or mixed, then explicitly set it as the primary Town Index.</span>
@@ -4687,6 +4700,8 @@ export function HistoricalMapStudio({
     }
 
     return (
+      <section className="town-index-workspace-with-navigator">
+      <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "town_index")} />
       <TownIndexMissionMap
         draftPoints={townIndexDraftPoints}
         indexAsset={reconstructionModel.index.indexAsset}
@@ -4699,13 +4714,17 @@ export function HistoricalMapStudio({
         onOpenLinkedRegion={(region) => openTownIndexRegionLink(region, "numbered_sheets")}
         onSelectRegion={setSelectedIndexRegionId}
         onUpdateRegionPolygon={(regionId, polygon) => patchTownIndexRegion(regionId, { sourcePolygon: polygon })}
+        onZoomChange={setSourceZoom}
+        zoom={sourceZoom}
       />
+      </section>
     );
   }
 
   function renderSheetInventoryWorkspace() {
     return (
       <section className="sanborn-sheet-inventory-workspace" aria-label="Sheet Inventory">
+        <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "numbered_sheets")} />
         {reconstructionModel.sheetProgress.length === 0 ? <p className="sanborn-atlas-empty">No sheets are loaded for this edition.</p> : null}
         {reconstructionModel.sheetProgress
           .slice()
@@ -4743,6 +4762,8 @@ export function HistoricalMapStudio({
 
   function renderMapPiecesWorkspace() {
     return (
+      <section className="sanborn-workspace-with-navigator" aria-label="Map Pieces workspace">
+      <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "piece_inventory")} />
       <SanbornPageWorkbench
         asset={selectedAtlasPageAsset}
         page={selectedAtlasPage}
@@ -4767,12 +4788,14 @@ export function HistoricalMapStudio({
         onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
         onSelectPiece={setSelectedMapPieceId}
       />
+      </section>
     );
   }
 
   function renderMapPlacementWorkspace() {
     return (
       <section className="sanborn-map-placement-workspace" ref={minimalMapRef}>
+        <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "gps_alignment")} />
         {!selectedMapPiece ? <p className="minimal-sanborn-gps__notice is-warning">Select a saved map piece before using Map placement.</p> : null}
         {selectedAtlasPage && !selectedPageSupportsMapPlacement ? <p className="minimal-sanborn-gps__notice is-warning">{selectedPageToolBlockMessage}</p> : null}
         {selectedMapPiece && !selectedMapPiece.isPersisted ? <p className="minimal-sanborn-gps__notice is-warning">Save map pieces before geographic placement.</p> : null}
