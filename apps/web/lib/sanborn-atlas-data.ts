@@ -227,6 +227,14 @@ export async function loadSanbornAtlasInventory(input: {
   }
 
   const atlases = ((atlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas).filter((atlas) => !atlas.archivedAt);
+  const archivedAtlasResult = await supabase
+    .from("sanborn_atlases")
+    .select(atlasSelectWithArchive)
+    .eq("town_package_id", town.id)
+    .not("archived_at", "is", null)
+    .order("edition_year", { ascending: false })
+    .order("volume_label", { ascending: true });
+  const archivedAtlases = archivedAtlasResult.error ? [] : ((archivedAtlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
   const atlasByRowId = new Map(atlases.map((atlas) => [atlas.rowId, atlas]));
   const activeAtlas = atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
   let allPages: SanbornAtlasPageRecord[] = [];
@@ -297,6 +305,7 @@ export async function loadSanbornAtlasInventory(input: {
     mode: "public",
     dataSource: "supabase",
     atlases,
+    archivedAtlases,
     pages,
     pieces,
     unassignedAssetIds: getUnassignedSanbornUploads(assets, allPages).map((asset) => asset.assetId),

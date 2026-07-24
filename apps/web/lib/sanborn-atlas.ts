@@ -147,6 +147,7 @@ export type SanbornAtlasInventoryState = {
   dataSource: "supabase" | "unavailable";
   warningMessage?: string;
   atlases: SanbornAtlasRecord[];
+  archivedAtlases: SanbornAtlasRecord[];
   pages: SanbornAtlasPageRecord[];
   pieces: SanbornMapPieceRecord[];
   unassignedAssetIds: string[];
@@ -582,6 +583,7 @@ export function createEmptySanbornAtlasInventoryState(input?: Partial<Pick<Sanbo
     dataSource: input?.dataSource ?? "unavailable",
     warningMessage: input?.warningMessage,
     atlases: [],
+    archivedAtlases: [],
     pages: [],
     pieces: [],
     unassignedAssetIds: [],

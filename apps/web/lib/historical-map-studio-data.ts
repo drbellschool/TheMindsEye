@@ -56,7 +56,7 @@ import {
   type StudioWorkspace,
 } from "./historical-map-studio.ts";
 import { sanbornSheetBucket } from "./sanborn-intake.ts";
-import { createEmptySanbornAtlasInventoryState, getSavedSanbornEditionYears } from "./sanborn-atlas.ts";
+import { createEmptySanbornAtlasInventoryState, getSavedSanbornEditionYears, getUnassignedSanbornUploads } from "./sanborn-atlas.ts";
 import { loadSanbornAtlasInventory } from "./sanborn-atlas-data.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 
@@ -1098,7 +1098,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
   const mapLayerRows = (mapLayersResult.data ?? []) as MapLayerRow[];
   const assetRows = (assetsResult.data ?? []) as SanbornAssetRow[];
   const allAssets = await mapAssets(supabase, activeTownPackage, assetRows, sourceRows);
-  const atlasInventory = await loadSanbornAtlasInventory({
+  let atlasInventory = await loadSanbornAtlasInventory({
     supabase,
     town: activeTownPackage,
     assets: allAssets,
@@ -1118,6 +1118,10 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     activeAssetRows = (activeAssetsResult.data ?? []) as SanbornAssetRow[];
   }
   const assets = await mapAssets(supabase, activeTownPackage, activeAssetRows, sourceRows);
+  atlasInventory = {
+    ...atlasInventory,
+    unassignedAssetIds: getUnassignedSanbornUploads(assets, atlasInventory.pages).map((asset) => asset.assetId),
+  };
   let townIndexRegionRows: TownIndexRegionRow[] = [];
   let workspaceWarning: string | undefined;
   let townIndexWarning: string | undefined;
@@ -1171,7 +1175,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
       const placementsResult = await supabase
         .from("historical_map_sheet_placements")
         .select("sanborn_sheet_asset_id, x, y, scale_x, scale_y, skew_x, skew_y, rotation, opacity, layer_order, is_visible, is_locked, is_flipped_horizontally, is_flipped_vertically")
-        .eq("workspace_id", workspaceRow.id);
+        .eq("workspace_id", workspaceRow.id)
+        .in("sanborn_sheet_asset_id", activeAssetRows.map((asset) => asset.id));
 
       if (placementsResult.error) {
         workspaceWarning = `Saved placement query failed: ${placementsResult.error.message}`;
@@ -1184,7 +1189,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         .select(
           "sheet_georeference_id, sanborn_sheet_asset_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, longitude_span, latitude_span, rotation, scale_x, scale_y, skew_x, skew_y, pivot_x, pivot_y, warp_type, projective_matrix, transform_version, placement_status, is_flipped_horizontally, is_flipped_vertically, opacity, layer_order, is_visible, is_locked, georeference_status, review_status, evidence_classification, updated_at",
         )
-        .eq("workspace_id", workspaceRow.id);
+        .eq("workspace_id", workspaceRow.id)
+        .in("sanborn_sheet_asset_id", activeAssetRows.map((asset) => asset.id));
 
       if (sheetGeoreferencesResult.error) {
         workspaceWarning = `Saved sheet geographic placement query failed: ${sheetGeoreferencesResult.error.message}`;
@@ -1197,7 +1203,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         .select(
           "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, is_visible, is_locked, review_status, evidence_classification, notes, updated_at",
         )
-        .eq("workspace_id", workspaceRow.id);
+        .eq("workspace_id", workspaceRow.id)
+        .in("atlas_page_id", atlasInventory.pages.map((page) => page.rowId));
 
       if (mapPieceGeoreferencesResult.error) {
         workspaceWarning = `Saved map piece placement query failed: ${mapPieceGeoreferencesResult.error.message}. Apply migration 0011 to enable piece map placement.`;
@@ -1210,7 +1217,8 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
         .select(
           "id, georeference_id, sanborn_sheet_asset_id, target_type, status, transformation_type, north_latitude, south_latitude, east_longitude, west_longitude, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, transform_matrix, residual_error, control_point_count, selected_basemap, overlay_opacity, overlay_visible, show_control_points, show_sheet_boundaries, rendering_mode, review_status, evidence_classification, notes, updated_at",
         )
-        .eq("workspace_id", workspaceRow.id);
+        .eq("workspace_id", workspaceRow.id)
+        .in("sanborn_sheet_asset_id", activeAssetRows.map((asset) => asset.id));
 
       if (georeferencesResult.error) {
         workspaceWarning = `Saved georeference query failed: ${georeferencesResult.error.message}`;

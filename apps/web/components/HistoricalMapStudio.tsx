@@ -995,6 +995,7 @@ export function HistoricalMapStudio({
     warningMessage: initialData.warningMessage,
   });
   const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
+  const archivedSanbornEditions = atlasInventory.archivedAtlases ?? [];
   const activeAtlasPages = atlasInventory.pages
     .filter((page) => page.atlasId === selectedAtlasId)
     .sort(compareSanbornAtlasPagesForWorkflow);
@@ -4760,6 +4761,17 @@ export function HistoricalMapStudio({
                 );
               })}
             </div>
+            {archivedSanbornEditions.length > 0 ? (
+              <div className="sanborn-edition-list" aria-label="Archived Sanborn editions">
+                <strong>Archived editions</strong>
+                {archivedSanbornEditions.map((atlas) => (
+                  <article className="sanborn-edition-list__item is-archived" key={atlas.atlasId}>
+                    <span>{atlas.editionYear}{atlas.volumeLabel ? ` ${atlas.volumeLabel}` : ""}</span>
+                    <span>Archived {formatDate(atlas.archivedAt)}</span>
+                  </article>
+                ))}
+              </div>
+            ) : null}
             {editionManagerOpen ? (
               <div className="sanborn-edition-create" aria-label="Add Sanborn edition">
                 <strong>+ Add year</strong>
