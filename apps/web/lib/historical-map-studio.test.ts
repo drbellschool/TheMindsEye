@@ -654,6 +654,27 @@ test("edition controls do not synthesize town-package years as saved Sanborn edi
   assert.doesNotMatch(activeShell, /townPackageId=\$\{townPackageId\}&year=\$\{initialData\.activeMapYear/);
 });
 
+test("Add Year creation stays enabled after the active edition is archived", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const activeShellStart = studioComponent.indexOf("minimal-sanborn-gps--station-shell");
+  const legacyShellStart = studioComponent.indexOf("Legacy pre-station");
+  const activeShell = studioComponent.slice(activeShellStart, legacyShellStart > activeShellStart ? legacyShellStart : undefined);
+
+  assert.match(studioComponent, /const studioWriteUnavailable = initialData\.mode === "read_only";/);
+  assert.match(studioComponent, /const atlasDataUnavailable = atlasInventory\.mode === "read_only";/);
+  assert.match(studioComponent, /const atlasReadOnly = studioWriteUnavailable \|\| atlasDataUnavailable;/);
+  assert.match(studioComponent, /validateSanbornEditionCreation\(\{[\s\S]*year: editionDraft\.year[\s\S]*atlases: atlasInventory\.atlases/s);
+  assert.match(studioComponent, /disabled=\{studioWriteUnavailable \|\| atlasSaveActionsDisabled \|\| !editionCreationValidation\.valid\}/);
+  assert.match(studioComponent, /!initialData\.activeTownPackage \|\| studioWriteUnavailable \|\| \(!createNewAtlas && atlasDataUnavailable\)/);
+  assert.match(studioComponent, /setAtlasInventory\(\(current\) => \(\{[\s\S]*mode: "public"[\s\S]*atlases:/s);
+  assert.match(studioComponent, /setEditionManagerOpen\(false\);/);
+  assert.match(studioComponent, /No active Sanborn edition/);
+  assert.match(studioComponent, /setSelectedAtlasId\(""\);[\s\S]*setSelectedAtlasPageId\(""\);[\s\S]*setSelectedMapPieceId\(""\);[\s\S]*setSelectedAssetId\(""\);/s);
+  assert.match(studioComponent, /archivedSanbornEditions\.map/);
+  assert.match(studioComponent, /Restore edition/);
+  assert.match(studioComponent, /\{activeAtlas \? \(\s*<>[\s\S]*<label>Town package/s);
+});
+
 test("historical map studio uses compact chrome and sticky atlas actions", () => {
   const shell = readFileSync("components/CommunityShell.tsx", "utf8");
   const navigator = readFileSync("components/SanbornAtlasNavigator.tsx", "utf8");
@@ -699,7 +720,7 @@ test("Historical Map Studio uses recoverable persisted rail collapse controls", 
   assert.match(css, /\.sanborn-station-inspector\s*\{[\s\S]*isolation: isolate;/);
   assert.match(studioComponent, /setSelectedAtlasId\(""\);[\s\S]*setSelectedAtlasPageId\(""\);[\s\S]*setSelectedAssetId\(""\);[\s\S]*setSelectedMapPieceId\(""\);[\s\S]*setSelectedIndexRegionId\(""\);/);
   assert.match(studioComponent, /setMapPieceGeoreferences\(\[\]\);[\s\S]*setSheets\(\[\]\);/);
-  assert.match(studioComponent, /router\.replace\(`\/community\/historical-map-studio\?town=/);
+  assert.match(studioComponent, /router\.push\(`\/community\/historical-map-studio\?town=/);
 });
 
 test("Historical Map Studio compresses global chrome and command status rows", () => {

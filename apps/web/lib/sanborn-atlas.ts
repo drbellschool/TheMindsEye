@@ -352,6 +352,121 @@ export function findDuplicateSanbornEdition(input: {
   );
 }
 
+export type SanbornEditionCreationValidation = {
+  valid: boolean;
+  reason: string | null;
+  editionYear: number | null;
+  expectedPageCount: number | null;
+  duplicateAtlasId: string | null;
+};
+
+function normalizeOptionalUnknownSanbornText(value: unknown, maxLength = 240): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return normalizeOptionalSanbornText(String(value), maxLength);
+}
+
+function normalizeOptionalEditionDate(value: unknown): string | null {
+  const normalized = normalizeOptionalUnknownSanbornText(value, 10);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return "";
+  }
+
+  const [year, month, day] = normalized.split("-").map((part) => Number.parseInt(part, 10));
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
+    return "";
+  }
+
+  return normalized;
+}
+
+export function validateSanbornEditionCreation(input: {
+  townPackageId?: string | null;
+  year: unknown;
+  editionDate?: unknown;
+  expectedPageCount?: unknown;
+  volumeLabel?: unknown;
+  atlases: Array<Pick<SanbornAtlasRecord, "atlasId" | "editionYear" | "volumeLabel" | "archivedAt">>;
+}): SanbornEditionCreationValidation {
+  const editionYear = normalizeSanbornEditionYear(input.year);
+
+  if (!input.townPackageId) {
+    return {
+      valid: false,
+      reason: "Select a town before creating a Sanborn edition.",
+      editionYear: null,
+      expectedPageCount: null,
+      duplicateAtlasId: null,
+    };
+  }
+
+  if (!editionYear) {
+    return {
+      valid: false,
+      reason: "Enter a valid four-digit Sanborn edition year.",
+      editionYear: null,
+      expectedPageCount: null,
+      duplicateAtlasId: null,
+    };
+  }
+
+  if (normalizeOptionalEditionDate(input.editionDate) === "") {
+    return {
+      valid: false,
+      reason: "Use a valid edition date in YYYY-MM-DD format.",
+      editionYear,
+      expectedPageCount: null,
+      duplicateAtlasId: null,
+    };
+  }
+
+  const hasExpectedPageCount = normalizeOptionalUnknownSanbornText(input.expectedPageCount, 40) !== null;
+  const expectedPageCount = hasExpectedPageCount ? normalizePositiveInteger(input.expectedPageCount) : null;
+
+  if (hasExpectedPageCount && expectedPageCount === null) {
+    return {
+      valid: false,
+      reason: "Expected pages must be a positive whole number.",
+      editionYear,
+      expectedPageCount: null,
+      duplicateAtlasId: null,
+    };
+  }
+
+  const duplicate = findDuplicateSanbornEdition({
+    atlases: input.atlases,
+    editionYear,
+    volumeLabel: normalizeOptionalUnknownSanbornText(input.volumeLabel, 80),
+  });
+
+  if (duplicate) {
+    return {
+      valid: false,
+      reason: "That Sanborn edition already exists for this town and volume. Select the saved edition instead.",
+      editionYear,
+      expectedPageCount,
+      duplicateAtlasId: duplicate.atlasId,
+    };
+  }
+
+  return {
+    valid: true,
+    reason: null,
+    editionYear,
+    expectedPageCount,
+    duplicateAtlasId: null,
+  };
+}
+
 export type SanbornPageDependencySummary = {
   sourceRegions: number;
   mapPieces: number;

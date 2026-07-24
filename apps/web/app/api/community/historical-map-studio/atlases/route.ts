@@ -24,13 +24,6 @@ type AtlasSaveBody = {
   createNew?: boolean | null;
 };
 
-type AtlasArchiveBody = {
-  townPackageId?: string;
-  atlasId?: string;
-  action?: "archive" | "restore";
-  archiveReason?: string | null;
-};
-
 type SourceRecordRow = {
   id: string;
 };
@@ -39,6 +32,8 @@ type AtlasRow = {
   id: string;
   atlas_id: string;
   town_package_id: string;
+  edition_year?: number | null;
+  volume_label?: string | null;
   updated_at: string | null;
 };
 
@@ -191,7 +186,7 @@ export async function PATCH(request: NextRequest) {
   const access = await requireMapStudioWriteAccess();
   if (!access.ok) return access.response;
 
-  const body = (await request.json().catch(() => null)) as AtlasArchiveBody | null;
+  const body = (await request.json().catch(() => null)) as { townPackageId?: string; atlasId?: string; archiveReason?: string | null; restore?: boolean | null } | null;
   const atlasId = normalizeOptionalSanbornText(body?.atlasId, 160);
 
   if (!body || !atlasId) {
@@ -204,18 +199,76 @@ export async function PATCH(request: NextRequest) {
     return jsonError(400, "The requested town package could not be loaded.");
   }
 
-  const rpcName = body.action === "restore" ? "restore_sanborn_atlas" : "archive_sanborn_atlas";
-  const archiveResult = await access.supabase.rpc(rpcName, {
+  if (body.restore === true) {
+    const atlasResult = await access.supabase
+      .from("sanborn_atlases")
+      .select("id, atlas_id, town_package_id, edition_year, volume_label, updated_at")
+      .eq("atlas_id", atlasId)
+      .maybeSingle<AtlasRow>();
+
+    if (atlasResult.error) {
+      return jsonError(503, "Archived Sanborn atlas could not be checked.");
+    }
+
+    if (!atlasResult.data) {
+      return jsonError(404, "Archived Sanborn atlas was not found.");
+    }
+
+    if (atlasResult.data.town_package_id !== townPackageResult.data.id) {
+      return jsonError(400, "Atlas ID belongs to another town package.");
+    }
+
+    let duplicateQuery = access.supabase
+      .from("sanborn_atlases")
+      .select("id")
+      .eq("town_package_id", townPackageResult.data.id)
+      .eq("edition_year", atlasResult.data.edition_year)
+      .is("archived_at", null)
+      .neq("id", atlasResult.data.id)
+      .limit(1);
+
+    duplicateQuery = atlasResult.data.volume_label
+      ? duplicateQuery.eq("volume_label", atlasResult.data.volume_label)
+      : duplicateQuery.is("volume_label", null);
+
+    const duplicateResult = await duplicateQuery.maybeSingle<{ id: string }>();
+
+    if (duplicateResult.error) {
+      return jsonError(503, "Active Sanborn edition duplicates could not be checked.");
+    }
+
+    if (duplicateResult.data) {
+      return jsonError(409, "An active Sanborn edition already uses this year and volume.");
+    }
+
+    const restoreResult = await access.supabase
+      .from("sanborn_atlases")
+      .update({ archived_at: null, archive_reason: null })
+      .eq("id", atlasResult.data.id)
+      .select("atlas_id, updated_at")
+      .single<{ atlas_id: string; updated_at: string | null }>();
+
+    if (restoreResult.error || !restoreResult.data) {
+      return jsonError(503, "Sanborn atlas could not be restored.");
+    }
+
+    return NextResponse.json({
+      ok: true,
+      atlasId: restoreResult.data.atlas_id,
+      restored: true,
+      savedAt: restoreResult.data.updated_at ?? new Date().toISOString(),
+    });
+  }
+
+  const archiveResult = await access.supabase.rpc("archive_sanborn_atlas", {
     p_town_package_id: townPackageResult.data.id,
     p_atlas_id: atlasId,
-    ...(body.action === "restore"
-      ? {}
-      : { p_archive_reason: normalizeOptionalSanbornText(body.archiveReason, 1000) ?? "Archived from Historical Map Studio." }),
+    p_archive_reason: normalizeOptionalSanbornText(body.archiveReason, 1000) ?? "Archived from Historical Map Studio.",
   });
 
   if (archiveResult.error) {
     const status = archiveResult.error.code === "P0001" ? 400 : 503;
-    return jsonError(status, `Sanborn atlas could not be ${body.action === "restore" ? "restored" : "archived"}: ${archiveResult.error.message}`);
+    return jsonError(status, `Sanborn atlas could not be archived: ${archiveResult.error.message}`);
   }
 
   return NextResponse.json({ ok: true, result: archiveResult.data ?? null, savedAt: new Date().toISOString() });
