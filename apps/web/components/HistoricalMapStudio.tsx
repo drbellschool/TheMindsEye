@@ -3254,6 +3254,43 @@ export function HistoricalMapStudio({
     }
   }
 
+  async function restoreArchivedEdition(atlasId: string) {
+    if (!initialData.activeTownPackage) {
+      return;
+    }
+
+    const restoredAtlas = archivedSanbornEditions.find((atlas) => atlas.atlasId === atlasId) ?? null;
+
+    setSaveStatus("saving");
+    setSaveMessage("Restoring Sanborn edition...");
+    const response = await fetch("/api/community/historical-map-studio/atlases", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        townPackageId: initialData.activeTownPackage.id,
+        atlasId,
+        action: "restore",
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
+
+    if (!response.ok || !payload?.ok) {
+      setSaveStatus("error");
+      setSaveMessage(payload?.message ?? "Sanborn edition restore failed.");
+      return;
+    }
+
+    setSelectedAtlasId(atlasId);
+    setSelectedAtlasPageId("");
+    setSelectedAssetId("");
+    setSelectedMapPieceId("");
+    setSelectedIndexRegionId("");
+    router.replace(
+      `/community/historical-map-studio?town=${initialData.activeTownPackage.id}&townPackageId=${initialData.activeTownPackage.id}&year=${restoredAtlas?.editionYear ?? ""}&mapYear=${restoredAtlas?.editionYear ?? ""}&atlasId=${atlasId}&atlas=${atlasId}&workflow=source`,
+    );
+    router.refresh();
+  }
+
   async function deleteEmptyEdition(atlasId: string) {
     if (!initialData.activeTownPackage) {
       return;
@@ -4768,6 +4805,7 @@ export function HistoricalMapStudio({
                   <article className="sanborn-edition-list__item is-archived" key={atlas.atlasId}>
                     <span>{atlas.editionYear}{atlas.volumeLabel ? ` ${atlas.volumeLabel}` : ""}</span>
                     <span>Archived {formatDate(atlas.archivedAt)}</span>
+                    <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => void restoreArchivedEdition(atlas.atlasId)} type="button">Restore edition</button>
                   </article>
                 ))}
               </div>
@@ -5421,17 +5459,19 @@ export function HistoricalMapStudio({
             <div className="sanborn-station-inspector__body">{renderInspectorBody()}</div>
           </aside>
         )}
-        <button
-          aria-controls="sanborn-station-inspector"
-          aria-expanded={!rightPanelCollapsed}
-          className={`sanborn-layout-tab sanborn-layout-tab--right${rightPanelCollapsed ? " is-collapsed" : ""}`}
-          onClick={() => setRightPanelCollapsed((value) => !value)}
-          title="Toggle inspector (])"
-          type="button"
-        >
-          <span aria-hidden="true">{rightPanelCollapsed ? "<" : ">"}</span>
-          <span>{rightPanelCollapsed ? "Show inspector" : "Hide inspector"}</span>
-        </button>
+        {rightPanelCollapsed ? (
+          <button
+            aria-controls="sanborn-station-inspector"
+            aria-expanded={false}
+            className="sanborn-layout-tab sanborn-layout-tab--right is-collapsed"
+            onClick={() => setRightPanelCollapsed(false)}
+            title="Show inspector (])"
+            type="button"
+          >
+            <span aria-hidden="true">&lt;</span>
+            <span>Show inspector</span>
+          </button>
+        ) : null}
       </div>
     </section>
   );

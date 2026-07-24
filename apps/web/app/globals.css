@@ -4037,6 +4037,7 @@ body:has(.minimal-sanborn-gps) {
 .sanborn-station-inspector {
   position: relative;
   z-index: 2;
+  isolation: isolate;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;

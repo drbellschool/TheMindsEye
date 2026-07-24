@@ -36,6 +36,7 @@ const migrationPath = "../../supabase/migrations/0010_sanborn_atlas_page_piece_i
 const pageClassificationMigrationPath = "../../supabase/migrations/0015_page_classification_workflow.sql";
 const functionalSourceRegionsMigrationPath = "../../supabase/migrations/0016_functional_source_regions.sql";
 const atlasManagementMigrationPath = "../../supabase/migrations/0017_atlas_edition_management.sql";
+const atlasRestoreMigrationPath = "../../supabase/migrations/0018_restore_sanborn_atlas.sql";
 const atlasRoutePath = "app/api/community/historical-map-studio/atlases/route.ts";
 const pageRoutePath = "app/api/community/historical-map-studio/atlas-pages/route.ts";
 const pieceRoutePath = "app/api/community/historical-map-studio/map-pieces/route.ts";
@@ -354,6 +355,18 @@ test("migration 0017 adds service-role-only edition archive and scoped page move
   assertSqlIncludes(migration, "grant execute on function public.move_sanborn_atlas_page_to_atlas(uuid, text, text, boolean) to service_role;");
 });
 
+test("migration 0018 restores archived editions through service role only", () => {
+  const migration = readFileSync(atlasRestoreMigrationPath, "utf8");
+  const restoreAtlas = readSqlFunction(migration, "restore_sanborn_atlas");
+
+  assert.match(restoreAtlas, /archived_at = null/);
+  assert.match(restoreAtlas, /archive_reason = null/);
+  assert.match(restoreAtlas, /if not found then[\s\S]*Sanborn atlas was not found/);
+  assert.match(restoreAtlas, /Atlas ID belongs to another town package/);
+  assertSqlIncludes(migration, "revoke execute on function public.restore_sanborn_atlas(uuid, text) from PUBLIC, anon, authenticated;");
+  assertSqlIncludes(migration, "grant execute on function public.restore_sanborn_atlas(uuid, text) to service_role;");
+});
+
 test("edition and page management routes preserve scope and linked source safety", () => {
   const atlasRoute = readRoute(atlasRoutePath);
   const atlasDataLoader = readFileSync("./lib/sanborn-atlas-data.ts", "utf8");
@@ -368,7 +381,8 @@ test("edition and page management routes preserve scope and linked source safety
   assert.match(studioDataLoader, /activeAssetIds = \[\.\.\.new Set\(atlasInventory\.pages\.map/);
   assert.match(studioDataLoader, /\.in\("asset_id", activeAssetIds\)/);
   assert.match(studioDataLoader, /if \(workspaceRow && assets\.length > 0\)/);
-  assert.match(atlasRoute, /\.rpc\("archive_sanborn_atlas"/);
+  assert.match(atlasRoute, /rpcName = body\.action === "restore" \? "restore_sanborn_atlas" : "archive_sanborn_atlas"/);
+  assert.match(atlasRoute, /action\?: "archive" \| "restore"/);
   assert.match(atlasRoute, /Developed editions must be archived instead of deleted/);
   assert.match(pageRoute, /\.rpc\("move_sanborn_atlas_page_to_atlas"/);
   assert.match(pageRoute, /\.rpc\("archive_sanborn_atlas_page"/);

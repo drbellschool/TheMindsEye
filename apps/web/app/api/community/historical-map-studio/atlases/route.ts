@@ -24,6 +24,13 @@ type AtlasSaveBody = {
   createNew?: boolean | null;
 };
 
+type AtlasArchiveBody = {
+  townPackageId?: string;
+  atlasId?: string;
+  action?: "archive" | "restore";
+  archiveReason?: string | null;
+};
+
 type SourceRecordRow = {
   id: string;
 };
@@ -184,7 +191,7 @@ export async function PATCH(request: NextRequest) {
   const access = await requireMapStudioWriteAccess();
   if (!access.ok) return access.response;
 
-  const body = (await request.json().catch(() => null)) as { townPackageId?: string; atlasId?: string; archiveReason?: string | null } | null;
+  const body = (await request.json().catch(() => null)) as AtlasArchiveBody | null;
   const atlasId = normalizeOptionalSanbornText(body?.atlasId, 160);
 
   if (!body || !atlasId) {
@@ -197,15 +204,18 @@ export async function PATCH(request: NextRequest) {
     return jsonError(400, "The requested town package could not be loaded.");
   }
 
-  const archiveResult = await access.supabase.rpc("archive_sanborn_atlas", {
+  const rpcName = body.action === "restore" ? "restore_sanborn_atlas" : "archive_sanborn_atlas";
+  const archiveResult = await access.supabase.rpc(rpcName, {
     p_town_package_id: townPackageResult.data.id,
     p_atlas_id: atlasId,
-    p_archive_reason: normalizeOptionalSanbornText(body.archiveReason, 1000) ?? "Archived from Historical Map Studio.",
+    ...(body.action === "restore"
+      ? {}
+      : { p_archive_reason: normalizeOptionalSanbornText(body.archiveReason, 1000) ?? "Archived from Historical Map Studio." }),
   });
 
   if (archiveResult.error) {
     const status = archiveResult.error.code === "P0001" ? 400 : 503;
-    return jsonError(status, `Sanborn atlas could not be archived: ${archiveResult.error.message}`);
+    return jsonError(status, `Sanborn atlas could not be ${body.action === "restore" ? "restored" : "archived"}: ${archiveResult.error.message}`);
   }
 
   return NextResponse.json({ ok: true, result: archiveResult.data ?? null, savedAt: new Date().toISOString() });

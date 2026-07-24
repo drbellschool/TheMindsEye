@@ -687,7 +687,8 @@ test("Historical Map Studio uses recoverable persisted rail collapse controls", 
   assert.match(studioComponent, /aria-controls="sanborn-station-rail"[\s\S]*Show stations/s);
   assert.match(studioComponent, /aria-controls="sanborn-station-inspector"[\s\S]*Show inspector/s);
   assert.match(studioComponent, /title="Toggle stations \(\[\)"/);
-  assert.match(studioComponent, /title="Toggle inspector \(\]\)"/);
+  assert.match(studioComponent, /title="Show inspector \(\]\)"/);
+  assert.match(studioComponent, /\{rightPanelCollapsed \? \([\s\S]*className="sanborn-layout-tab sanborn-layout-tab--right is-collapsed"/);
   assert.match(studioComponent, /Hide inspector/);
   assert.match(navigator, /id="sanborn-station-rail"/);
   assert.match(css, /\.sanborn-layout-tab\s*\{[\s\S]*position: absolute;[\s\S]*z-index: 900;/);
@@ -695,6 +696,7 @@ test("Historical Map Studio uses recoverable persisted rail collapse controls", 
   assert.match(css, /\.sanborn-layout-tab--right\s*\{[\s\S]*right: 0;/);
   assert.match(css, /\.sanborn-layout-tab\s*\{[\s\S]*width: 32px;[\s\S]*pointer-events: auto;/);
   assert.match(css, /\.sanborn-station-inspector\s*\{[\s\S]*position: relative;[\s\S]*z-index: 2;/);
+  assert.match(css, /\.sanborn-station-inspector\s*\{[\s\S]*isolation: isolate;/);
   assert.match(studioComponent, /setSelectedAtlasId\(""\);[\s\S]*setSelectedAtlasPageId\(""\);[\s\S]*setSelectedAssetId\(""\);[\s\S]*setSelectedMapPieceId\(""\);[\s\S]*setSelectedIndexRegionId\(""\);/);
   assert.match(studioComponent, /setMapPieceGeoreferences\(\[\]\);[\s\S]*setSheets\(\[\]\);/);
   assert.match(studioComponent, /router\.replace\(`\/community\/historical-map-studio\?town=/);
