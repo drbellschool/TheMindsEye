@@ -4023,6 +4023,7 @@ body:has(.minimal-sanborn-gps) {
   min-height: 0;
   overflow: auto;
   background: #20211f;
+  isolation: isolate;
 }
 
 .sanborn-map-placement-workspace {
@@ -4266,6 +4267,8 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-source-preview {
   align-content: start;
+  position: relative;
+  isolation: isolate;
 }
 
 .sanborn-source-preview > img {
@@ -4277,11 +4280,68 @@ body:has(.minimal-sanborn-gps) {
 }
 
 .sanborn-source-region-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   min-width: 0;
+  padding: 6px;
+  background: rgba(28, 29, 27, 0.97);
+  border-bottom: 1px solid rgba(226, 190, 126, 0.24);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+}
+
+.sanborn-source-region-toolbar__zoom,
+.sanborn-source-region-toolbar__status {
+  align-self: center;
+  color: rgba(246, 231, 203, 0.76);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.sanborn-source-region-toolbar__status {
+  margin-left: auto;
+}
+
+.sanborn-source-region-toolbar__status.is-error { color: #f09a7b; }
+
+.sanborn-edition-sheet-navigator {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 5px 6px;
+  background: rgba(28, 29, 27, 0.96);
+  border-bottom: 1px solid rgba(226, 190, 126, 0.16);
+}
+
+.sanborn-edition-sheet-navigator button {
+  min-width: 30px;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid rgba(226, 190, 126, 0.25);
+  border-radius: 4px;
+  background: rgba(9, 9, 8, 0.42);
+  color: rgba(246, 231, 203, 0.78);
+  cursor: pointer;
+}
+
+.sanborn-edition-sheet-navigator button.is-active { border-color: #e2be7e; color: #f6e7cb; box-shadow: inset 0 -2px #e2be7e; }
+.sanborn-edition-sheet-navigator button.is-in_progress,
+.sanborn-edition-sheet-navigator button.is-started { border-bottom-color: #d1a045; }
+.sanborn-edition-sheet-navigator button.is-placed { border-bottom-color: #5f93bf; }
+.sanborn-edition-sheet-navigator button.is-reviewed { border-bottom-color: #6d9f67; }
+.sanborn-edition-sheet-navigator button.is-conflict { border-bottom-color: #e8755b; }
+
+.town-index-workspace-with-navigator,
+.sanborn-workspace-with-navigator {
+  min-width: 0;
+  min-height: 100%;
 }
 
 .sanborn-station-citation {
@@ -4379,6 +4439,14 @@ body:has(.minimal-sanborn-gps) {
   margin: 8px auto;
   border: 1px solid rgba(226, 190, 126, 0.22);
   background: #ede9dd;
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+}
+
+.town-index-mission-map__canvas {
+  position: relative;
+  width: 100%;
+  transform-origin: top left;
 }
 
 .town-index-mission-map__frame img {
