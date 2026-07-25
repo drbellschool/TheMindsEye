@@ -1377,6 +1377,21 @@ test("map piece placement route saves through the scoped service-role RPC", () =
   assert.doesNotMatch(route, /\.from\("sanborn_map_piece_georeferences"\)[\s\S]{0,240}\.(insert|update|upsert)\(/);
 });
 
+test("Map Placement uses one extracted state-driven inspector and preserves source context", () => {
+  const studio = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const inspector = readFileSync("components/MapPlacementInspector.tsx", "utf8");
+  const stateHelper = readFileSync("lib/map-placement-inspector.ts", "utf8");
+  assert.match(studio, /<MapPlacementInspector/);
+  assert.match(studio, /atlasWorkflowStep === "gps_alignment"/);
+  assert.match(studio, /Click the modern map to place the selected map piece/);
+  assert.match(inspector, /Browse objects/);
+  assert.match(inspector, /Save and next/);
+  assert.match(inspector, /Advanced whole-sheet reference/);
+  assert.doesNotMatch(inspector, /Pieces on selected page/);
+  assert.match(stateHelper, /deriveMapPlacementInspectorState/);
+  assert.match(studio, /SanbornSourceContext/);
+});
+
 test("Map placement opens at useful town zoom and exposes piece-first controls", () => {
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");

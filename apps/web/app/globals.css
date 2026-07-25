@@ -4175,6 +4175,50 @@ body:has(.minimal-sanborn-gps) {
   font-size: 0.62rem;
 }
 
+.map-placement-inspector {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 12px;
+}
+.map-placement-inspector__header,
+.map-placement-inspector__primary {
+  position: sticky;
+  z-index: 3;
+  background: var(--sanborn-panel, #2e211b);
+}
+.map-placement-inspector__header { top: -12px; display: flex; justify-content: space-between; gap: 12px; padding: 4px 0 10px; border-bottom: 1px solid rgba(226, 190, 126, 0.22); }
+.map-placement-inspector__header > div:first-child { display: grid; min-width: 0; gap: 3px; }
+.map-placement-inspector__header strong { color: #f6e7cb; font-size: 1.05rem; }
+.map-placement-inspector__header small, .map-placement-inspector__metadata dd, .map-placement-inspector__queue header span { color: rgba(246, 231, 203, 0.65); font-size: 0.76rem; }
+.map-placement-inspector__header-actions { display: flex; align-items: start; gap: 8px; }
+.map-placement-inspector__status { border: 1px solid rgba(226, 190, 126, 0.45); border-radius: 999px; color: #f6d37e; font-size: 0.62rem; padding: 3px 6px; white-space: nowrap; }
+.map-placement-inspector__status.is-saved, .map-placement-inspector__status.is-reviewed { color: #b9e4b0; border-color: rgba(185, 228, 176, 0.5); }
+.map-placement-inspector__status.is-unable_to_place { color: #f2a59c; border-color: rgba(242, 165, 156, 0.5); }
+.map-placement-inspector__primary { top: 54px; margin: -2px 0 0; padding: 8px 0; border-bottom: 1px solid rgba(226, 190, 126, 0.18); }
+.map-placement-inspector__primary p { margin: 0 0 8px; color: #f6e7cb; font-size: 0.82rem; }
+.map-placement-inspector__primary-actions, .map-placement-inspector__actions, .map-placement-inspector__queue-nav, .map-placement-inspector__segmented { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-placement-inspector__error { display: grid; gap: 8px; border: 1px solid rgba(242, 165, 156, 0.55); border-radius: 6px; background: rgba(116, 44, 38, 0.35); color: #ffd5ce; padding: 8px; font-size: 0.78rem; }
+.map-placement-inspector__queue { display: grid; gap: 8px; }
+.map-placement-inspector__queue > header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.map-placement-inspector__filter, .map-placement-inspector__section label, .map-placement-inspector__advanced > label { display: grid; gap: 4px; color: rgba(246, 231, 203, 0.78); font-size: 0.76rem; }
+.map-placement-inspector__queue-list { display: grid; gap: 5px; }
+.map-placement-inspector__queue-item { display: grid; gap: 2px; border: 1px solid rgba(226, 190, 126, 0.2); border-radius: 5px; background: rgba(20, 14, 11, 0.28); color: #f6e7cb; cursor: pointer; padding: 7px 8px; text-align: left; }
+.map-placement-inspector__queue-item:hover, .map-placement-inspector__queue-item.is-selected { border-color: #e2be7e; background: rgba(226, 190, 126, 0.12); }
+.map-placement-inspector__queue-item span, .map-placement-inspector__queue-item small { color: rgba(246, 231, 203, 0.62); font-size: 0.68rem; }
+.map-placement-inspector__metadata, .map-placement-inspector__summary { display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 5px 9px; margin: 0; }
+.map-placement-inspector__metadata dt, .map-placement-inspector__summary dt { color: rgba(246, 231, 203, 0.58); font-size: 0.7rem; }
+.map-placement-inspector__metadata dd, .map-placement-inspector__summary dd { margin: 0; }
+.map-placement-inspector__section { display: grid; gap: 9px; border-top: 1px solid rgba(226, 190, 126, 0.16); padding-top: 10px; }
+.map-placement-inspector__section h3, .map-placement-inspector__whole-sheet h4 { margin: 0; color: #e2be7e; font-size: 0.72rem; letter-spacing: 0.08em; }
+.map-placement-inspector__advanced { border-top: 1px solid rgba(226, 190, 126, 0.16); padding-top: 10px; }
+.map-placement-inspector__advanced summary { color: #e2be7e; cursor: pointer; font-size: 0.78rem; }
+.map-placement-inspector__advanced > *:not(summary) { margin-top: 9px; }
+.map-placement-inspector__whole-sheet { display: grid; gap: 7px; border-top: 1px solid rgba(226, 190, 126, 0.14); padding-top: 9px; }
+.map-placement-inspector__exception-link { border: 0; background: none; color: #e2be7e; cursor: pointer; font-size: 0.76rem; padding: 0; text-align: left; }
+
 .sanborn-source-context__header strong {
   overflow: hidden;
   color: #f6e7cb;

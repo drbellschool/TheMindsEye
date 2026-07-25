@@ -24,6 +24,7 @@ import { SanbornEditionSheetNavigator } from "@/components/SanbornEditionSheetNa
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { SanbornPieceList } from "@/components/SanbornPieceList";
 import { SanbornSourceContext } from "@/components/SanbornSourceContext";
+import { MapPlacementInspector } from "@/components/MapPlacementInspector";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
@@ -1024,7 +1025,7 @@ export function HistoricalMapStudio({
         .filter((piece) => piece.atlasPageId === selectedAtlasPage.pageId)
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
-  const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? selectedAtlasPagePieces[0] ?? null;
+  const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? (atlasWorkflowStep === "gps_alignment" ? null : selectedAtlasPagePieces[0] ?? null);
   const sheetInventoryQueue = useMemo(
     () => deriveSheetInventoryQueue({ activeAtlasId: selectedAtlasId, pages: atlasInventory.pages, assets: sheets, pieces: atlasInventory.pieces, placements: mapPieceGeoreferences, regions: townIndexRegions }),
     [atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId, sheets, townIndexRegions],
@@ -2147,7 +2148,17 @@ export function HistoricalMapStudio({
       case "piece_inventory":
         return saveMapPieces();
       case "gps_alignment":
-        return selectedMapPieceHasGeographicFootprint ? saveSelectedMapPiecePlacement() : saveSheetGeoreferences("manual", selectedAssetId);
+        if (!selectedMapPiece) {
+          setSaveStatus("error");
+          setSaveMessage("Select a geographic object before saving placement.");
+          return;
+        }
+        if (!selectedMapPieceHasGeographicFootprint && selectedMapPieceGeoreference?.placementStatus !== "unable_to_place") {
+          setSaveStatus("error");
+          setSaveMessage("Click the modern map to place this object before saving.");
+          return;
+        }
+        return saveSelectedMapPiecePlacement();
     }
   }
 
@@ -2428,6 +2439,14 @@ export function HistoricalMapStudio({
     selectAtlasPage(item.pageId, "gps_alignment");
     setSelectedMapPieceId(item.pieceId);
     setSelectedAssetId(item.sourceAssetId);
+    if (item.status === "not_placed") {
+      setPiecePlacementAnchorId(item.pieceId);
+      setPlacementAnchorAssetId("");
+      setGeoEditMode("pan_modern_map");
+      commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
+      setSaveStatus("idle");
+      setSaveMessage("Click the modern map to place the selected map piece.");
+    }
     requestFocusTarget({ targetId: focusTargetId("map-piece-inspector-card", item.pieceId), instruction: item.status === "not_placed" ? "Place this geographic object on the modern map." : "Review this object's saved geographic placement." });
     if (item.placement && hasOperationalMapPiecePlacement(item.placement)) {
       requestExternalMapView({ latitude: item.placement.centerLatitude, longitude: item.placement.centerLongitude }, Math.max(modernMapZoom, 17), "fit_sheet", "placementQueue");
@@ -2485,6 +2504,9 @@ export function HistoricalMapStudio({
     if (!selectedMapPieceGeoreference || !selectedMapPiece) {
       return;
     }
+    if (!selectedMapPieceGeoreference.isPersisted && typeof window !== "undefined" && !window.confirm("Discard this unsaved placement draft?")) {
+      return;
+    }
 
     replaceMapPieceGeoreference(
       normalizeSanbornMapPieceGeoreference({
@@ -2498,6 +2520,7 @@ export function HistoricalMapStudio({
       }),
     );
     setPiecePlacementAnchorId("");
+    setSaveStatus("idle");
     setSaveMessage("Piece placement reset. Save placement to persist the reset.");
   }
 
@@ -2527,24 +2550,24 @@ export function HistoricalMapStudio({
     setFitOverlayRequest((current) => current + 1);
   }
 
-  async function saveSelectedMapPiecePlacement() {
+  async function saveSelectedMapPiecePlacement(): Promise<boolean> {
     if (!selectedMapPiece || !selectedMapPieceGeoreference || !selectedAtlasPage || !activeAtlas) {
       setSaveStatus("error");
       setSaveMessage("Select a saved map piece before saving placement.");
-      return;
+      return false;
     }
 
     if (!selectedPageSupportsMapPlacement) {
       setSaveStatus("error");
       setSaveMessage(selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before saving placement.");
-      return;
+      return false;
     }
 
     if (!selectedMapPieceHasGeographicFootprint && selectedMapPieceGeoreference.placementStatus !== "unable_to_place") {
       const validation = validateMapPieceGeographicCorners(selectedMapPieceGeoreference.corners);
       setSaveStatus("error");
       setSaveMessage(validation.ok ? "Place the selected map piece before saving placement." : validation.error);
-      return;
+      return false;
     }
 
     const placementForSave = selectedMapPieceGeoreference.placementStatus === "unable_to_place"
@@ -2553,7 +2576,7 @@ export function HistoricalMapStudio({
     if (placementForSave.placementStatus === "unable_to_place" && !placementForSave.unableToPlaceReason?.trim()) {
       setSaveStatus("error");
       setSaveMessage("Unable to place requires a reason.");
-      return;
+      return false;
     }
 
     const activeTownPackage = initialData.activeTownPackage;
@@ -2561,7 +2584,7 @@ export function HistoricalMapStudio({
     if (!activeTownPackage || atlasReadOnly || saveInFlightRef.current || placementSaveInFlightRef.current) {
       setSaveStatus("error");
       setSaveMessage("Map piece placement save failed: write access is unavailable.");
-      return;
+      return false;
     }
 
     saveInFlightRef.current = true;
@@ -2599,7 +2622,7 @@ export function HistoricalMapStudio({
     if (!saveResult.ok) {
       setSaveStatus("error");
       setSaveMessage(`Save failed: ${saveResult.message}`);
-      return;
+      return false;
     }
 
     const { response, payload } = saveResult.value;
@@ -2607,7 +2630,7 @@ export function HistoricalMapStudio({
     if (!response.ok || !payload?.ok || !payload.placement) {
       setSaveStatus("error");
       setSaveMessage(`Save failed: ${payload?.message ?? "Map piece placement save failed."}`);
-      return;
+      return false;
     }
 
     const savedPlacement = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: selectedMapPiece.pieceId, atlasPageId: selectedMapPiece.atlasPageId, isPersisted: true });
@@ -2615,7 +2638,7 @@ export function HistoricalMapStudio({
     if (!piecePlacementMatchesForPersistence(placementForSave, savedPlacement)) {
       setSaveStatus("error");
       setSaveMessage("Save failed: database confirmation did not match the current map piece placement.");
-      return;
+      return false;
     }
 
     replaceMapPieceGeoreference(savedPlacement);
@@ -2632,6 +2655,37 @@ export function HistoricalMapStudio({
       workflowStep: atlasWorkflowStep,
     };
     router.refresh();
+    return true;
+  }
+
+  function startSelectedMapPiecePlacement() {
+    if (!selectedMapPiece) return;
+    setPiecePlacementAnchorId(selectedMapPiece.pieceId);
+    setPlacementAnchorAssetId("");
+    setGeoEditMode("pan_modern_map");
+    commitGeographicMapSettings({ editMode: "pan_modern_map", globalHistoricalOpacity: 1 }, false);
+    setSaveStatus("idle");
+    setSaveMessage("Click the modern map to place the selected map piece.");
+  }
+
+  function cancelSelectedMapPiecePlacement() {
+    setPiecePlacementAnchorId("");
+    setPlacementAnchorAssetId("");
+    setSaveStatus("idle");
+    setSaveMessage("");
+  }
+
+  function markSelectedPlacementReviewed() {
+    if (!selectedMapPiece) return;
+    commitMapPieceGeoreference(selectedMapPiece.pieceId, { placementStatus: "reviewed", reviewerIdentity: "workspace reviewer", reviewedAt: new Date().toISOString() });
+    setSaveMessage("Placement marked reviewed. Save placement to persist the review.");
+  }
+
+  async function savePlacementAndNext() {
+    const saved = await saveSelectedMapPiecePlacement();
+    if (!saved) return;
+    const next = mapPiecePlacementQueue.items.find((item) => item.pieceId !== selectedMapPiece?.pieceId && item.status === "not_placed");
+    if (next) openPlacementQueueItem(next);
   }
 
   async function reloadSelectedMapPiecePlacement() {
@@ -5172,6 +5226,75 @@ export function HistoricalMapStudio({
       return null;
     }
 
+    if (atlasWorkflowStep === "gps_alignment") {
+      return (
+        <MapPlacementInspector
+          allMapPieceBounds={Boolean(allMapPieceBounds)}
+          atlasReadOnly={atlasReadOnly}
+          geoEditMode={geoEditMode}
+          hasSelectedSheetGeoreference={Boolean(selectedSheetGeoreference)}
+          onCancelPlacement={cancelSelectedMapPiecePlacement}
+          onCenterTown={() => centerGpsOnActiveTown()}
+          onConfirmUnableToPlace={markSelectedUnableToPlace}
+          onDismissError={() => { setSaveStatus("idle"); setSaveMessage(""); }}
+          onEditPlacement={() => { setPiecePlacementAnchorId(""); setGeoEditMode("edit_historical_sheets"); commitGeographicMapSettings({ editMode: "edit_historical_sheets", globalHistoricalOpacity: 1 }, false); setSaveStatus("idle"); setSaveMessage(""); }}
+          onFitAll={fitAllPlacedMapPieces}
+          onFitSelected={fitSelectedMapPiece}
+          onFitSheet={fitSelectedSheet}
+          onHide={() => setRightPanelCollapsed(true)}
+          onMarkReviewed={markSelectedPlacementReviewed}
+          onNextReview={() => movePlacementQueue("next_review")}
+          onNextUnplaced={() => movePlacementQueue("next_unplaced")}
+          onPreviousUnplaced={() => movePlacementQueue("previous_unplaced")}
+          onPlaceSheet={() => selectedAssetId && addSheetToMap(selectedAssetId, mapCenter)}
+          onReloadPlacement={() => void reloadSelectedMapPiecePlacement()}
+          onReloadSheet={() => void reloadSavedPlacement()}
+          onResetAllSheets={resetAllSheetPlacementsToCurrentTownLocation}
+          onResetPiece={resetSelectedMapPiecePlacement}
+          onResetSheet={resetSelectedPlacementToTownCenter}
+          onSaveAndNext={savePlacementAndNext}
+          onSavePlacement={saveSelectedMapPiecePlacement}
+          onSaveSheet={() => void saveSheetGeoreferences("manual", selectedAssetId)}
+          onSelectQueueItem={openPlacementQueueItem}
+          onSetDisplayScope={setPieceDisplayScope}
+          onSetGeoEditMode={(mode) => { setGeoEditMode(mode); setPiecePlacementAnchorId(""); commitGeographicMapSettings({ editMode: mode, globalHistoricalOpacity: 1 }, false); }}
+          onSetOpacity={(value) => selectedMapPiece && commitMapPieceGeoreference(selectedMapPiece.pieceId, { opacity: value })}
+          onSetRotation={(value) => selectedMapPiece && selectedMapPieceGeoreference && replaceMapPieceGeoreference(rotateMapPieceGeoreference(selectedMapPieceGeoreference, value))}
+          onSetShowReferenceSheetAlignment={setShowReferenceSheetAlignment}
+          onSetUnableToPlaceReason={setUnableToPlaceReason}
+          onStartPlacement={startSelectedMapPiecePlacement}
+          onToggleLocked={() => selectedMapPiece && selectedMapPieceGeoreference && commitMapPieceGeoreference(selectedMapPiece.pieceId, { isLocked: !selectedMapPieceGeoreference.isLocked })}
+          onToggleOverlayMode={() => setOverlayRenderMode((mode) => mode === "projective" ? "rectangular" : "projective")}
+          onTogglePlainMap={() => setPlainMapTestMode((value) => !value)}
+          onToggleVisible={() => selectedMapPiece && selectedMapPieceGeoreference && commitMapPieceGeoreference(selectedMapPiece.pieceId, { isVisible: !selectedMapPieceGeoreference.isVisible })}
+          overlayRenderMode={overlayRenderMode}
+          pieceDisplayScope={pieceDisplayScope}
+          plainMapTestMode={plainMapTestMode}
+          placement={selectedMapPieceGeoreference}
+          queue={mapPiecePlacementQueue}
+          saveMessage={saveMessage}
+          saveStatus={saveStatus}
+          selectedAssetId={selectedAssetId}
+          selectedMapPieceHasGeographicFootprint={selectedMapPieceHasGeographicFootprint}
+          selectedMapPieceLocked={selectedMapPieceGeoreference?.isLocked === true}
+          selectedMapPieceOpacity={selectedMapPieceOpacity}
+          selectedMapPiecePlaced={selectedMapPiecePlaced}
+          selectedMapPieceRotation={selectedMapPieceRotation}
+          selectedMapPieceVisible={selectedMapPieceGeoreference?.isVisible !== false}
+          selectedPage={selectedAtlasPage}
+          selectedPageAssetName={selectedAtlasPageAsset?.originalFilename ?? null}
+          selectedPageSourceRegionLabel={selectedPageSourceRegions.find((region) => region.linkedAtlasPageId === selectedAtlasPage?.pageId)?.regionLabel ?? null}
+          selectedPageSupportsMapPlacement={selectedPageSupportsMapPlacement}
+          selectedPageToolBlockMessage={selectedPageToolBlockMessage}
+          selectedPiece={selectedMapPiece}
+          selectedPlacementSaveable={selectedPlacementSaveable}
+          selectedSheetPlaced={selectedSheetPlaced}
+          showReferenceSheetAlignment={showReferenceSheetAlignment}
+          unableToPlaceReason={unableToPlaceReason}
+        />
+      );
+    }
+
     if (atlasWorkflowStep === "source") {
       return (
         <>
@@ -5894,7 +6017,7 @@ export function HistoricalMapStudio({
             {locationMessage ? <span className={`minimal-sanborn-gps__message ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</span> : null}
             {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
             {uploadStatusText ? <span className={`minimal-sanborn-gps__message ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</span> : null}
-            {toolbarSaveMessage ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
+            {toolbarSaveMessage && !isGpsAlignmentStep ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
             {focusInstruction ? <span className="minimal-sanborn-gps__message sanborn-focus-instruction" aria-live="polite">{focusInstruction}</span> : null}
           </div>
         </div>
@@ -5931,15 +6054,17 @@ export function HistoricalMapStudio({
         </main>
         {rightPanelCollapsed ? null : (
           <aside className="sanborn-station-inspector" id="sanborn-station-inspector" aria-label={`${activeStationLabel} inspector`}>
-            <header className="sanborn-station-inspector__header">
-              <div>
-                <span>{activeStationLabel}</span>
-                <strong>{selectedObjectLabel}</strong>
-              </div>
-              <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
-              <button className="sanborn-station-inspector__close" onClick={() => setRightPanelCollapsed(true)} type="button">Hide inspector</button>
-            </header>
-            <div className="sanborn-station-inspector__body">{renderInspectorBody()}</div>
+            {atlasWorkflowStep === "gps_alignment" ? renderInspectorBody() : <>
+              <header className="sanborn-station-inspector__header">
+                <div>
+                  <span>{activeStationLabel}</span>
+                  <strong>{selectedObjectLabel}</strong>
+                </div>
+                <span className={`minimal-sanborn-gps__status is-${saveStatus}`}>{saveStatusText}</span>
+                <button className="sanborn-station-inspector__close" onClick={() => setRightPanelCollapsed(true)} type="button">Hide inspector</button>
+              </header>
+              <div className="sanborn-station-inspector__body">{renderInspectorBody()}</div>
+            </>}
           </aside>
         )}
         {rightPanelCollapsed ? (
@@ -6261,7 +6386,7 @@ export function HistoricalMapStudio({
             {locationMessage ? <span className={`minimal-sanborn-gps__message ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</span> : null}
             {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
             {uploadStatusText ? <span className={`minimal-sanborn-gps__message ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</span> : null}
-            {toolbarSaveMessage ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
+            {toolbarSaveMessage && !isGpsAlignmentStep ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
           </div>
         </div>
       </header>
