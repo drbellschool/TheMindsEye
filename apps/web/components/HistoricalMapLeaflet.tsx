@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { ImageOverlay, MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { ImageOverlay, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 
 import {
@@ -1729,6 +1729,78 @@ function TransformedPieceLayer({
   return null;
 }
 
+function GeographicFeaturePlacement({
+  layer,
+  mode,
+  isSelected,
+  onCommit,
+  onSelect,
+}: {
+  layer: HistoricalPieceMapLayer;
+  mode: GeoEditMode | "preview";
+  isSelected: boolean;
+  onCommit?: HistoricalMapLeafletProps["onPieceTransformCommit"];
+  onSelect?: HistoricalMapLeafletProps["onSelectPiece"];
+}) {
+  const geometry = layer.geographicGeometry;
+  if (!geometry || geometry.coordinates.length === 0) {
+    return null;
+  }
+
+  const positions = geometry.coordinates.map((coordinate) => [coordinate.latitude, coordinate.longitude] as LatLngTuple);
+  const editable = mode === "edit_historical_sheets" && !layer.isLocked;
+  const commitCoordinates = (coordinates: LatLngTuple[]) => {
+    onCommit?.(layer.pieceId, {
+      geographicGeometry: { geometryType: geometry.geometryType, coordinates: coordinates.map(([latitude, longitude]) => ({ latitude, longitude })) },
+      centerLatitude: coordinates[0]?.[0] ?? layer.centerLatitude,
+      centerLongitude: coordinates[0]?.[1] ?? layer.centerLongitude,
+      placementStatus: "draft",
+      isPersisted: false,
+    });
+  };
+
+  if (geometry.geometryType === "point" || geometry.geometryType === "junction") {
+    const position = positions[0];
+    return (
+      <Marker
+        draggable={editable}
+        eventHandlers={{
+          click: () => onSelect?.(layer.pieceId),
+          dragend: (event) => {
+            const next = event.target.getLatLng();
+            commitCoordinates([[next.lat, next.lng]]);
+          },
+        }}
+        icon={markerIcon(isSelected ? "is-selected" : "is-map-piece", geometry.geometryType === "junction" ? "J" : "P")}
+        position={position}
+      >
+        <Tooltip>{layer.pieceLabel}</Tooltip>
+      </Marker>
+    );
+  }
+
+  return (
+    <>
+      <Polyline eventHandlers={{ click: () => onSelect?.(layer.pieceId) }} pathOptions={{ color: isSelected ? "#f0c36a" : "#b8894d", weight: isSelected ? 5 : 3 }} positions={positions} />
+      {editable ? positions.map((position, index) => (
+        <Marker
+          draggable
+          eventHandlers={{
+            click: () => onSelect?.(layer.pieceId),
+            dragend: (event) => {
+              const nextPositions = positions.map((candidate, candidateIndex) => candidateIndex === index ? [event.target.getLatLng().lat, event.target.getLatLng().lng] as LatLngTuple : candidate);
+              commitCoordinates(nextPositions);
+            },
+          }}
+          icon={markerIcon("is-map-piece-vertex", String(index + 1))}
+          key={`${layer.pieceId}-${index}`}
+          position={position}
+        />
+      )) : null}
+    </>
+  );
+}
+
 export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   const basemap = getBasemap(props.basemapKey);
   const derivedBounds = props.plainTileOnly ? null : props.bounds ?? boundsFromCorners(props.corners);
@@ -1790,7 +1862,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
       <FitBounds bounds={derivedBounds} enabled={props.fitBoundsEnabled ?? true} onViewMutation={props.onMapViewMutation} request={props.fitBoundsRequest} />
 
       {pieceLayers
-        .filter((piece) => piece.isVisible && Boolean(piece.imageUrl || piece.signedUrlError))
+        .filter((piece) => piece.isVisible && piece.targetGeometry === "polygon" && Boolean(piece.imageUrl || piece.signedUrlError))
         .sort((a, b) => a.layerOrder - b.layerOrder)
         .map((piece) => (
           <TransformedPieceLayer
@@ -1798,6 +1870,20 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             key={piece.pieceId}
             layer={piece}
             mode={props.sheetEditMode ?? "pan_modern_map"}
+            onCommit={props.onPieceTransformCommit}
+            onSelect={props.onSelectPiece}
+          />
+        ))}
+
+      {pieceLayers
+        .filter((piece) => piece.isVisible && piece.targetGeometry !== "polygon")
+        .sort((a, b) => a.layerOrder - b.layerOrder)
+        .map((piece) => (
+          <GeographicFeaturePlacement
+            key={`feature-${piece.pieceId}`}
+            layer={piece}
+            mode={props.sheetEditMode ?? "pan_modern_map"}
+            isSelected={props.selectedPieceId === piece.pieceId}
             onCommit={props.onPieceTransformCommit}
             onSelect={props.onSelectPiece}
           />

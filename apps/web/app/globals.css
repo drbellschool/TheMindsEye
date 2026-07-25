@@ -21,6 +21,51 @@
   --radius-sm: 12px;
 }
 
+.sanborn-placement-queue {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.55rem 0 0.8rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(194, 150, 84, 0.42);
+  border-radius: 0.55rem;
+  background: rgba(45, 27, 18, 0.78);
+}
+
+.sanborn-placement-queue__summary,
+.sanborn-placement-queue__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.sanborn-placement-queue__list {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.sanborn-placement-queue__item {
+  display: grid;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  color: inherit;
+  text-align: left;
+  border: 1px solid rgba(194, 150, 84, 0.2);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.sanborn-placement-queue__item:hover,
+.sanborn-placement-queue__item.is-selected {
+  border-color: #d3a45d;
+  background: rgba(211, 164, 93, 0.14);
+}
+
+.sanborn-placement-queue__item small { color: #dfc38e; }
+
 .sanborn-piece-review-categories {
   display: grid;
   gap: 0.4rem;

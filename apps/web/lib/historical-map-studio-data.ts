@@ -5,6 +5,7 @@ import {
   cornersFromBounds,
   isNearZeroCoordinate,
   isOperationalMapCenter,
+  validateGeoCoordinate,
   normalizeControlPoint,
   normalizeGeoreferenceStatus,
   normalizeGeoreferenceTargetType,
@@ -268,6 +269,10 @@ type MapPieceGeoreferenceRow = {
   layer_order: number | null;
   placement_status: string | null;
   target_geometry: string | null;
+  geographic_geometry: unknown;
+  unable_to_place_reason: string | null;
+  reviewer_identity: string | null;
+  reviewed_at: string | null;
   is_visible: boolean | null;
   is_locked: boolean | null;
   review_status: string | null;
@@ -789,7 +794,9 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
       };
       const validation = validateMapPieceGeographicCorners(corners);
 
-      if (row.target_geometry !== persistedMapPieceTargetGeometry || !validation.ok) {
+      const geographicGeometry = row.geographic_geometry as SanbornMapPieceGeoreference["geographicGeometry"];
+      const nonPolygonValid = row.target_geometry !== persistedMapPieceTargetGeometry && Boolean(geographicGeometry?.coordinates.length && geographicGeometry.coordinates.every((coordinate) => validateGeoCoordinate(coordinate).ok));
+      if ((row.target_geometry === persistedMapPieceTargetGeometry && !validation.ok) || (row.target_geometry !== persistedMapPieceTargetGeometry && !nonPolygonValid)) {
         invalidCount += 1;
         return null;
       }
@@ -798,7 +805,7 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
         pieceGeoreferenceId: row.piece_georeference_id,
         pieceId: piece.pieceId,
         atlasPageId: page.pageId,
-        targetGeometry: persistedMapPieceTargetGeometry,
+        targetGeometry: row.target_geometry ?? persistedMapPieceTargetGeometry,
         centerLatitude: row.center_latitude,
         centerLongitude: row.center_longitude,
         corners,
@@ -811,6 +818,10 @@ function mapMapPieceGeoreferences(rows: MapPieceGeoreferenceRow[], atlasInventor
         reviewStatus: normalizeReviewClassification(row.review_status),
         evidenceClassification: normalizeReviewClassification(row.evidence_classification),
         notes: row.notes,
+        geographicGeometry,
+        unableToPlaceReason: row.unable_to_place_reason,
+        reviewerIdentity: row.reviewer_identity,
+        reviewedAt: row.reviewed_at,
         updatedAt: row.updated_at,
         isPersisted: true,
       });
@@ -1211,7 +1222,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
       const mapPieceGeoreferencesResult = await supabase
         .from("sanborn_map_piece_georeferences")
         .select(
-          "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, is_visible, is_locked, review_status, evidence_classification, notes, updated_at",
+          "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, geographic_geometry, unable_to_place_reason, reviewer_identity, reviewed_at, is_visible, is_locked, review_status, evidence_classification, notes, updated_at",
         )
         .eq("workspace_id", workspaceRow.id)
         .in("atlas_page_id", atlasInventory.pages.map((page) => page.rowId));
