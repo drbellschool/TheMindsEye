@@ -9,6 +9,37 @@ export type SanbornSourceContextViewport = {
   aspectRatio: number;
 };
 
+export function clampSanbornSourceContextViewport(
+  viewport: SanbornSourceContextViewport,
+  imageWidth: number,
+  imageHeight: number,
+): SanbornSourceContextViewport {
+  const width = Math.min(Math.max(1, viewport.width), Math.max(1, imageWidth));
+  const height = Math.min(Math.max(1, viewport.height), Math.max(1, imageHeight));
+  return {
+    ...viewport,
+    x: clamp(viewport.x, 0, Math.max(0, imageWidth - width)),
+    y: clamp(viewport.y, 0, Math.max(0, imageHeight - height)),
+    width,
+    height,
+    aspectRatio: width / height,
+  };
+}
+
+export function panSanbornSourceContextViewport(
+  viewport: SanbornSourceContextViewport,
+  deltaX: number,
+  deltaY: number,
+  imageWidth: number,
+  imageHeight: number,
+): SanbornSourceContextViewport {
+  return clampSanbornSourceContextViewport(
+    { ...viewport, x: viewport.x - deltaX, y: viewport.y - deltaY },
+    imageWidth,
+    imageHeight,
+  );
+}
+
 type SourceContextInput = {
   sourceGeometry?: SanbornMapPieceSourceGeometry | null;
   sourcePolygon?: SanbornNormalizedPoint[] | null;

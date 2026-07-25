@@ -1368,6 +1368,10 @@ test("map piece placement route saves through the scoped service-role RPC", () =
   assert.match(dataSource, /validateMapPieceGeographicCorners\(corners\)/);
   assert.match(dataSource, /Saved map piece placement query returned \$\{savedMapPieceGeoreferenceMapping\.invalidCount\} invalid geographic placement row\(s\)\./);
   assert.match(route, /supabase\.rpc\("save_sanborn_map_piece_georeference"/);
+  assert.match(route, /resolveMapPlacementWorkspaceIdentity/);
+  assert.match(route, /\.eq\("town_package_id", townPackageId\)[\s\S]*\.eq\("map_year", mapYear\)/);
+  assert.match(route, /Map Placement could not resolve the workspace for this town and edition/);
+  assert.match(route, /workspaceId\?: string/);
   assert.match(route, /normalizeSanbornMapPieceGeoreference/);
   assert.doesNotMatch(route, /\.upsert\(/);
   assert.doesNotMatch(route, /\.from\("sanborn_map_piece_georeferences"\)[\s\S]{0,240}\.(insert|update|upsert)\(/);
