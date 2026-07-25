@@ -173,6 +173,14 @@ import {
   getSourceRepositoryLabel,
 } from "@/lib/town-reconstruction";
 import { focusStudioTarget, focusTargetForTask, focusTargetId, type StudioFocusTarget } from "@/lib/studio-focus-target";
+import {
+  getPrimaryIndexState,
+  getActiveEditionPages,
+  getSourceRecordProgress,
+  getSourceRecordQueue,
+  groupSourceOptionsForEdition,
+  suggestSourceRecordDisplayLabel,
+} from "@/lib/source-record-workflow";
 
 type UploadStatus = {
   filename: string;
@@ -1002,11 +1010,13 @@ export function HistoricalMapStudio({
     warningMessage: initialData.warningMessage,
   });
   const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
-  const activeAtlasPages = atlasInventory.pages
-    .filter((page) => page.atlasId === selectedAtlasId)
-    .sort(compareSanbornAtlasPagesForWorkflow);
+  const activeAtlasPages = getActiveEditionPages(atlasInventory.pages, selectedAtlasId).sort(compareSanbornAtlasPagesForWorkflow);
   const selectedAtlasPage = activeAtlasPages.find((page) => page.pageId === selectedAtlasPageId) ?? activeAtlasPages[0] ?? null;
   const selectedAtlasPageAsset = selectedAtlasPage ? sheets.find((sheet) => sheet.assetId === selectedAtlasPage.sanbornSheetAssetId) ?? null : null;
+  const sourceRecordQueue = getSourceRecordQueue(activeAtlasPages, sheets, townIndexRegions);
+  const sourceRecordProgress = getSourceRecordProgress({ pages: activeAtlasPages, assets: sheets, regions: townIndexRegions });
+  const sourceRecordSourceGroups = groupSourceOptionsForEdition(initialData.sourceOptions, activeAtlas?.editionYear);
+  const primaryIndexState = getPrimaryIndexState(activeAtlasPages);
   const selectedAtlasPagePieces = selectedAtlasPage
     ? atlasInventory.pieces
         .filter((piece) => piece.atlasPageId === selectedAtlasPage.pageId)
@@ -4689,8 +4699,59 @@ export function HistoricalMapStudio({
   }
 
   function renderSourceWorkspace() {
+    const unfinishedPageIndex = sourceRecordQueue.findIndex(({ page }) => page.pageId === selectedAtlasPage?.pageId);
+    const previousUnfinishedPage = unfinishedPageIndex > 0 ? sourceRecordQueue[unfinishedPageIndex - 1]?.page : null;
+    const nextUnfinishedPage = sourceRecordQueue[unfinishedPageIndex + 1]?.page ?? (unfinishedPageIndex < 0 ? sourceRecordQueue[0]?.page : null);
+    const primaryCandidates = activeAtlasPages.filter((page) => page.pageType === "index_or_mixed");
+    const focusSourceTask = (targetId: string, instruction: string) => requestFocusTarget({ targetId, instruction });
     return (
       <section className="sanborn-station-panel sanborn-source-preview" aria-label="Source Record preview">
+        <div className="sanborn-source-record-intro">
+          <div>
+            <p className="panel__eyebrow">Guided Source Record</p>
+            <strong>Classify the uploaded pages, identify the edition&apos;s primary index, and preserve the citation trail.</strong>
+          </div>
+          <span className="sanborn-source-record-progress">{sourceRecordProgress.completed}/{sourceRecordProgress.total} checks complete</span>
+        </div>
+        <section className="sanborn-source-record-primary" aria-labelledby="source-record-primary-index-heading">
+          <div>
+            <p className="panel__eyebrow">First required question</p>
+            <h3 id="source-record-primary-index-heading">Which uploaded file is the primary Sanborn index for this edition?</h3>
+            <span className={`sanborn-source-record-state is-${primaryIndexState}`}>
+              {primaryIndexState === "confirmed" ? "Primary index confirmed" : primaryIndexState === "candidate" ? "Candidate index" : primaryIndexState === "conflict" ? "Conflict requiring review" : "Unresolved"}
+            </span>
+          </div>
+          <div className="sanborn-source-record-candidates">
+            {primaryCandidates.length > 0 ? primaryCandidates.map((page) => (
+              <button className="sanborn-button" key={page.pageId} onClick={() => {
+                selectAtlasPage(page.pageId, "page_classification");
+                focusSourceTask(`primary-page-designation:${page.pageId}`, "Confirm whether this uploaded file is the edition's primary Sanborn index.");
+              }} type="button">
+                {getSanbornPageDisplayLabel(page)}{page.isPrimaryTownIndex ? " · confirmed" : " · candidate"}
+              </button>
+            )) : <span className="sanborn-atlas-empty">No index candidate has been classified yet. Review each uploaded file before confirming one.</span>}
+          </div>
+        </section>
+        <div className="sanborn-source-record-sequence" aria-label="Source Record task sequence">
+          {[
+            ["Review uploaded files", `page-classification:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Classify each page", `page-classification:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Identify the primary index", `primary-page-designation:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Confirm the printed sheet reference", `page-printed-reference:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Link the page to its source record", `page-source-record:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Review the citation", `citation-preview:${selectedAtlasPage?.pageId ?? ""}`],
+            ["Mark functional source regions", selectedSourceRegion ? `source-region-linked-page:${selectedSourceRegion.regionId}` : `page-classification:${selectedAtlasPage?.pageId ?? ""}`],
+          ].map(([label, targetId], index) => (
+            <button className="sanborn-source-record-sequence__item" key={label} onClick={() => focusSourceTask(targetId, `${label}.`)} type="button">
+              <span>{index + 1}</span>{label}
+            </button>
+          ))}
+        </div>
+        <div className="sanborn-source-record-queue" aria-label="Unfinished page navigation">
+          <span>Unfinished pages: {sourceRecordQueue.length}</span>
+          <button className="sanborn-button" disabled={!previousUnfinishedPage} onClick={() => previousUnfinishedPage && selectAtlasPage(previousUnfinishedPage.pageId, "page_classification")} type="button">Previous unfinished page</button>
+          <button className="sanborn-button" disabled={!nextUnfinishedPage} onClick={() => nextUnfinishedPage && selectAtlasPage(nextUnfinishedPage.pageId, "page_classification")} type="button">Next unfinished page</button>
+        </div>
         <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "page_classification")} />
         <div className="sanborn-source-region-toolbar" aria-label="Functional source region tools">
           <button className={`sanborn-button${townIndexMapMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("select")} type="button">Select</button>
@@ -5097,8 +5158,8 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "page_classification") {
       return (
         <>
-          <section className="sanborn-station-subsection">
-            <strong>Page Classification</strong>
+          <section className="sanborn-station-subsection" aria-label="Page Identity">
+            <strong>PAGE IDENTITY · Page Classification</strong>
             <dl className="sanborn-station-details">
               <dt>Selected uploaded page</dt>
               <dd>{selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "No page selected"}</dd>
@@ -5113,8 +5174,9 @@ export function HistoricalMapStudio({
               <>
                 <label data-focus-target={`page-classification:${selectedAtlasPage.pageId}`}>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
                 <p className="sanborn-atlas-empty">{getSanbornPageTypeDescription(selectedAtlasPage.pageType)}</p>
-                <label>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} placeholder="2, 2A, East inset, Unnumbered" /></label>
+                <label data-focus-target={`page-printed-reference:${selectedAtlasPage.pageId}`}>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} placeholder="2, 2A, East inset, Unnumbered" /></label>
                 <label>Display title<input disabled={atlasReadOnly} value={selectedAtlasPage.displayLabel ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { displayLabel: event.target.value })} placeholder="Cover, Town Index, Sheet 2" /></label>
+                <p className="sanborn-atlas-empty">Suggested label: {suggestSourceRecordDisplayLabel(selectedAtlasPage)}</p>
                 <label data-focus-target={`primary-page-designation:${selectedAtlasPage.pageId}`}>
                   <input
                     checked={selectedAtlasPage.isPrimaryTownIndex}
@@ -5148,8 +5210,8 @@ export function HistoricalMapStudio({
               <p className="sanborn-atlas-empty">Select an uploaded page before classifying it.</p>
             )}
           </section>
-          <section className="sanborn-station-subsection">
-            <strong>Functional Source Regions</strong>
+          <section className="sanborn-station-subsection" aria-label="Functional Source Regions">
+            <strong>FUNCTIONAL SOURCE REGIONS</strong>
             <p className="sanborn-atlas-empty">Mark the page areas that support later work: town coverage, sheet coverage, printed index text, geographic map content, legend/key, or notes.</p>
             {selectedPageSourceRegions.length > 0 ? (
               <label>Selected region<select value={selectedSourceRegion?.regionId ?? ""} onChange={(event) => setSelectedIndexRegionId(event.target.value)}>
@@ -5189,7 +5251,8 @@ export function HistoricalMapStudio({
                 }}><option value="">Unresolved / no link</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
                 <label data-focus-target={`source-region-provenance:${selectedSourceRegion.regionId}`}>Region provenance<select disabled={atlasReadOnly} value={selectedSourceRegion.sourceRecordId ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sourceRecordId: event.target.value || null })}>
                   <option value="">Inherit from source sheet</option>
-                  {initialData.sourceOptions.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} — {source.title}</option>)}
+                  {sourceRecordSourceGroups.editionSources.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} — {source.title}</option>)}
+                  {sourceRecordSourceGroups.otherTownSources.length > 0 ? <optgroup label="Other town sources">{sourceRecordSourceGroups.otherTownSources.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} — {source.title}</option>)}</optgroup> : null}
                 </select></label>
                 <p className="sanborn-atlas-empty">{selectedSourceRegion.sourceRecordId ? "Region-level source override" : `Inherited from ${selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "the source sheet"}.`}</p>
                 <label data-focus-target={`workflow-status:${selectedSourceRegion.regionId}`}>Status<select disabled={atlasReadOnly} value={selectedSourceRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
@@ -5203,6 +5266,8 @@ export function HistoricalMapStudio({
               </>
             ) : null}
           </section>
+          <section className="sanborn-station-subsection" aria-label="Source and Citation">
+          <strong>SOURCE AND CITATION</strong>
           <dl className="sanborn-station-details">
             <dt>Internal source ID</dt>
             <dd>{selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "Missing source record"}</dd>
@@ -5221,7 +5286,7 @@ export function HistoricalMapStudio({
             <dt>Source status</dt>
             <dd>{selectedSourceRecord?.sourceStatus ?? "unknown"}</dd>
           </dl>
-          <p className="sanborn-station-citation">{selectedSourceCitation || "Citation unavailable until a source is linked."}</p>
+          <p className="sanborn-station-citation" data-focus-target={`citation-preview:${selectedAtlasPage?.pageId ?? ""}`}>{selectedSourceCitation || "Citation unavailable until a source is linked."}</p>
           <div className="sanborn-station-actions">
             <button className="sanborn-button" disabled={!selectedSourceCitation} onClick={() => navigator.clipboard?.writeText(selectedSourceCitation)} type="button">Copy citation</button>
             <button className="sanborn-button" disabled={!selectedSourceRecord} onClick={() => selectedSourceRecord && navigator.clipboard?.writeText(getSourceDisplayId(selectedSourceRecord))} type="button">Copy source ID</button>
@@ -5230,8 +5295,9 @@ export function HistoricalMapStudio({
           <label data-focus-target={`page-source-record:${selectedAtlasPage?.pageId ?? selectedAssetId}`}>Link selected sheet to source<select value={metadataDraft.sourceRecordId} onChange={(event) => {
             const source = initialData.sourceOptions.find((candidate) => candidate.sourceRecordId === event.target.value);
             setMetadataDraft({ ...metadataDraft, sourceRecordId: event.target.value, sourceUrl: source?.persistentUrl ?? source?.sourceUrl ?? metadataDraft.sourceUrl, archiveName: source?.archiveName ?? metadataDraft.archiveName, rightsNote: source?.rightsNote ?? metadataDraft.rightsNote });
-          }}><option value="">Source unavailable</option>{initialData.sourceOptions.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} - {source.title}</option>)}</select></label>
+          }}><option value="">Source unavailable</option>{sourceRecordSourceGroups.editionSources.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} - {source.title}</option>)}{sourceRecordSourceGroups.otherTownSources.length > 0 ? <optgroup label="Other town sources">{sourceRecordSourceGroups.otherTownSources.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} - {source.title}</option>)}</optgroup> : null}</select></label>
           <button className="sanborn-button sanborn-button--primary" disabled={!selectedAsset || atlasReadOnly} onClick={() => void updateMetadata()} type="button">Update source metadata</button>
+          </section>
         </>
       );
     }
@@ -5642,7 +5708,7 @@ export function HistoricalMapStudio({
         </div>
       </header>
 
-      <div className={`sanborn-atlas-workflow sanborn-atlas-workflow--stations${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
+      <div className={`sanborn-atlas-workflow sanborn-atlas-workflow--stations${atlasWorkflowStep === "page_classification" ? " is-source-record" : ""}${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
         <button
           aria-controls="sanborn-station-rail"
           aria-expanded={!leftPanelCollapsed}
