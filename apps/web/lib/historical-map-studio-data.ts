@@ -315,6 +315,10 @@ type TownIndexRegionRow = {
   progress_status?: string | null;
   include_in_town_index?: boolean | null;
   available_to_map_pieces?: boolean | null;
+  display_color?: string | null;
+  display_opacity?: number | null;
+  reference_resolution?: "linked" | "missing" | "not_applicable" | "unresolved" | null;
+  reference_resolution_note?: string | null;
   review_status: string | null;
   evidence_classification: string | null;
   notes: string | null;
@@ -865,6 +869,10 @@ function mapTownIndexRegions(
         progressStatus: normalizeTownIndexStatus(row.progress_status),
         includeInTownIndex: row.include_in_town_index ?? true,
         availableToMapPieces: row.available_to_map_pieces === true,
+        displayColor: row.display_color ?? "#b98b57",
+        displayOpacity: row.display_opacity ?? 0.55,
+        referenceResolution: row.reference_resolution ?? "unresolved",
+        referenceResolutionNote: row.reference_resolution_note ?? null,
         reviewStatus: normalizeReviewClassification(row.review_status),
         evidenceClassification: normalizeReviewClassification(row.evidence_classification),
         notes: row.notes,
@@ -1138,7 +1146,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     let townIndexRegionsResult = (await supabase
       .from("sanborn_source_regions")
       .select(
-        "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, source_record_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, workflow_status, review_status, evidence_classification, notes, updated_at",
+        "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, source_record_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, display_color, display_opacity, reference_resolution, reference_resolution_note, workflow_status, review_status, evidence_classification, notes, updated_at",
       )
       .eq("town_package_id", activeTownPackage.id)
       .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))

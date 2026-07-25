@@ -15,6 +15,7 @@ import {
   type SanbornTownIndexRegionRecord,
   type SanbornTownIndexStatus,
 } from "@/lib/sanborn-town-index";
+import { normalizeDisplayColor, normalizeDisplayOpacity } from "@/lib/town-index-review";
 
 export type TownIndexMissionMapMode = "select" | "draw" | "move" | "pan";
 
@@ -284,6 +285,9 @@ export function TownIndexMissionMap({
                 <polygon
                   aria-label={`${region.regionLabel || region.sheetReference || "Unlabeled region"}: ${statusLabels[status]}`}
                   className="town-index-region__polygon"
+                  fill={normalizeDisplayColor(region.displayColor)}
+                  fillOpacity={normalizeDisplayOpacity(region.displayOpacity)}
+                  style={{ fill: normalizeDisplayColor(region.displayColor), fillOpacity: normalizeDisplayOpacity(region.displayOpacity) }}
                   onClick={(event) => {
                     event.stopPropagation();
                     onSelectRegion(region.regionId);

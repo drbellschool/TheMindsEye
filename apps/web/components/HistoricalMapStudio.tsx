@@ -173,6 +173,7 @@ import {
   getSourceRepositoryLabel,
 } from "@/lib/town-reconstruction";
 import { focusStudioTarget, focusTargetForTask, focusTargetId, type StudioFocusTarget } from "@/lib/studio-focus-target";
+import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, referenceResolutionStatuses, townIndexDisplayPalette, validateReferenceResolution } from "@/lib/town-index-review";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -1111,10 +1112,11 @@ export function HistoricalMapStudio({
   const activeTownIndexRegions = useMemo(
     () =>
       townIndexRegions
-        .filter((region) => region.atlasId === selectedAtlasId && sourceRegionIsTownIndexContext(region))
+        .filter((region) => region.atlasId === selectedAtlasId && (sourceRegionIsTownIndexContext(region) || ["inset_map", "specials", "legend_key"].includes(region.regionType)))
         .sort((left, right) => compareSheetReferences(left.sheetReference, right.sheetReference) || left.regionLabel.localeCompare(right.regionLabel)),
     [selectedAtlasId, townIndexRegions],
   );
+  const townIndexChecklist = getTownIndexChecklistProgress(activeTownIndexRegions);
   const selectedPageSourceRegions = useMemo(
     () =>
       townIndexRegions
@@ -2100,8 +2102,8 @@ export function HistoricalMapStudio({
   function selectSourceRegionAndFocus(regionId: string) {
     setSelectedIndexRegionId(regionId);
     requestFocusTarget({
-      targetId: focusTargetId("source-region-linked-page", regionId),
-      instruction: "Review the selected source region and complete its linked page or provenance fields.",
+      targetId: focusTargetId(atlasWorkflowStep === "town_index" ? "town-index-region-card" : "source-region-linked-page", regionId),
+      instruction: atlasWorkflowStep === "town_index" ? "Review the selected Town Index region, resolution, color, and status." : "Review the selected source region and complete its linked page or provenance fields.",
     });
   }
 
@@ -4009,6 +4011,10 @@ export function HistoricalMapStudio({
       progressStatus: "not_started",
       includeInTownIndex: true,
       availableToMapPieces: false,
+      displayColor: townIndexDisplayPalette[nextIndex % townIndexDisplayPalette.length],
+      displayOpacity: 0.55,
+      referenceResolution: "unresolved",
+      referenceResolutionNote: null,
       reviewStatus: "unknown",
       evidenceClassification: "unknown",
       notes: null,
@@ -4067,6 +4073,10 @@ export function HistoricalMapStudio({
           progressStatus: regionToSave.progressStatus,
           includeInTownIndex: regionToSave.includeInTownIndex,
           availableToMapPieces: regionToSave.availableToMapPieces,
+          displayColor: regionToSave.displayColor,
+          displayOpacity: regionToSave.displayOpacity,
+          referenceResolution: regionToSave.referenceResolution,
+          referenceResolutionNote: regionToSave.referenceResolutionNote,
           notes: regionToSave.notes,
         },
       }),
@@ -4099,6 +4109,10 @@ export function HistoricalMapStudio({
       progressStatus: payload.region?.progressStatus ?? regionToSave.progressStatus,
       includeInTownIndex: payload.region?.includeInTownIndex ?? regionToSave.includeInTownIndex,
       availableToMapPieces: payload.region?.availableToMapPieces ?? regionToSave.availableToMapPieces,
+      displayColor: payload.region?.displayColor ?? regionToSave.displayColor,
+      displayOpacity: payload.region?.displayOpacity ?? regionToSave.displayOpacity,
+      referenceResolution: payload.region?.referenceResolution ?? regionToSave.referenceResolution,
+      referenceResolutionNote: payload.region?.referenceResolutionNote ?? regionToSave.referenceResolutionNote,
       notes: payload.region?.notes ?? regionToSave.notes,
       reviewStatus: payload.region?.reviewStatus ?? regionToSave.reviewStatus,
       evidenceClassification: payload.region?.evidenceClassification ?? regionToSave.evidenceClassification,
@@ -4837,6 +4851,33 @@ export function HistoricalMapStudio({
 
     return (
       <section className="town-index-workspace-with-navigator">
+      <section className="sanborn-town-index-chore-list" aria-label="Town Index guided checklist">
+        <header><div><p className="panel__eyebrow">Guided index review</p><strong>Walk the printed index before opening downstream work.</strong></div><span>{townIndexChecklist.completed}/{townIndexChecklist.total} categories</span></header>
+        <div className="sanborn-town-index-chore-list__categories">
+          {[
+            { label: "SHEET COVERAGE REGIONS", detail: `${townIndexChecklist.coverage.reviewed} of ${townIndexChecklist.coverage.total} reviewed`, predicate: (region: SanbornTownIndexRegionRecord) => region.regionType === "sheet_coverage_region", instruction: "Review each printed coverage region, reference, linked page, color, and status." },
+            { label: "INSETS AND DETACHED DISTRICTS", detail: townIndexChecklist.insets.total > 0 ? `${townIndexChecklist.insets.reviewed} of ${townIndexChecklist.insets.total} reviewed` : "Not started", predicate: (region: SanbornTownIndexRegionRecord) => region.regionType === "inset_map", instruction: "Review the printed inset or detached district and its linked page." },
+            { label: "SPECIALS", detail: townIndexChecklist.specials === "marked" ? "Marked" : "Not started", predicate: (region: SanbornTownIndexRegionRecord) => region.regionType === "specials", instruction: "Mark the printed Specials section and preserve its polygon and source connection." },
+            { label: "KEY / LEGEND", detail: townIndexChecklist.key === "marked" ? "Marked" : "Not started", predicate: (region: SanbornTownIndexRegionRecord) => region.regionType === "legend_key", instruction: "Mark the key or legend for future symbol interpretation." },
+            { label: "INDEX RECONCILIATION", detail: `${townIndexChecklist.references.resolved} of ${townIndexChecklist.references.total} resolved`, predicate: (region: SanbornTownIndexRegionRecord) => Boolean(region.sheetReference && region.referenceResolution !== "linked" && region.referenceResolution !== "missing" && region.referenceResolution !== "not_applicable"), instruction: "Resolve this printed reference as linked, missing, or not applicable with a reason." },
+          ].map((chore) => {
+            const targetRegion = activeTownIndexRegions.find(chore.predicate);
+            return <button className="sanborn-town-index-chore-list__item" key={chore.label} onClick={() => {
+              if (targetRegion) {
+                setSelectedIndexRegionId(targetRegion.regionId);
+                setSourceZoom(1.5);
+                requestFocusTarget({ targetId: focusTargetId("town-index-region-card", targetRegion.regionId), instruction: chore.instruction });
+              } else if (reconstructionModel.index.indexPage) {
+                requestFocusTarget({ targetId: focusTargetId("workflow-status", "town-index"), instruction: chore.instruction });
+              }
+            }} type="button"><strong>{chore.label}</strong><span>{chore.detail}</span></button>;
+          })}
+        </div>
+        <div className="sanborn-town-index-region-list" aria-label="Town Index regions">
+          {activeTownIndexRegions.filter((region) => region.workflowStatus !== "reviewed").map((region) => <button className="sanborn-town-index-region-list__item" data-focus-target={`town-index-region-card:${region.regionId}`} key={region.regionId} onClick={() => { setSelectedIndexRegionId(region.regionId); setSourceZoom(1.5); requestFocusTarget({ targetId: focusTargetId("town-index-region-card", region.regionId), instruction: "Review this unfinished index region in the inspector." }); }} type="button"><i aria-hidden="true" style={{ backgroundColor: normalizeDisplayColor(region.displayColor), opacity: normalizeDisplayOpacity(region.displayOpacity) }} /><span>{region.regionLabel || region.sheetReference || "Unlabeled region"}</span><small>{region.sheetReference || "No printed reference"} · {region.workflowStatus.replaceAll("_", " ")}</small></button>)}
+          <details><summary>Completed regions ({activeTownIndexRegions.filter((region) => region.workflowStatus === "reviewed").length})</summary>{activeTownIndexRegions.filter((region) => region.workflowStatus === "reviewed").map((region) => <button className="sanborn-town-index-region-list__item is-complete" key={region.regionId} onClick={() => { setSelectedIndexRegionId(region.regionId); setSourceZoom(1.5); requestFocusTarget({ targetId: focusTargetId("town-index-region-card", region.regionId), instruction: "Review this completed index region if a correction is needed." }); }} type="button"><i aria-hidden="true" style={{ backgroundColor: normalizeDisplayColor(region.displayColor), opacity: normalizeDisplayOpacity(region.displayOpacity) }} /><span>{region.regionLabel || region.sheetReference || "Unlabeled region"}</span><small>Reviewed</small></button>)}</details>
+        </div>
+      </section>
       <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "town_index")} />
       <TownIndexMissionMap
         draftPoints={townIndexDraftPoints}
@@ -5303,6 +5344,9 @@ export function HistoricalMapStudio({
     }
 
     if (atlasWorkflowStep === "town_index") {
+      const selectedReferenceValidation = selectedTownIndexRegion
+        ? validateReferenceResolution(selectedTownIndexRegion.referenceResolution, selectedTownIndexRegion.referenceResolutionNote)
+        : null;
       return (
         <>
           <dl className="sanborn-station-details">
@@ -5334,9 +5378,12 @@ export function HistoricalMapStudio({
           </div>
           {selectedTownIndexRegion ? (
             <>
+              <section data-focus-target={`town-index-region-card:${selectedTownIndexRegion.regionId}`} className="sanborn-town-index-region-card" aria-label="Town Index region review">
               <label>Region label<input disabled={atlasReadOnly} value={selectedTownIndexRegion.regionLabel} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionLabel: event.target.value })} /></label>
               <label>Printed sheet reference<input disabled={atlasReadOnly} value={selectedTownIndexRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { sheetReference: event.target.value })} /></label>
               <label>Region type<select disabled={atlasReadOnly} value={selectedTownIndexRegion.regionType} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionType: event.target.value as SanbornTownIndexRegionType })}>{sanbornSourceRegionTypes.map((type) => <option key={type} value={type}>{getSourceRegionTypeLabel(type)}</option>)}</select></label>
+              <label>Display color<div className="sanborn-town-index-color-control"><input aria-label="Exact region display color" disabled={atlasReadOnly} type="color" value={normalizeDisplayColor(selectedTownIndexRegion.displayColor)} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { displayColor: event.target.value })} /><span className="sanborn-town-index-color-swatch" style={{ backgroundColor: normalizeDisplayColor(selectedTownIndexRegion.displayColor), opacity: normalizeDisplayOpacity(selectedTownIndexRegion.displayOpacity) }} />{townIndexDisplayPalette.map((color) => <button aria-label={`Use ${color} display color`} className="sanborn-town-index-color-preset" key={color} onClick={() => patchTownIndexRegion(selectedTownIndexRegion.regionId, { displayColor: color })} style={{ backgroundColor: color }} type="button" />)}</div></label>
+              <label>Color opacity<input disabled={atlasReadOnly} max="1" min="0.15" step="0.05" type="range" value={normalizeDisplayOpacity(selectedTownIndexRegion.displayOpacity)} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { displayOpacity: Number(event.target.value) })} /><span>{Math.round(normalizeDisplayOpacity(selectedTownIndexRegion.displayOpacity) * 100)}%</span></label>
               <label data-focus-target={`source-region-linked-page:${selectedTownIndexRegion.regionId}`}>Linked sheet/page<select disabled={atlasReadOnly} value={selectedTownIndexRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
                 const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
                 patchTownIndexRegion(selectedTownIndexRegion.regionId, {
@@ -5346,7 +5393,10 @@ export function HistoricalMapStudio({
                   linkedSheetAssetRowId: linkedPage?.sanbornSheetAssetRowId ?? null,
                 });
               }}><option value="">Unresolved / no link</option>{activeAtlasPages.filter((page) => pageTypeSupportsMapPieces(page.pageType)).map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
-              <label>Status<select disabled={atlasReadOnly} value={selectedTownIndexRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+              <label data-focus-target={`reference-resolution:${selectedTownIndexRegion.regionId}`}>Printed reference resolution<select disabled={atlasReadOnly} value={selectedTownIndexRegion.referenceResolution ?? "unresolved"} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { referenceResolution: event.target.value as SanbornTownIndexRegionRecord["referenceResolution"] })}>{referenceResolutionStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+              {(selectedTownIndexRegion.referenceResolution === "missing" || selectedTownIndexRegion.referenceResolution === "not_applicable") ? <label>Resolution reason<textarea disabled={atlasReadOnly} value={selectedTownIndexRegion.referenceResolutionNote ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { referenceResolutionNote: event.target.value })} placeholder="Why is this reference missing or not applicable?" /></label> : null}
+              {selectedReferenceValidation && !selectedReferenceValidation.ok ? <p className="sanborn-atlas-warning">{selectedReferenceValidation.error}</p> : null}
+              <label data-focus-target="workflow-status:town-index">Status<select disabled={atlasReadOnly} value={selectedTownIndexRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
               <label>Notes<textarea disabled={atlasReadOnly} value={selectedTownIndexRegion.notes ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { notes: event.target.value })} /></label>
               <dl className="sanborn-station-details">
                 <dt>Progress</dt>
@@ -5355,11 +5405,12 @@ export function HistoricalMapStudio({
                 <dd>{selectedIndexProgress?.warnings.join(", ") || "None"}</dd>
               </dl>
               <div className="sanborn-station-actions">
-                <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || saveStatus === "saving"} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save region</button>
+                <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || saveStatus === "saving" || Boolean(selectedReferenceValidation && !selectedReferenceValidation.ok)} onClick={() => void saveSelectedTownIndexRegion()} type="button">Save region</button>
                 <button className="sanborn-button" disabled={!selectedTownIndexRegion.linkedAtlasPageId && !selectedTownIndexRegion.linkedSheetAssetId} onClick={() => openTownIndexRegionLink(selectedTownIndexRegion, "piece_inventory")} type="button">Open linked sheet</button>
                 <button className="sanborn-button" onClick={() => selectAtlasPage(selectedTownIndexRegion.indexAtlasPageId, "page_classification")} type="button">Edit source regions</button>
                 <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => void deleteSelectedTownIndexRegion()} type="button">Delete region</button>
               </div>
+              </section>
             </>
           ) : (
             <p className="sanborn-atlas-empty">Select or draw an index region.</p>

@@ -25,6 +25,7 @@ import {
   calculateTownIndexRegionProgress,
   compareSheetReferences,
   getSourceRegionTypeLabel,
+  normalizeSourceRegionType,
   sanbornSourceRegionTypes,
   sourceRegionSupportsMapPieces,
   sourceRegionSupportsTownIndex,
@@ -435,10 +436,13 @@ test("source region model supports all functional region types", () => {
     "block_index_text",
     "legend_key",
     "inset_map",
+    "specials",
     "title_or_decoration",
     "notes",
     "other",
   ]);
+  assert.equal(normalizeSourceRegionType("specials"), "specials");
+  assert.equal(normalizeSourceRegionType("unknown-legacy-type"), "other");
 });
 
 test("non-sequential sheets aggregate without assuming a sheet-one sequence", () => {
