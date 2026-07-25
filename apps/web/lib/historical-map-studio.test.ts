@@ -32,6 +32,7 @@ import {
   suggestSourceRecordDisplayLabel,
 } from "./source-record-workflow.ts";
 import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, validateReferenceResolution } from "./town-index-review.ts";
+import { deriveSheetInventoryQueue } from "./sheet-inventory-queue.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -1839,4 +1840,31 @@ test("Town Index review metadata migration is additive and guarded", () => {
   assert.match(migration, /reference_resolution_note/);
   assert.match(migration, /'specials'/);
   assert.doesNotMatch(migration, /drop table\s+public\.sanborn_source_regions/i);
+});
+
+test("Sheet Inventory queue filters archived pages, derives status precedence, and keeps documented missing references", () => {
+  const page = (pageId: string, pageType: string, archivedAt: string | null = null) => ({ pageId, atlasId: "atlas-1888", sanbornSheetAssetId: `${pageId}-asset`, pageSequence: Number(pageId.replace("page-", "")) || 1, pageType, sheetNumber: null, printedReference: pageId === "page-1" ? "1" : "2", displayLabel: null, isPrimaryTownIndex: false, archivedAt }) as any;
+  const pages = [page("page-1", "sanborn_sheet"), page("page-2", "unknown"), page("page-3", "sanborn_sheet", "2026-01-01"), page("page-4", "sanborn_sheet")];
+  const queue = deriveSheetInventoryQueue({
+    activeAtlasId: "atlas-1888",
+    pages,
+    assets: [
+      { assetId: "page-1-asset", sourceRecordId: "source-1", originalFilename: "sheet-1.jpg" },
+      { assetId: "page-2-asset", sourceRecordId: null, originalFilename: "sheet-2.jpg" },
+      { assetId: "page-4-asset", sourceRecordId: "source-4", originalFilename: "sheet-4.jpg" },
+    ] as any,
+    pieces: [],
+    placements: [],
+    regions: [{ regionId: "missing-4", atlasId: "atlas-1888", indexAtlasPageId: "index", regionLabel: "Sheet 4", sheetReference: "4", regionType: "sheet_coverage_region", workflowStatus: "missing", referenceResolution: "missing", referenceResolutionNote: "No upload received" }] as any,
+  });
+  assert.equal(queue.some((item) => item.pageId === "page-3"), false);
+  assert.equal(queue.find((item) => item.pageId === "page-2")?.status, "needs_classification");
+  assert.equal(queue.find((item) => item.id === "missing:missing-4")?.status, "missing_page");
+  assert.equal(queue.find((item) => item.pageId === "page-1")?.status, "waiting_for_index_link");
+});
+
+test("Sheet Inventory cards route active sheets into Map Pieces and the focused inspector", () => {
+  const studio = readFileSync(new URL("../components/HistoricalMapStudio.tsx", import.meta.url), "utf8");
+  assert.match(studio, /selectAtlasPage\(item\.pageId, "piece_inventory"\)/);
+  assert.match(studio, /workflow-status:piece-inventory/);
 });
