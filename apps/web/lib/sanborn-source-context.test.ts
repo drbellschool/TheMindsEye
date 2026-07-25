@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildSanbornSourceContextViewport, normalizedPointToSourceContextPoint } from "./sanborn-source-context.ts";
+import { buildSanbornSourceContextViewport, clampSanbornSourceContextViewport, normalizedPointToSourceContextPoint, panSanbornSourceContextViewport } from "./sanborn-source-context.ts";
 
 test("source context adds padding around polygon and line geometry", () => {
   const polygon = buildSanbornSourceContextViewport({
@@ -51,4 +51,20 @@ test("context viewBox preserves the requested aspect ratio and overlay alignment
   assert.ok(Math.abs(viewport.aspectRatio - 1.4) < 0.02);
   assert.ok(point.x > 0 && point.x < 1);
   assert.ok(point.y > 0 && point.y < 1);
+});
+
+test("source context panning moves the crop and keeps the viewport clamped", () => {
+  const viewport = buildSanbornSourceContextViewport({
+    sourcePolygon: [{ x: 0.45, y: 0.45 }, { x: 0.55, y: 0.55 }],
+    imageWidth: 1000,
+    imageHeight: 1000,
+    previewAspectRatio: 1,
+  });
+  const moved = panSanbornSourceContextViewport(viewport, 100, -80, 1000, 1000);
+  assert.equal(moved.x, viewport.x - 100);
+  assert.equal(moved.y, viewport.y + 80);
+  const edge = panSanbornSourceContextViewport(moved, 10000, -10000, 1000, 1000);
+  assert.equal(edge.x, 0);
+  assert.equal(edge.y, 1000 - edge.height);
+  assert.deepEqual(clampSanbornSourceContextViewport(edge, 1000, 1000), edge);
 });

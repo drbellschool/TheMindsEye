@@ -872,6 +872,7 @@ export function HistoricalMapStudio({
   const minimalMapRef = useRef<HTMLElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const saveInFlightRef = useRef(false);
+  const placementSaveInFlightRef = useRef(false);
   const [stageSize, setStageSize] = useState({ width: 1100, height: 720 });
   const [sheets, setSheets] = useState<StudioSheetAsset[]>(initialData.sheets);
   const [history, setHistory] = useState<StudioHistoryState>(buildInitialHistory(createPresentFromState(initialData)));
@@ -882,6 +883,7 @@ export function HistoricalMapStudio({
   const [saveStatus, setSaveStatus] = useState<StudioSaveStatus>("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState(initialData.workspace?.updatedAt ?? "");
+  const [resolvedMapPlacementWorkspaceId, setResolvedMapPlacementWorkspaceId] = useState(initialData.workspace?.workspaceId ?? "");
   const [search, setSearch] = useState("");
   const [sheetFilter, setSheetFilter] = useState<"all" | "unplaced" | "draft" | "aligned" | "reviewed" | "hidden" | "locked" | "warnings">("all");
   const [showGrid, setShowGrid] = useState(true);
@@ -1516,6 +1518,7 @@ export function HistoricalMapStudio({
     setSaveStatus("idle");
     setSaveMessage("");
     setLastSavedAt(initialData.workspace?.updatedAt ?? "");
+    setResolvedMapPlacementWorkspaceId(initialData.workspace?.workspaceId ?? "");
     setGeoreferenceDraft(createGeoreferenceDraft(initialData, preferredAssetId || null));
     setMapCenter(getDefaultTownCenter(initialData));
     setModernMapZoom(initialData.geographicMap.zoom);
@@ -2403,6 +2406,11 @@ export function HistoricalMapStudio({
       return;
     }
 
+    if (saveStatus === "error") {
+      setSaveStatus("idle");
+      setSaveMessage("");
+    }
+
     setSelectedAtlasPageId(selection.page.pageId);
     setSelectedMapPieceId(selection.piece.pieceId);
     setSelectedAssetId(selection.sourceAssetId);
@@ -2413,6 +2421,10 @@ export function HistoricalMapStudio({
   function openPlacementQueueItem(item: MapPiecePlacementQueueItem) {
     const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === item.pieceId);
     if (!piece) return;
+    if (saveStatus === "error") {
+      setSaveStatus("idle");
+      setSaveMessage("");
+    }
     selectAtlasPage(item.pageId, "gps_alignment");
     setSelectedMapPieceId(item.pieceId);
     setSelectedAssetId(item.sourceAssetId);
@@ -2546,17 +2558,18 @@ export function HistoricalMapStudio({
 
     const activeTownPackage = initialData.activeTownPackage;
 
-    if (!activeTownPackage || atlasReadOnly || saveInFlightRef.current) {
+    if (!activeTownPackage || atlasReadOnly || saveInFlightRef.current || placementSaveInFlightRef.current) {
       setSaveStatus("error");
       setSaveMessage("Map piece placement save failed: write access is unavailable.");
       return;
     }
 
     saveInFlightRef.current = true;
+    placementSaveInFlightRef.current = true;
     setSaveStatus("saving");
     setSaveMessage("Saving map piece placement...");
     const mapCenterForSave = isOperationalMapCenter(mapCenter) ? mapCenter : getGpsTownCenterFromState(initialData);
-    const workspaceId = initialData.workspace?.workspaceId ?? `${activeTownPackage.packageId}-${initialData.activeMapYear ?? activeTownPackage.year}-historical-map-studio`;
+    const workspaceId = resolvedMapPlacementWorkspaceId || `${activeTownPackage.packageId}-${initialData.activeMapYear ?? activeTownPackage.year}-historical-map-studio`;
     const saveResult = await runMapPiecePlacementNetworkRequest(
       async () => {
         const response = await fetch("/api/community/historical-map-studio/map-piece-georeferences", {
@@ -2573,12 +2586,13 @@ export function HistoricalMapStudio({
             placement: placementForSave,
           }),
         });
-        const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string; placement?: SanbornMapPieceGeoreference } | null;
+        const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string; workspaceId?: string; placement?: SanbornMapPieceGeoreference } | null;
 
         return { response, payload };
       },
       () => {
         saveInFlightRef.current = false;
+        placementSaveInFlightRef.current = false;
       },
     );
 
@@ -2605,6 +2619,7 @@ export function HistoricalMapStudio({
     }
 
     replaceMapPieceGeoreference(savedPlacement);
+    if (payload.workspaceId) setResolvedMapPlacementWorkspaceId(payload.workspaceId);
     setSaveStatus("saved");
     setSaveMessage("Map piece placement saved.");
     setLastSavedAt(payload.savedAt ?? new Date().toISOString());
@@ -6531,7 +6546,7 @@ export function HistoricalMapStudio({
       </header>
 
       {initialData.warningMessage ? <p className="map-studio-toast">{initialData.warningMessage}</p> : null}
-      {saveMessage ? <p className={saveStatus === "error" ? "map-studio-toast is-error" : "map-studio-toast"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
+      {saveMessage && atlasWorkflowStep !== "gps_alignment" ? <p className={saveStatus === "error" ? "map-studio-toast is-error" : "map-studio-toast"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
 
       <div className={`map-studio-layout${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
         <aside className="map-studio-sidebar" hidden={leftPanelCollapsed}>

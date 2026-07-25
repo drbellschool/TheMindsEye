@@ -4183,7 +4183,14 @@ body:has(.minimal-sanborn-gps) {
   white-space: nowrap;
 }
 
+.sanborn-source-context__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .sanborn-source-context__hide,
+.sanborn-source-context__reset,
 .sanborn-source-context__show {
   flex: 0 0 auto;
   font-size: 0.62rem;
@@ -4201,10 +4208,15 @@ body:has(.minimal-sanborn-gps) {
   position: relative;
   width: 100%;
   overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   border: 1px solid rgba(226, 190, 126, 0.28);
   border-radius: 6px;
   background: #ede9dd;
 }
+
+.sanborn-source-context__viewport:active { cursor: grabbing; }
 
 .sanborn-source-context__svg {
   display: block;

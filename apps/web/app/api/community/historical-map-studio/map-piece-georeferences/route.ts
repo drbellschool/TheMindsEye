@@ -100,6 +100,63 @@ function sanitizeWorkspaceId(value: string | null | undefined, fallback: string)
   return normalized.length > 0 ? normalized : fallback;
 }
 
+type WorkspaceIdentity = {
+  workspaceId: string;
+  reusedExisting: boolean;
+  staleClientWorkspaceId: boolean;
+};
+
+function normalizeWorkspaceConflictMessage(message: string): string {
+  return /historical_map_workspaces_workspace_id_key|duplicate key.*workspace|workspace_id.*unique/i.test(message)
+    ? "Map Placement could not resolve the workspace for this town and edition. Reload the workspace and try again."
+    : message;
+}
+
+async function resolveMapPlacementWorkspaceIdentity(
+  supabase: SupabaseAdminClient,
+  townPackageId: string,
+  mapYear: number,
+  clientWorkspaceId: string | null | undefined,
+  canonicalBase: string,
+): Promise<{ identity: WorkspaceIdentity | null; error: Error | null }> {
+  const scoped = await supabase
+    .from("historical_map_workspaces")
+    .select("workspace_id")
+    .eq("town_package_id", townPackageId)
+    .eq("map_year", mapYear)
+    .maybeSingle<{ workspace_id: string }>();
+
+  if (scoped.error) return { identity: null, error: scoped.error };
+  const sanitizedClientId = clientWorkspaceId ? sanitizeWorkspaceId(clientWorkspaceId, "") : "";
+  if (scoped.data) {
+    return {
+      identity: {
+        workspaceId: scoped.data.workspace_id,
+        reusedExisting: true,
+        staleClientWorkspaceId: Boolean(sanitizedClientId && sanitizedClientId !== scoped.data.workspace_id),
+      },
+      error: null,
+    };
+  }
+
+  const canonicalId = sanitizeWorkspaceId(canonicalBase, `${townPackageId}-${mapYear}-historical-map-studio`);
+  const preferredId = sanitizedClientId || canonicalId;
+  const owner = await supabase.from("historical_map_workspaces").select("town_package_id, map_year").eq("workspace_id", preferredId).maybeSingle<{ town_package_id: string; map_year: number }>();
+  if (owner.error) return { identity: null, error: owner.error };
+  if (!owner.data) {
+    return { identity: { workspaceId: preferredId, reusedExisting: false, staleClientWorkspaceId: false }, error: null };
+  }
+
+  const collisionBase = sanitizeWorkspaceId(`${canonicalId}-${townPackageId}-${mapYear}`, `${townPackageId}-${mapYear}-historical-map-studio-${townPackageId}`);
+  for (const suffix of ["", "-2", "-3"]) {
+    const collisionSafeId = `${collisionBase}${suffix}`.slice(0, 120);
+    const collisionOwner = await supabase.from("historical_map_workspaces").select("workspace_id").eq("workspace_id", collisionSafeId).maybeSingle<{ workspace_id: string }>();
+    if (collisionOwner.error) return { identity: null, error: collisionOwner.error };
+    if (!collisionOwner.data) return { identity: { workspaceId: collisionSafeId, reusedExisting: false, staleClientWorkspaceId: true }, error: null };
+  }
+  return { identity: null, error: new Error("A collision-safe map workspace ID is already occupied.") };
+}
+
 async function resolvePieceScope(supabase: SupabaseAdminClient, pieceId: string, townPackageId: string) {
   const pieceResult = await supabase
     .from("sanborn_map_pieces")
@@ -305,7 +362,18 @@ export async function PUT(request: NextRequest) {
   }
 
   const mapYear = Number.isInteger(body.mapYear) && body.mapYear! > 0 ? body.mapYear! : townPackage.year;
-  const workspaceId = sanitizeWorkspaceId(body.workspaceId, `${townPackage.package_id}-${mapYear}-historical-map-studio`);
+  const workspaceIdentity = await resolveMapPlacementWorkspaceIdentity(
+    supabase,
+    townPackage.id,
+    mapYear,
+    body.workspaceId,
+    `${townPackage.package_id}-${mapYear}-historical-map-studio`,
+  );
+  if (workspaceIdentity.error || !workspaceIdentity.identity) {
+    console.error("Map Placement workspace resolution failed", workspaceIdentity.error);
+    return jsonError(503, "Map Placement could not resolve the workspace for this town and edition. Reload the workspace and try again.");
+  }
+  const workspaceId = workspaceIdentity.identity.workspaceId;
   if (scope.piece.placement_eligibility && scope.piece.placement_eligibility !== "available") {
     return jsonError(400, "This feature is reference-only or unresolved for placement.");
   }
@@ -329,7 +397,8 @@ export async function PUT(request: NextRequest) {
 
   if (saveResult.error) {
     const status = saveResult.error.code === "P0001" ? 400 : 503;
-    return jsonError(status, `Sanborn map piece placement could not be saved: ${saveResult.error.message}`);
+    console.error("Map Placement save failed", saveResult.error);
+    return jsonError(status, normalizeWorkspaceConflictMessage(saveResult.error.message));
   }
 
   const featurePlacementUpdate = await supabase.rpc("save_sanborn_map_piece_feature_placement", {
