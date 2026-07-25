@@ -4345,6 +4345,98 @@ body:has(.minimal-sanborn-gps) {
   padding: 0;
 }
 
+.sanborn-sheet-queue__header,
+.sanborn-sheet-queue-card__header,
+.sanborn-sheet-queue-card__checks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sanborn-sheet-queue__header {
+  border: 1px solid rgba(226, 190, 126, 0.2);
+  border-radius: 8px;
+  background: rgba(32, 23, 16, 0.72);
+  color: #f6e7cb;
+  padding: 10px;
+}
+
+.sanborn-sheet-queue,
+.sanborn-sheet-queue__completed {
+  display: grid;
+  gap: 7px;
+}
+
+.sanborn-sheet-queue__completed {
+  border: 1px solid rgba(226, 190, 126, 0.16);
+  border-radius: 8px;
+  padding: 7px;
+}
+
+.sanborn-sheet-queue__completed summary {
+  color: rgba(246, 231, 203, 0.72);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 4px;
+}
+
+.sanborn-sheet-queue-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(226, 190, 126, 0.22);
+  border-left: 4px solid #d1a045;
+  border-radius: 8px;
+  background: rgba(14, 12, 10, 0.82);
+  color: rgba(246, 231, 203, 0.84);
+  cursor: pointer;
+  font: inherit;
+  padding: 10px;
+  text-align: left;
+}
+
+.sanborn-sheet-queue-card:hover,
+.sanborn-sheet-queue-card.is-selected {
+  border-color: #e2be7e;
+  background: rgba(47, 34, 21, 0.88);
+}
+
+.sanborn-sheet-queue-card.is-needs_classification { border-left-color: #e8755b; }
+.sanborn-sheet-queue-card.is-needs_source { border-left-color: #d1a045; }
+.sanborn-sheet-queue-card.is-waiting_for_index_link { border-left-color: #b4a06b; }
+.sanborn-sheet-queue-card.is-ready_for_map_pieces { border-left-color: #7890a8; }
+.sanborn-sheet-queue-card.is-map_pieces_in_progress { border-left-color: #8d9b68; }
+.sanborn-sheet-queue-card.is-waiting_for_placement { border-left-color: #ad7770; }
+.sanborn-sheet-queue-card.is-complete { border-left-color: #6d9f67; }
+.sanborn-sheet-queue-card.is-missing_page { border-left-color: #8e7664; }
+.sanborn-sheet-queue-card.is-blocked { border-left-color: #f3a09a; }
+
+.sanborn-sheet-queue-card__header strong {
+  color: #f6e7cb;
+  font-size: 0.82rem;
+}
+
+.sanborn-sheet-queue-card__header span {
+  color: #e2be7e;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.sanborn-sheet-queue-card__meta,
+.sanborn-sheet-queue-card__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.68rem;
+}
+
+.sanborn-sheet-queue-card em {
+  color: #f3a09a;
+  font-size: 0.68rem;
+}
+
 .sanborn-station-details {
   display: grid;
   grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);

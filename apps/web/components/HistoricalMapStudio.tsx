@@ -174,6 +174,7 @@ import {
 } from "@/lib/town-reconstruction";
 import { focusStudioTarget, focusTargetForTask, focusTargetId, type StudioFocusTarget } from "@/lib/studio-focus-target";
 import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, referenceResolutionStatuses, townIndexDisplayPalette, validateReferenceResolution } from "@/lib/town-index-review";
+import { deriveSheetInventoryQueue } from "@/lib/sheet-inventory-queue";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -1024,6 +1025,10 @@ export function HistoricalMapStudio({
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
   const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? selectedAtlasPagePieces[0] ?? null;
+  const sheetInventoryQueue = useMemo(
+    () => deriveSheetInventoryQueue({ activeAtlasId: selectedAtlasId, pages: atlasInventory.pages, assets: sheets, pieces: atlasInventory.pieces, placements: mapPieceGeoreferences, regions: townIndexRegions }),
+    [atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId, sheets, townIndexRegions],
+  );
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
@@ -4899,40 +4904,38 @@ export function HistoricalMapStudio({
   }
 
   function renderSheetInventoryWorkspace() {
+    const unfinishedItems = sheetInventoryQueue.filter((item) => item.status !== "complete");
+    const completedItems = sheetInventoryQueue.filter((item) => item.status === "complete");
+    const openQueueItem = (item: (typeof sheetInventoryQueue)[number]) => {
+      if (item.kind === "missing") {
+        const region = townIndexRegions.find((candidate) => candidate.regionId === item.regionId);
+        if (region) {
+          setSelectedIndexRegionId(region.regionId);
+          selectAtlasPage(region.indexAtlasPageId, "town_index");
+          requestFocusTarget({ targetId: focusTargetId("town-index-region-card", region.regionId), instruction: "Review the documented missing-page resolution in Town Index." });
+        }
+        return;
+      }
+      if (!item.pageId) return;
+      setSelectedMapPieceId("");
+      selectAtlasPage(item.pageId, "piece_inventory");
+      requestFocusTarget({ targetId: focusTargetId("workflow-status", "piece-inventory"), instruction: item.status === "ready_for_map_pieces" ? "Create the first geographic Map Piece for this sheet." : "Continue the next incomplete Map Pieces review task for this sheet." });
+    };
+    const renderCard = (item: (typeof sheetInventoryQueue)[number]) => (
+      <button className={`sanborn-sheet-queue-card is-${item.status}${item.pageId === selectedAtlasPage?.pageId ? " is-selected" : ""}`} key={item.id} onClick={() => openQueueItem(item)} type="button">
+        <div className="sanborn-sheet-queue-card__header"><strong>{item.displayLabel}</strong><span>{item.statusLabel}</span></div>
+        <div className="sanborn-sheet-queue-card__meta"><span>Printed ref: {item.printedReference ?? "Unresolved"}</span><span>File: {item.filename ?? "No uploaded file"}</span><span>Classification: {item.pageType.replaceAll("_", " ")}</span></div>
+        <div className="sanborn-sheet-queue-card__checks"><span>Source/citation: {item.sourceLinked ? "linked" : "missing"}</span><span>Town Index: {item.indexLinked ? "linked" : "waiting"}</span><span>Map Pieces: {item.mapPiecesStatus.replace("_", " ")}</span><span>Objects: {item.mapPieceCount}</span><span>Placed: {item.placedObjectCount}</span><span>Awaiting placement: {item.awaitingPlacementCount}</span></div>
+        {item.warning ? <em>{item.warning}</em> : null}
+      </button>
+    );
     return (
       <section className="sanborn-sheet-inventory-workspace" aria-label="Sheet Inventory">
         <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "numbered_sheets")} />
-        {reconstructionModel.sheetProgress.length === 0 ? <p className="sanborn-atlas-empty">No sheets are loaded for this edition.</p> : null}
-        {reconstructionModel.sheetProgress
-          .slice()
-          .sort((left, right) => compareSheetReferences(left.printedReference ?? left.displayLabel, right.printedReference ?? right.displayLabel))
-          .map((sheet) => {
-            const asset = sheets.find((candidate) => candidate.assetId === sheet.sheetAssetId);
-            const page = atlasInventory.pages.find((candidate) => candidate.pageId === sheet.pageId);
-
-            return (
-              <button
-                className={`sanborn-sheet-card is-${sheet.status}${selectedAssetId === sheet.sheetAssetId ? " is-selected" : ""}`}
-                key={sheet.sheetAssetId}
-                onClick={() => {
-                  if (page) setSelectedAtlasPageId(page.pageId);
-                  selectAndCenter(sheet.sheetAssetId);
-                }}
-                type="button"
-              >
-                {asset?.signedUrl ? <img alt="" src={asset.signedUrl} /> : <span className="map-studio-thumb-fallback">No image</span>}
-                <strong>{sheet.displayLabel}</strong>
-                <span>{sheet.printedReference ? `Printed ref ${sheet.printedReference}` : "No printed reference"}</span>
-                <span>{sheet.pageTypeLabel}{sheet.isPrimaryTownIndex ? " | Primary Town Index" : ""}</span>
-                <span>{asset?.originalFilename ?? "Missing asset"}</span>
-                <span>{sheet.sourceLinked ? "Source linked" : "Missing source"}</span>
-                <span>{sheet.mapPiecesIdentified} pieces | {sheet.mapPiecesPlaced} placed</span>
-                <span>{sheet.status.replaceAll("_", " ")} | {sheet.completionPercent}%</span>
-                {sheet.warning ? <em>{sheet.warning}</em> : null}
-                {sheet.classificationConflict ? <em>Classification conflict</em> : null}
-              </button>
-            );
-          })}
+        <header className="sanborn-sheet-queue__header"><div><p className="panel__eyebrow">Edition processing queue</p><strong>{unfinishedItems.length} sheets need attention</strong></div><span>{completedItems.length} complete</span></header>
+        {sheetInventoryQueue.length === 0 ? <p className="sanborn-atlas-empty">No active-edition sheets or documented missing references are available.</p> : null}
+        <div className="sanborn-sheet-queue">{unfinishedItems.map(renderCard)}</div>
+        <details className="sanborn-sheet-queue__completed"><summary>Completed ({completedItems.length})</summary><div className="sanborn-sheet-queue">{completedItems.map(renderCard)}</div></details>
       </section>
     );
   }
@@ -5509,7 +5512,7 @@ export function HistoricalMapStudio({
               {selectedAtlasPagePieces.length > 0 ? <span> Existing pieces are flagged as classification conflicts. Reclassify page or archive invalid pieces.</span> : null}
             </div>
           ) : null}
-          <dl className="sanborn-station-details">
+          <dl className="sanborn-station-details" data-focus-target="workflow-status:piece-inventory">
             <dt>Selected sheet</dt>
             <dd>{selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "Unavailable"}</dd>
             <dt>Page type</dt>
