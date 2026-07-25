@@ -4139,6 +4139,123 @@ body:has(.minimal-sanborn-gps) {
   overflow: hidden;
 }
 
+.sanborn-source-context {
+  position: absolute;
+  z-index: 450;
+  left: 12px;
+  bottom: 28px;
+  width: min(340px, 35%);
+  min-width: 260px;
+  padding: 7px;
+  border: 1px solid rgba(226, 190, 126, 0.58);
+  border-radius: 9px;
+  background: rgba(28, 20, 14, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  color: #f6e7cb;
+}
+
+.sanborn-source-context__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 6px;
+}
+
+.sanborn-source-context__header div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.sanborn-source-context__header span,
+.sanborn-source-context__header small,
+.sanborn-source-context__filename {
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.62rem;
+}
+
+.sanborn-source-context__header strong {
+  overflow: hidden;
+  color: #f6e7cb;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sanborn-source-context__hide,
+.sanborn-source-context__show {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  padding: 4px 7px;
+}
+
+.sanborn-source-context__show {
+  position: absolute;
+  left: 12px;
+  bottom: 28px;
+  z-index: 450;
+}
+
+.sanborn-source-context__viewport {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(226, 190, 126, 0.28);
+  border-radius: 6px;
+  background: #ede9dd;
+}
+
+.sanborn-source-context__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sanborn-source-context__image {
+  display: block;
+}
+
+.sanborn-source-context__viewport.is-loading .sanborn-source-context__image,
+.sanborn-source-context__viewport.is-retrying .sanborn-source-context__image,
+.sanborn-source-context__viewport.is-failed .sanborn-source-context__image {
+  visibility: hidden;
+}
+
+.sanborn-source-context__highlight {
+  fill: rgba(226, 190, 126, 0.24);
+  stroke: #f6d37e;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.sanborn-source-context__filename {
+  display: block;
+  overflow: hidden;
+  padding: 5px 2px 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .sanborn-source-context {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: auto;
+    min-width: 0;
+    margin: 8px;
+  }
+
+  .sanborn-source-context__show {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    margin: 8px;
+  }
+}
+
 .sanborn-station-inspector {
   position: relative;
   z-index: 2;

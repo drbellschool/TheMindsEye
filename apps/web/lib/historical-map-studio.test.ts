@@ -687,6 +687,19 @@ test("Town Index is map-first and region focus stays inspector-scoped", () => {
   assert.match(focusHelper, /sanborn-station-inspector__body/);
 });
 
+test("Map Placement uses one reusable source-context crop instead of a clipped piece preview", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const contextComponent = readFileSync("components/SanbornSourceContext.tsx", "utf8");
+  const contextHelper = readFileSync("lib/sanborn-source-context.ts", "utf8");
+  assert.match(studioComponent, /<SanbornSourceContext/);
+  assert.doesNotMatch(studioComponent, /<clipPath/);
+  assert.match(contextComponent, /useSanbornSourceImageState/);
+  assert.match(contextComponent, /SanbornSourceImageStatus/);
+  assert.match(contextComponent, /sanborn-source-context__highlight/);
+  assert.match(contextHelper, /minimumSpan/);
+  assert.match(contextHelper, /paddingRatio/);
+});
+
 test("Map Pieces keeps one save request and preserves the draft after an error", () => {
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const route = readFileSync("app/api/community/historical-map-studio/map-pieces/route.ts", "utf8");

@@ -23,6 +23,7 @@ import { ReconstructionContextBar } from "@/components/ReconstructionContextBar"
 import { SanbornEditionSheetNavigator } from "@/components/SanbornEditionSheetNavigator";
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { SanbornPieceList } from "@/components/SanbornPieceList";
+import { SanbornSourceContext } from "@/components/SanbornSourceContext";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
@@ -364,12 +365,6 @@ function getMapPiecePlacementClass(placement: SanbornMapPieceGeoreference | null
   }
 
   return placement.isPersisted ? "is-saved" : "is-draft";
-}
-
-function getSourcePolygonSvgPoints(piece: SanbornMapPieceRecord, asset: StudioSheetAsset): string {
-  return piece.sourcePolygon
-    .map((point) => `${Number((point.x * asset.width).toFixed(2))},${Number((point.y * asset.height).toFixed(2))}`)
-    .join(" ");
 }
 
 function normalizeAtlasWorkflowStep(value: string | null | undefined): SanbornAtlasWorkflowStep | null {
@@ -4627,10 +4622,6 @@ export function HistoricalMapStudio({
   const selectedMapPieceRotation = selectedMapPieceGeoreference?.rotation ?? 0;
   const selectedMapPiecePlacementLabel = getMapPiecePlacementLabel(selectedMapPieceGeoreference);
   const selectedMapPieceDisplayLabel = getMapPieceDisplayLabel(selectedMapPiece);
-  const selectedPiecePreviewClipId = selectedMapPiece
-    ? `sanborn-piece-preview-${selectedMapPiece.pieceId.replace(/[^a-zA-Z0-9_-]/g, "-")}`
-    : "";
-  const selectedPiecePreviewPoints = selectedMapPiece && selectedAtlasPageAsset ? getSourcePolygonSvgPoints(selectedMapPiece, selectedAtlasPageAsset) : "";
   const saveStatusText =
     saveStatus === "saving"
       ? "Saving"
@@ -5143,6 +5134,11 @@ export function HistoricalMapStudio({
             zoom={modernMapZoom}
           />
         )}
+        <SanbornSourceContext
+          asset={selectedAtlasPageAsset}
+          piece={selectedMapPiece}
+          sourceLabel={selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "Selected source sheet"}
+        />
       </section>
     );
   }
@@ -6333,27 +6329,6 @@ export function HistoricalMapStudio({
         >
           <summary>Piece placement inventory</summary>
           <div className="sanborn-piece-placement-panel">
-            {selectedMapPiece && selectedAtlasPageAsset?.signedUrl ? (
-              <figure className="sanborn-piece-placement-preview" aria-label="Selected piece preview">
-                <svg viewBox={`0 0 ${selectedAtlasPageAsset?.width ?? 1} ${selectedAtlasPageAsset?.height ?? 1}`} role="img">
-                  <defs>
-                    <clipPath id={selectedPiecePreviewClipId}>
-                      <polygon points={selectedPiecePreviewPoints} />
-                    </clipPath>
-                  </defs>
-                  <image
-                    clipPath={`url(#${selectedPiecePreviewClipId})`}
-                    height={selectedAtlasPageAsset?.height ?? 1}
-                    href={selectedAtlasPageAsset?.signedUrl ?? ""}
-                    preserveAspectRatio="xMidYMid meet"
-                    width={selectedAtlasPageAsset?.width ?? 1}
-                  />
-                </svg>
-                <figcaption>{selectedMapPieceDisplayLabel}</figcaption>
-              </figure>
-            ) : (
-              <p className="sanborn-atlas-empty">Select a saved piece with an available signed source image.</p>
-            )}
             <dl className="sanborn-piece-placement-summary">
               <dt>Page</dt>
               <dd>{selectedAtlasPage?.displayLabel || selectedAtlasPage?.sheetNumber || "Unavailable"}</dd>
