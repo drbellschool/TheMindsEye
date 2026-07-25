@@ -45,6 +45,7 @@ const piecePlacementRoutePath = "app/api/community/historical-map-studio/map-pie
 const uploadRoutePath = "app/api/community/sanborn-sheets/route.ts";
 const deleteRoutePath = "app/api/community/historical-map-studio/delete/route.ts";
 const replaceRoutePath = "app/api/community/historical-map-studio/replace/route.ts";
+const featureSaveMigrationPath = "../../supabase/migrations/0023_map_piece_feature_save_rpc.sql";
 
 test("normalizes and validates point, line, polygon, and junction feature geometry", () => {
   const point = normalizeSanbornMapPieceGeometry({ geometryType: "point", points: [{ x: 0.2, y: 0.3 }] });
@@ -66,6 +67,21 @@ test("feature review categories do not infer completion from zero objects", () =
   assert.match(migration, /add column if not exists source_geometry/i);
   assert.match(migration, /geometry_type in \('point', 'line', 'polygon', 'junction'\)/i);
   assert.match(migration, /source_polygon/);
+});
+
+test("PR88 replaces the map-piece RPC with atomic feature-field saves and legacy fallbacks", () => {
+  const migration = readFileSync(featureSaveMigrationPath, "utf8");
+  const route = readRoute(pieceRoutePath);
+  assert.match(migration, /create or replace function public\.save_sanborn_map_pieces\(\s*p_town_package_id uuid,\s*p_page_id text,\s*p_pieces jsonb/s);
+  for (const field of ["geometry_type", "source_geometry", "feature_category", "placement_eligibility", "printed_symbol_text", "review_categories"]) {
+    assert.match(migration, new RegExp(field));
+  }
+  assert.match(migration, /jsonb_build_object\('geometryType', 'polygon', 'points', payload\.item -> 'sourcePolygon'\)/);
+  assert.match(migration, /sanborn_map_piece_source_geometry_is_valid/);
+  assert.match(migration, /source_geometry = payload\.source_geometry/);
+  assert.match(migration, /grant execute on function public\.save_sanborn_map_pieces\(uuid, text, jsonb\) to service_role/);
+  assert.doesNotMatch(route, /for \(const piece of pieces\)/);
+  assert.match(route, /\.rpc\("save_sanborn_map_pieces"/);
 });
 
 function readMigration(): string {

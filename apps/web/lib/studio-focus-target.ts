@@ -1,6 +1,7 @@
 export type StudioFocusTarget = {
   targetId: string;
   instruction: string;
+  scrollMode?: "document" | "inspector" | "none";
 };
 
 export type ReconstructionTaskContext = {
@@ -31,7 +32,7 @@ export function focusTargetForTask(context: ReconstructionTaskContext): StudioFo
   return { targetId: focusTargetId("workflow-status", context.workflow), instruction: "Complete the highlighted workflow section." };
 }
 
-export function focusStudioTarget(targetId: string): boolean {
+export function focusStudioTarget(targetId: string, scrollMode: StudioFocusTarget["scrollMode"] = "document"): boolean {
   const element = document.querySelector<HTMLElement>(`[data-focus-target="${CSS.escape(targetId)}"]`);
   if (!element) return false;
 
@@ -44,7 +45,18 @@ export function focusStudioTarget(targetId: string): boolean {
   const focusable = element.matches("button, input, select, textarea, [tabindex]")
     ? element
     : element.querySelector<HTMLElement>("button, input, select, textarea, [tabindex]");
-  element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  if (scrollMode !== "none") {
+    const scrollContainer = scrollMode === "inspector"
+      ? element.closest<HTMLElement>(".sanborn-station-inspector__body, .map-studio-inspector")
+      : null;
+    if (scrollContainer) {
+      const elementRect = element.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      scrollContainer.scrollTo({ top: Math.max(0, scrollContainer.scrollTop + elementRect.top - containerRect.top - (containerRect.height - elementRect.height) / 2), behavior: "smooth" });
+    } else if (scrollMode === "document") {
+      element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    }
+  }
   if (focusable && typeof focusable.focus === "function") focusable.focus({ preventScroll: true });
   element.classList.remove("is-focus-target");
   void element.offsetWidth;

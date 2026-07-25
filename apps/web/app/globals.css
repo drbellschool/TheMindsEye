@@ -4744,6 +4744,27 @@ body:has(.minimal-sanborn-gps) {
   min-height: 100%;
 }
 
+.sanborn-town-index-map-summary,
+.sanborn-town-index-map-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(32, 23, 16, 0.72);
+  color: rgba(246, 231, 203, 0.72);
+  font-size: 0.72rem;
+}
+
+.sanborn-town-index-map-summary {
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(226, 190, 126, 0.14);
+}
+
+.sanborn-town-index-map-toolbar {
+  border-bottom: 1px solid rgba(226, 190, 126, 0.14);
+}
+
 .sanborn-station-citation {
   border: 1px solid rgba(226, 190, 126, 0.18);
   border-radius: 7px;
@@ -4805,7 +4826,8 @@ body:has(.minimal-sanborn-gps) {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-height: 0;
-  height: 100%;
+  min-height: min(72vh, 760px);
+  height: auto;
   background: #20211f;
   color: #f6e7cb;
 }

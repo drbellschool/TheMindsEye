@@ -211,9 +211,9 @@ export function TownIndexMissionMap({
   }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
-    if (!onZoomChange) return;
-    event.preventDefault();
-    onZoomChange(Math.max(0.5, Math.min(4, Number((zoom + (event.deltaY < 0 ? 0.1 : -0.1)).toFixed(2)))));
+    // Wheel input is intentionally reserved for scrolling the image frame.
+    // Button controls own magnification so normal navigation never changes zoom.
+    if (onZoomChange) return;
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
