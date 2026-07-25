@@ -23,6 +23,7 @@ import {
   type SanbornTownIndexRegionRecord,
   type SanbornTownIndexStatus,
 } from "./sanborn-town-index.ts";
+import { deriveReconstructionTaskLedger } from "./reconstruction-task-ledger.ts";
 
 export type ReconstructionWorkflowStepId =
   | "town_edition"
@@ -981,6 +982,7 @@ export function buildReconstructionModelFromStudioState(input: {
   selectedAtlasId?: string | null;
   selectedPageId?: string | null;
   selectedPieceId?: string | null;
+  currentStage?: ReconstructionWorkflowStepId;
 }) {
   const activeAtlas =
     input.state.atlasInventory.atlases.find((atlas) => atlas.atlasId === input.selectedAtlasId) ??
@@ -1041,6 +1043,18 @@ export function buildReconstructionModelFromStudioState(input: {
     index,
     sourceRecordCount: input.state.sourceOptions.length,
   });
+  const ledger = deriveReconstructionTaskLedger({
+    town: input.state.activeTownPackage,
+    atlas: activeAtlas,
+    pages,
+    assets: input.state.sheets,
+    regions: sourceRegions,
+    pieces,
+    placements: input.state.mapPieceGeoreferences,
+    sourceOptions: input.state.sourceOptions,
+    currentStage: input.currentStage,
+    activePageId: input.selectedPageId,
+  });
 
   return {
     activeAtlas,
@@ -1052,6 +1066,8 @@ export function buildReconstructionModelFromStudioState(input: {
     index,
     town,
     edition,
-    tasks,
+    tasks: ledger.tasks,
+    legacyTasks: tasks,
+    ledger,
   };
 }

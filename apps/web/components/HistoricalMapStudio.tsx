@@ -1117,8 +1117,9 @@ export function HistoricalMapStudio({
         selectedAtlasId,
         selectedPageId: selectedAtlasPageId,
         selectedPieceId: selectedMapPieceId,
+        currentStage: atlasWorkflowStep === "source" ? "source_record" : atlasWorkflowStep === "town_index" ? "town_index" : atlasWorkflowStep === "numbered_sheets" ? "sheet_inventory" : atlasWorkflowStep === "piece_inventory" ? "map_pieces_blocks" : atlasWorkflowStep === "gps_alignment" ? "map_placement" : "town_edition",
       }),
-    [atlasInventory, initialData, mapPieceGeoreferences, selectedAtlasId, selectedAtlasPageId, selectedMapPieceId, sheets, townIndexRegions],
+    [atlasInventory, atlasWorkflowStep, initialData, mapPieceGeoreferences, selectedAtlasId, selectedAtlasPageId, selectedMapPieceId, sheets, townIndexRegions],
   );
   const activeTownIndexRegions = useMemo(
     () =>
@@ -2108,6 +2109,15 @@ export function HistoricalMapStudio({
     if (task.context.mapPieceId) setSelectedMapPieceId(task.context.mapPieceId);
     changeAtlasWorkflowStep(nextStep);
     requestFocusTarget(focusTargetForTask(task.context));
+  }
+
+  function focusNextIncompleteTask() {
+    const nextTask = reconstructionModel.ledger.nextIncompleteTask;
+    if (!nextTask) {
+      setFocusInstruction("All currently derived reconstruction tasks are resolved.");
+      return;
+    }
+    focusWorkflowTask(nextTask);
   }
 
   function selectSourceRegionAndFocus(regionId: string) {
@@ -4744,14 +4754,17 @@ export function HistoricalMapStudio({
           <p>{initialData.activeTownPackage?.region ?? "Select a town package to begin reconstruction."}</p>
         </div>
         <div className="sanborn-station-metrics" aria-label="Reconstruction progress metrics">
-          <span><strong>{reconstructionModel.town.completionPercent}%</strong> overall</span>
+          <span title={reconstructionModel.ledger.town.explanation}><strong>{reconstructionModel.ledger.town.percent}%</strong> overall ({reconstructionModel.ledger.town.resolved}/{reconstructionModel.ledger.town.required})</span>
+          <span><strong>{reconstructionModel.ledger.currentStage.percent}%</strong> current stage</span>
+          <span><strong>{reconstructionModel.ledger.activeSheet.percent}%</strong> active sheet</span>
           <span><strong>{reconstructionModel.edition.sheetCount}</strong> sheets</span>
           <span><strong>{reconstructionModel.classification.classifiedPages}/{reconstructionModel.classification.totalPages}</strong> pages classified</span>
           <span><strong>{reconstructionModel.edition.placedMapPieceCount}</strong> pieces placed</span>
           <span><strong>{reconstructionModel.index.completion.totalRegions}</strong> index regions</span>
           <span><strong>{reconstructionModel.town.sourceRecordsLinked}</strong> sources linked</span>
-          <span><strong>{reconstructionModel.tasks.length}</strong> active tasks</span>
+          <span><strong>{reconstructionModel.ledger.tasks.filter((task) => !task.resolved).length}</strong> unresolved tasks</span>
         </div>
+        <p className="sanborn-progress-explanation">{reconstructionModel.ledger.overall.explanation} New discovered objects add required placement tasks to the denominator.</p>
         <section className="sanborn-station-panel">
           <header>
             <strong>Available Work</strong>
@@ -4761,7 +4774,7 @@ export function HistoricalMapStudio({
             {reconstructionModel.tasks.length > 0 ? (
               reconstructionModel.tasks.map((task) => (
                 <button
-                  className={`reconstruction-task-list__item is-${task.priority}`}
+                  className={`reconstruction-task-list__item is-${task.priority} is-${task.state}`}
                   key={task.id}
                   onClick={() => {
                     focusWorkflowTask(task);
@@ -4769,7 +4782,7 @@ export function HistoricalMapStudio({
                   type="button"
                 >
                   <strong>{task.label}</strong>
-                  <span>{task.detail}</span>
+                  <span>{task.detail} · {task.state.replaceAll("_", " ")}</span>
                 </button>
               ))
             ) : (
@@ -5753,6 +5766,7 @@ export function HistoricalMapStudio({
           context={getCurrentReconstructionContext()}
           currentRoute="map"
           editionProgress={reconstructionModel.edition}
+          ledgerProgress={reconstructionModel.ledger.overall}
           pieces={reconstructionModel.pieceProgress}
           sheets={reconstructionModel.sheetProgress}
           sourceOptions={initialData.sourceOptions}
@@ -5764,6 +5778,7 @@ export function HistoricalMapStudio({
             setEditionManagerOpen(true);
             changeAtlasWorkflowStep("source");
           }}
+          onNextIncompleteTask={focusNextIncompleteTask}
           onPieceChange={(pieceId) => {
             if (isGpsAlignmentStep) {
               selectMapPieceForPlacement(pieceId);
@@ -5924,6 +5939,7 @@ export function HistoricalMapStudio({
           context={getCurrentReconstructionContext()}
           currentRoute="map"
           editionProgress={reconstructionModel.edition}
+          ledgerProgress={reconstructionModel.ledger.overall}
           pieces={reconstructionModel.pieceProgress}
           sheets={reconstructionModel.sheetProgress}
           sourceOptions={initialData.sourceOptions}
@@ -5931,6 +5947,7 @@ export function HistoricalMapStudio({
           townProgress={reconstructionModel.town}
           towns={initialData.townPackages}
           years={availableEditionYears}
+          onNextIncompleteTask={focusNextIncompleteTask}
           onPieceChange={(pieceId) => {
             if (isGpsAlignmentStep) {
               selectMapPieceForPlacement(pieceId);

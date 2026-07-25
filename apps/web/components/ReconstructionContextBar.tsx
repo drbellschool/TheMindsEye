@@ -19,6 +19,7 @@ import {
   type SheetReconstructionProgress,
   type TownReconstructionProgress,
 } from "@/lib/town-reconstruction";
+import type { ReconstructionLedgerProgress } from "@/lib/reconstruction-task-ledger";
 
 type ReconstructionContextBarProps = {
   currentRoute: ReconstructionRouteId;
@@ -31,12 +32,14 @@ type ReconstructionContextBarProps = {
   activeSourceRecordId?: string | null;
   townProgress: TownReconstructionProgress;
   editionProgress?: EditionReconstructionProgress | null;
+  ledgerProgress?: ReconstructionLedgerProgress | null;
   compact?: boolean;
   onTownChange?: (townPackageId: string) => void;
   onYearChange?: (mapYear: number) => void;
   onAddEdition?: () => void;
   onSheetChange?: (sheetAssetId: string) => void;
   onPieceChange?: (mapPieceId: string) => void;
+  onNextIncompleteTask?: () => void;
 };
 
 const addEditionSelectValue = "__add_sanborn_edition__";
@@ -134,12 +137,14 @@ export function ReconstructionContextBar({
   activeSourceRecordId,
   townProgress,
   editionProgress,
+  ledgerProgress,
   compact = false,
   onTownChange,
   onYearChange,
   onAddEdition,
   onSheetChange,
   onPieceChange,
+  onNextIncompleteTask,
 }: ReconstructionContextBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -348,11 +353,12 @@ export function ReconstructionContextBar({
       </div>
 
       <div className="reconstruction-context__progress" aria-label="Reconstruction progress">
-        <div className="reconstruction-progress" role="progressbar" aria-label="Overall town reconstruction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={townProgress.completionPercent}>
-          <span style={{ width: `${townProgress.completionPercent}%` }} />
+        <div className="reconstruction-progress" role="progressbar" aria-label="Overall town reconstruction progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={ledgerProgress?.percent ?? townProgress.completionPercent}>
+          <span style={{ width: `${ledgerProgress?.percent ?? townProgress.completionPercent}%` }} />
         </div>
-        <span>Town reconstruction: {townProgress.completionPercent}%</span>
-        {editionProgress ? <span>{editionProgress.editionYear ?? activeYear ?? "Edition"} edition: {editionProgress.completionPercent}%</span> : null}
+        <span title={ledgerProgress?.explanation}>Town reconstruction: {ledgerProgress?.percent ?? townProgress.completionPercent}%{ledgerProgress ? ` (${ledgerProgress.resolved}/${ledgerProgress.required})` : ""}</span>
+        {editionProgress ? <span>{editionProgress.editionYear ?? activeYear ?? "Edition"} edition: {ledgerProgress?.percent ?? editionProgress.completionPercent}%</span> : null}
+        {onNextIncompleteTask ? <button className="sanborn-button" onClick={onNextIncompleteTask} type="button">Next incomplete task</button> : null}
       </div>
 
       <nav className="reconstruction-context__tabs" aria-label="Reconstruction engines">

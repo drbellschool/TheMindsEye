@@ -66,6 +66,22 @@
 
 .sanborn-placement-queue__item small { color: #dfc38e; }
 
+.sanborn-progress-explanation {
+  margin: 0.35rem 0;
+  color: var(--muted, #8f765f);
+  font-size: 0.78rem;
+}
+
+.reconstruction-context__progress .sanborn-button {
+  min-height: 1.8rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.reconstruction-task-list__item.is-completed,
+.reconstruction-task-list__item.is-exception {
+  opacity: 0.72;
+}
+
 .sanborn-piece-review-categories {
   display: grid;
   gap: 0.4rem;
