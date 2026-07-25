@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { SanbornPieceList } from "@/components/SanbornPieceList";
+import { SanbornSourceImageStatus, useSanbornSourceImageState } from "@/components/SanbornSourceImage";
 import {
   buildDefaultSanbornPieceId,
   calculateSourceBoundingBox,
@@ -156,6 +157,7 @@ export function SanbornPageWorkbench({
     scrollLeft: number;
     scrollTop: number;
   } | null>(null);
+  const sourceImage = useSanbornSourceImageState({ asset });
   const sortedPieces = useMemo(() => [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence), [pieces]);
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
   const selectedPiecePointCount = selectedPiece?.sourceGeometry?.points.length ?? selectedPiece?.sourcePolygon.length ?? 0;
@@ -163,6 +165,7 @@ export function SanbornPageWorkbench({
   const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
   const classificationBlocked = Boolean(classificationBlockedMessage);
   const editorReadOnly = readOnly || pieceInventoryBlocked || classificationBlocked;
+  const drawingDisabled = editorReadOnly || !sourceImage.isLoaded;
   const panActive = editorMode === "pan" || spacePanActive;
   const disabledToolReason = pieceInventoryBlocked
     ? "Save the atlas page assignments before drawing map pieces."
@@ -170,6 +173,8 @@ export function SanbornPageWorkbench({
       ? classificationBlockedMessage
       : readOnly
         ? "Map piece editing is read-only."
+        : !sourceImage.isLoaded
+          ? sourceImage.state === "failed" ? "Retry the source image before drawing." : "Wait for the source image to finish loading before drawing."
         : undefined;
 
   useEffect(() => {
@@ -220,7 +225,7 @@ export function SanbornPageWorkbench({
   }
 
   function handleSvgPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (editorReadOnly || !asset || panActive || event.button !== 0) {
+    if (drawingDisabled || !asset || panActive || event.button !== 0) {
       return;
     }
 
@@ -251,7 +256,7 @@ export function SanbornPageWorkbench({
   }
 
   function handleSvgPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (editorReadOnly || !draggingVertex || !asset || panActive) {
+    if (drawingDisabled || !draggingVertex || !asset || panActive) {
       return;
     }
 
@@ -278,7 +283,7 @@ export function SanbornPageWorkbench({
   function finishDraft() {
     const geometryType: SanbornMapPieceGeometryType = editorMode === "mark_point" ? "point" : editorMode === "add_junction" ? "junction" : editorMode === "draw_line" ? "line" : "polygon";
     const minimumPoints = geometryType === "point" || geometryType === "junction" ? 1 : geometryType === "line" ? 2 : 3;
-    if (editorReadOnly || !page || draftPoints.length < minimumPoints) {
+    if (drawingDisabled || !page || draftPoints.length < minimumPoints) {
       return;
     }
 
@@ -447,25 +452,25 @@ export function SanbornPageWorkbench({
             <button className={`sanborn-button${editorMode === "pan" ? " sanborn-button--primary" : ""}`} onClick={() => setEditorMode("pan")} type="button">
               Pan
             </button>
-            <button className={`sanborn-button${editorMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("draw")} title={disabledToolReason} type="button">
+            <button className={`sanborn-button${editorMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("draw")} title={disabledToolReason} type="button">
               Draw area
             </button>
-            <button className={`sanborn-button${editorMode === "mark_point" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("mark_point")} title={disabledToolReason} type="button">
+            <button className={`sanborn-button${editorMode === "mark_point" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("mark_point")} title={disabledToolReason} type="button">
               Mark point
             </button>
-            <button className={`sanborn-button${editorMode === "draw_line" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("draw_line")} title={disabledToolReason} type="button">
+            <button className={`sanborn-button${editorMode === "draw_line" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("draw_line")} title={disabledToolReason} type="button">
               Draw line
             </button>
-            <button className={`sanborn-button${editorMode === "add_junction" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("add_junction")} title={disabledToolReason} type="button">
+            <button className={`sanborn-button${editorMode === "add_junction" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("add_junction")} title={disabledToolReason} type="button">
               Add junction
             </button>
-            <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly || !selectedPiece} onClick={() => setEditorMode("add_vertex")} title={!selectedPiece ? "Select a map piece before adding a vertex." : disabledToolReason} type="button">
+            <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled || !selectedPiece} onClick={() => setEditorMode("add_vertex")} title={!selectedPiece ? "Select a map piece before adding a vertex." : disabledToolReason} type="button">
               Add vertex
             </button>
             <button className="sanborn-button" disabled={editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiecePointCount <= selectedPieceMinimumPoints} onClick={removeSelectedVertex} title={disabledToolReason} type="button">
               Remove vertex
             </button>
-            <button className="sanborn-button sanborn-button--primary" disabled={editorReadOnly || draftPoints.length < (editorMode === "mark_point" || editorMode === "add_junction" ? 1 : editorMode === "draw_line" ? 2 : 3)} onClick={finishDraft} title={disabledToolReason} type="button">
+            <button className="sanborn-button sanborn-button--primary" disabled={drawingDisabled || draftPoints.length < (editorMode === "mark_point" || editorMode === "add_junction" ? 1 : editorMode === "draw_line" ? 2 : 3)} onClick={finishDraft} title={disabledToolReason} type="button">
               Finish feature
             </button>
             <button className="sanborn-button" disabled={editorReadOnly || draftPoints.length === 0} onClick={clearDraft} title={disabledToolReason} type="button">
@@ -508,9 +513,12 @@ export function SanbornPageWorkbench({
           ref={viewportRef}
           tabIndex={0}
         >
-          <div className="sanborn-page-workbench__image-frame" style={{ width: `${sourceZoom * 100}%` }}>
+          <div className="sanborn-page-workbench__image-frame" style={{ width: `${sourceZoom * 100}%`, aspectRatio: sourceImage.aspectRatio }}>
             {asset.signedUrl ? (
-              <img alt={asset.originalFilename} src={asset.signedUrl} />
+              <>
+                <img alt={sourceImage.isLoaded ? asset.originalFilename : ""} aria-hidden={!sourceImage.isLoaded} className={`sanborn-source-image__img is-${sourceImage.state}`} key={sourceImage.imageKey} onError={sourceImage.onError} onLoad={sourceImage.onLoad} src={asset.signedUrl} />
+                <SanbornSourceImageStatus filename={asset.originalFilename} onRetry={sourceImage.retryImage} state={sourceImage.state} />
+              </>
             ) : (
               <div className="sanborn-page-workbench__image-missing">Signed source image unavailable.</div>
             )}

@@ -4882,6 +4882,37 @@ body:has(.minimal-sanborn-gps) {
   background: #ede9dd;
 }
 
+.sanborn-source-image__img.is-loading,
+.sanborn-source-image__img.is-retrying,
+.sanborn-source-image__img.is-failed {
+  visibility: hidden;
+}
+
+.sanborn-source-image__status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: #5a4633;
+  text-align: center;
+  background: rgba(237, 233, 221, 0.92);
+}
+
+.sanborn-source-image__status.is-failed {
+  color: #4a2b22;
+  background: rgba(236, 216, 195, 0.96);
+}
+
+.sanborn-source-image__status span {
+  max-width: min(90%, 32rem);
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
 .town-index-mission-map__overlay {
   position: absolute;
   inset: 0;

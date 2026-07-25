@@ -16,6 +16,7 @@ import {
   type SanbornTownIndexStatus,
 } from "@/lib/sanborn-town-index";
 import { normalizeDisplayColor, normalizeDisplayOpacity } from "@/lib/town-index-review";
+import { SanbornSourceImageStatus, useSanbornSourceImageState } from "@/components/SanbornSourceImage";
 
 export type TownIndexMissionMapMode = "select" | "draw" | "move" | "pan";
 
@@ -116,6 +117,13 @@ export function TownIndexMissionMap({
   const [, setFrameSize] = useState({ width: 0, height: 0 });
   const [draggingVertex, setDraggingVertex] = useState<{ regionId: string; vertexIndex: number } | null>(null);
   const [draggingRegion, setDraggingRegion] = useState<{ regionId: string; start: SanbornNormalizedPoint; original: SanbornNormalizedPoint[] } | null>(null);
+  const sourceImage = useSanbornSourceImageState({
+    asset: indexAsset,
+    onLoad: () => {
+      const rect = frameRef.current?.getBoundingClientRect();
+      if (rect) setFrameSize({ width: rect.width, height: rect.height });
+    },
+  });
   const selectedRegion = regions.find((region) => region.regionId === selectedRegionId) ?? null;
   const sortedRegions = useMemo(
     () => [...regions].sort((left, right) => left.regionLabel.localeCompare(right.regionLabel) || left.regionId.localeCompare(right.regionId)),
@@ -172,7 +180,7 @@ export function TownIndexMissionMap({
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || mode !== "draw" || spacePanActive || !indexAsset) {
+    if (readOnly || mode !== "draw" || spacePanActive || !indexAsset || !sourceImage.isLoaded) {
       return;
     }
 
@@ -209,7 +217,7 @@ export function TownIndexMissionMap({
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || spacePanActive || !indexAsset) {
+    if (readOnly || spacePanActive || !indexAsset || !sourceImage.isLoaded) {
       return;
     }
 
@@ -257,9 +265,20 @@ export function TownIndexMissionMap({
       </header>
 
       <div className={`town-index-mission-map__frame${mode === "pan" ? " is-pan" : ""}`} onPointerCancel={handleFramePointerUp} onPointerDown={handleFramePointerDown} onPointerMove={handleFramePointerMove} onPointerUp={handleFramePointerUp} onWheel={handleWheel} ref={frameRef}>
-        <div className="town-index-mission-map__canvas" style={{ width: `${zoom * 100}%` }}>
+        <div className="town-index-mission-map__canvas" style={{ width: `${zoom * 100}%`, aspectRatio: sourceImage.aspectRatio }}>
           {indexAsset.signedUrl ? (
-            <img alt={`Town Index source page ${indexPage.displayLabel || indexPage.pageSequence}`} src={indexAsset.signedUrl} />
+            <>
+              <img
+                alt={sourceImage.isLoaded ? `Town Index source page ${indexPage.displayLabel || indexPage.pageSequence}` : ""}
+                aria-hidden={!sourceImage.isLoaded}
+                className={`sanborn-source-image__img is-${sourceImage.state}`}
+                key={sourceImage.imageKey}
+                onError={sourceImage.onError}
+                onLoad={sourceImage.onLoad}
+                src={indexAsset.signedUrl}
+              />
+              <SanbornSourceImageStatus filename={indexAsset.originalFilename} onRetry={sourceImage.retryImage} state={sourceImage.state} />
+            </>
           ) : (
             <div className="town-index-mission-map__missing-image">Signed index image unavailable.</div>
           )}
