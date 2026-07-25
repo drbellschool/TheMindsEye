@@ -614,9 +614,9 @@ test("draft atlas pages block piece inventory until page assignments are saved",
   assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted \|\| !selectedPageSupportsMapPieces\}/);
   assert.match(workbenchComponent, /Save the atlas page assignments before drawing map pieces\./);
   assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked \|\| classificationBlocked/);
-  assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw area/);
-  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !selectedPiece\}[\s\S]*Add vertex/);
-  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < .*\}[\s\S]*Finish feature/);
+  assert.match(workbenchComponent, /disabled=\{drawingDisabled\}[\s\S]*Draw area/);
+  assert.match(workbenchComponent, /disabled=\{drawingDisabled \|\| !selectedPiece\}[\s\S]*Add vertex/);
+  assert.match(workbenchComponent, /disabled=\{drawingDisabled \|\| draftPoints\.length < .*\}[\s\S]*Finish feature/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length === 0\}[\s\S]*Clear draft/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !page\}[\s\S]*Save pieces/);
   assert.match(studioComponent, /Save pages and continue/);
