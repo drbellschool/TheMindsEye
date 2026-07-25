@@ -13,6 +13,7 @@ import {
   type SanbornMapPieceRecord,
   type SanbornSourceBBox,
 } from "./sanborn-atlas.ts";
+import { normalizeSanbornMapPieceFeatureCategory, normalizeSanbornMapPieceReviewCategories, normalizeSanbornMapPieceGeometry as normalizeFeatureGeometry } from "./sanborn-map-piece-features.ts";
 import type { StudioSheetAsset, StudioTownPackage } from "./historical-map-studio.ts";
 import type { createAdminClient } from "./supabase/admin.ts";
 
@@ -53,6 +54,7 @@ type SanbornAtlasPageRow = {
   archive_reason?: string | null;
   review_status: string | null;
   evidence_classification: string | null;
+  review_categories?: unknown;
   updated_at: string | null;
 };
 
@@ -72,6 +74,12 @@ type SanbornMapPieceRow = {
   review_status: string | null;
   evidence_classification: string | null;
   notes: string | null;
+  geometry_type?: string | null;
+  source_geometry?: unknown;
+  feature_category?: string | null;
+  placement_eligibility?: string | null;
+  printed_symbol_text?: string | null;
+  review_categories?: unknown;
   updated_at: string | null;
 };
 
@@ -123,6 +131,7 @@ function mapPage(row: SanbornAtlasPageRow, atlasByRowId: Map<string, SanbornAtla
     archiveReason: row.archive_reason ?? null,
     reviewStatus: normalizeSanbornReviewStatus(row.review_status),
     evidenceClassification: normalizeSanbornReviewStatus(row.evidence_classification),
+    reviewCategories: normalizeSanbornMapPieceReviewCategories(row.review_categories),
     updatedAt: row.updated_at,
     isPersisted: true,
   };
@@ -158,6 +167,8 @@ function mapPiece(row: SanbornMapPieceRow, pageByRowId: Map<string, SanbornAtlas
   if (!page || !polygonResult.ok) {
     return null;
   }
+  const geometryResult = normalizeFeatureGeometry(row.source_geometry, row.source_polygon);
+  if (!geometryResult.ok) return null;
 
   return {
     rowId: row.id,
@@ -171,6 +182,11 @@ function mapPiece(row: SanbornMapPieceRow, pageByRowId: Map<string, SanbornAtlas
     titleText: row.title_text,
     sourcePolygon: polygonResult.polygon,
     sourceBBox: normalizeBbox(row.source_bbox, polygonResult.bbox),
+    sourceGeometry: geometryResult.geometry,
+    featureCategory: normalizeSanbornMapPieceFeatureCategory(row.feature_category),
+    placementEligibility: row.placement_eligibility === "reference_only" || row.placement_eligibility === "unresolved" ? row.placement_eligibility : "available",
+    printedSymbolText: row.printed_symbol_text ?? null,
+    reviewCategories: normalizeSanbornMapPieceReviewCategories(row.review_categories),
     creationMethod: normalizeSanbornMapPieceCreationMethod(row.creation_method),
     inventoryStatus: normalizeSanbornMapPieceInventoryStatus(row.inventory_status),
     reviewStatus: normalizeSanbornReviewStatus(row.review_status),
@@ -243,7 +259,7 @@ export async function loadSanbornAtlasInventory(input: {
 
   if (atlases.length > 0) {
     const pageSelectWithClassification =
-      "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, archived_at, archive_reason, review_status, evidence_classification, updated_at";
+      "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, archived_at, archive_reason, review_status, evidence_classification, review_categories, updated_at";
     const pageSelectBase = "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at";
     let pageResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
       .from("sanborn_atlas_pages")
@@ -254,7 +270,7 @@ export async function loadSanbornAtlasInventory(input: {
 
     if (
       pageResult.error &&
-      /printed_reference|is_primary_town_index|classification_notes|archived_at|archive_reason/i.test(pageResult.error.message)
+      /printed_reference|is_primary_town_index|classification_notes|archived_at|archive_reason|review_categories/i.test(pageResult.error.message)
     ) {
       console.warn("[HistoricalMapStudio] Page classification columns are unavailable; falling back to legacy atlas page select.", {
         message: pageResult.error.message,
@@ -279,11 +295,21 @@ export async function loadSanbornAtlasInventory(input: {
     pages = mappedPages.filter((page) => !page.archivedAt);
 
     if (pages.length > 0) {
-      const pieceResult = await supabase
+      const pieceSelectWithFeatures = "id, piece_id, atlas_page_id, parent_piece_id, piece_sequence, piece_type, block_number_text, title_text, source_polygon, source_bbox, geometry_type, source_geometry, feature_category, placement_eligibility, printed_symbol_text, review_categories, creation_method, inventory_status, review_status, evidence_classification, notes, updated_at";
+      const pieceSelectBase = "id, piece_id, atlas_page_id, parent_piece_id, piece_sequence, piece_type, block_number_text, title_text, source_polygon, source_bbox, creation_method, inventory_status, review_status, evidence_classification, notes, updated_at";
+      let pieceResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
         .from("sanborn_map_pieces")
-        .select("id, piece_id, atlas_page_id, parent_piece_id, piece_sequence, piece_type, block_number_text, title_text, source_polygon, source_bbox, creation_method, inventory_status, review_status, evidence_classification, notes, updated_at")
+        .select(pieceSelectWithFeatures)
         .in("atlas_page_id", pages.map((page) => page.rowId))
         .order("piece_sequence", { ascending: true });
+
+      if (pieceResult.error && /geometry_type|source_geometry|feature_category|placement_eligibility|printed_symbol_text|review_categories/i.test(pieceResult.error.message)) {
+        pieceResult = await supabase
+          .from("sanborn_map_pieces")
+          .select(pieceSelectBase)
+          .in("atlas_page_id", pages.map((page) => page.rowId))
+          .order("piece_sequence", { ascending: true });
+      }
 
       if (pieceResult.error) {
         return unavailableState(`Sanborn map pieces could not be loaded: ${pieceResult.error.message}`, assets);

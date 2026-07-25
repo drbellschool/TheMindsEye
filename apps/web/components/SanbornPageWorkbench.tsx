@@ -22,6 +22,7 @@ import {
   type SanbornMapPieceRecord,
   type SanbornNormalizedPoint,
 } from "@/lib/sanborn-atlas";
+import { normalizeSanbornMapPieceGeometry, sanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses, suggestSanbornFeatureLabel, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
 import {
   clampSanbornSourceImageZoom,
@@ -47,9 +48,11 @@ type SanbornPageWorkbenchProps = {
   showPieceList?: boolean;
   classificationBlockedMessage?: string;
   repairClassificationAction?: ReactNode;
+  reviewCategories?: SanbornMapPieceReviewCategories;
+  onReviewCategoriesChange?: (categories: SanbornMapPieceReviewCategories) => void;
 };
 
-type EditorMode = "select" | "draw" | "add_vertex" | "pan";
+type EditorMode = "select" | "draw" | "mark_point" | "draw_line" | "add_junction" | "add_vertex" | "pan";
 
 function pointsToAttribute(points: SanbornNormalizedPoint[], width: number, height: number): string {
   return points
@@ -80,10 +83,15 @@ function updatePiecePolygon(piece: SanbornMapPieceRecord, polygon: SanbornNormal
     ...piece,
     sourcePolygon: polygon,
     sourceBBox: calculateSourceBoundingBox(polygon),
+    sourceGeometry: { geometryType: "polygon", points: polygon },
   };
 }
 
-function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: SanbornNormalizedPoint[]): SanbornMapPieceRecord {
+function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: SanbornNormalizedPoint[], geometryType: SanbornMapPieceGeometryType): SanbornMapPieceRecord {
+  const geometry = normalizeSanbornMapPieceGeometry({ geometryType, points });
+  const legacyPolygon = geometry.ok ? geometry.legacyPolygon : points;
+  const sourceBBox = geometry.ok ? geometry.bbox : calculateSourceBoundingBox(legacyPolygon);
+  const category = geometryType === "point" ? "wells" : geometryType === "line" ? "water_routes_and_junctions" : "blocks_and_lots";
   const suffix = `${sequence}-${Date.now()}`;
 
   return {
@@ -95,9 +103,14 @@ function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: San
     pieceSequence: sequence,
     pieceType: "unclassified_region",
     blockNumberText: null,
-    titleText: null,
-    sourcePolygon: points,
-    sourceBBox: calculateSourceBoundingBox(points),
+    titleText: suggestSanbornFeatureLabel(category, sequence),
+    sourcePolygon: legacyPolygon,
+    sourceBBox,
+    sourceGeometry: geometry.ok ? geometry.geometry : { geometryType: "polygon", points: legacyPolygon },
+    featureCategory: category,
+    placementEligibility: "available",
+    printedSymbolText: null,
+    reviewCategories: {},
     creationMethod: "human",
     inventoryStatus: "draft",
     reviewStatus: "unknown",
@@ -125,6 +138,8 @@ export function SanbornPageWorkbench({
   showPieceList = true,
   classificationBlockedMessage = "",
   repairClassificationAction = null,
+  reviewCategories = {},
+  onReviewCategoriesChange,
 }: SanbornPageWorkbenchProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -143,6 +158,8 @@ export function SanbornPageWorkbench({
   } | null>(null);
   const sortedPieces = useMemo(() => [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence), [pieces]);
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
+  const selectedPiecePointCount = selectedPiece?.sourceGeometry?.points.length ?? selectedPiece?.sourcePolygon.length ?? 0;
+  const selectedPieceMinimumPoints = selectedPiece?.sourceGeometry?.geometryType === "point" || selectedPiece?.sourceGeometry?.geometryType === "junction" ? 1 : selectedPiece?.sourceGeometry?.geometryType === "line" ? 2 : 3;
   const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
   const classificationBlocked = Boolean(classificationBlockedMessage);
   const editorReadOnly = readOnly || pieceInventoryBlocked || classificationBlocked;
@@ -213,14 +230,23 @@ export function SanbornPageWorkbench({
       return;
     }
 
-    if (editorMode === "draw") {
+    if (editorMode === "draw" || editorMode === "draw_line") {
       setDraftPoints((current) => [...current, point]);
       return;
     }
 
+    if (editorMode === "mark_point" || editorMode === "add_junction") {
+      setDraftPoints([point]);
+      return;
+    }
+
     if (editorMode === "add_vertex" && selectedPiece) {
-      patchPolygon(selectedPiece.pieceId, [...selectedPiece.sourcePolygon, point]);
-      setSelectedVertexIndex(selectedPiece.sourcePolygon.length);
+      const currentPoints = selectedPiece.sourceGeometry?.points ?? selectedPiece.sourcePolygon;
+      if (selectedPiece.sourceGeometry?.geometryType && selectedPiece.sourceGeometry.geometryType !== "polygon") {
+        const geometry = normalizeSanbornMapPieceGeometry({ geometryType: selectedPiece.sourceGeometry.geometryType, points: [...currentPoints, point] });
+        if (geometry.ok) onPatchPiece(selectedPiece.pieceId, { sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry });
+      } else patchPolygon(selectedPiece.pieceId, [...currentPoints, point]);
+      setSelectedVertexIndex(currentPoints.length);
     }
   }
 
@@ -241,31 +267,39 @@ export function SanbornPageWorkbench({
       return;
     }
 
-    const polygon = piece.sourcePolygon.map((candidate, index) => (index === draggingVertex.vertexIndex ? point : candidate));
-    patchPolygon(piece.pieceId, polygon);
+    const currentPoints = piece.sourceGeometry?.points ?? piece.sourcePolygon;
+    const nextPoints = currentPoints.map((candidate, index) => (index === draggingVertex.vertexIndex ? point : candidate));
+    if (piece.sourceGeometry?.geometryType && piece.sourceGeometry.geometryType !== "polygon") {
+      const geometry = normalizeSanbornMapPieceGeometry({ geometryType: piece.sourceGeometry.geometryType, points: nextPoints });
+      if (geometry.ok) onPatchPiece(piece.pieceId, { sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry });
+    } else patchPolygon(piece.pieceId, nextPoints);
   }
 
   function finishDraft() {
-    if (editorReadOnly || !page || draftPoints.length < 3) {
+    const geometryType: SanbornMapPieceGeometryType = editorMode === "mark_point" ? "point" : editorMode === "add_junction" ? "junction" : editorMode === "draw_line" ? "line" : "polygon";
+    const minimumPoints = geometryType === "point" || geometryType === "junction" ? 1 : geometryType === "line" ? 2 : 3;
+    if (editorReadOnly || !page || draftPoints.length < minimumPoints) {
       return;
     }
 
     const nextSequence = Math.max(0, ...sortedPieces.map((piece) => piece.pieceSequence)) + 1;
-    const nextPiece = createPiece(page, nextSequence, draftPoints);
+    const nextPiece = createPiece(page, nextSequence, draftPoints, geometryType);
     onPiecesChange([...sortedPieces, nextPiece]);
     onSelectPiece(nextPiece.pieceId);
     setDraftPoints([]);
-    setEditorMode("draw");
+    setEditorMode(editorMode);
   }
 
   function removeSelectedVertex() {
-    if (editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3) {
+    const selectedPoints = selectedPiece?.sourceGeometry?.points ?? selectedPiece?.sourcePolygon ?? [];
+    const minimumVertices = selectedPiece?.sourceGeometry?.geometryType === "point" || selectedPiece?.sourceGeometry?.geometryType === "junction" ? 1 : selectedPiece?.sourceGeometry?.geometryType === "line" ? 2 : 3;
+    if (editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPoints.length <= minimumVertices) {
       return;
     }
 
     patchPolygon(
       selectedPiece.pieceId,
-      selectedPiece.sourcePolygon.filter((_, index) => index !== selectedVertexIndex),
+      selectedPoints.filter((_, index) => index !== selectedVertexIndex),
     );
     setSelectedVertexIndex(null);
   }
@@ -273,6 +307,12 @@ export function SanbornPageWorkbench({
   function clearDraft() {
     setDraftPoints([]);
     setEditorMode("select");
+  }
+
+  function setReviewCategory(category: SanbornMapPieceFeatureCategory, status: SanbornMapPieceReviewStatus) {
+    const next = { ...reviewCategories, [category]: status };
+    onReviewCategoriesChange?.(next);
+    onPiecesChange(sortedPieces.map((piece) => ({ ...piece, reviewCategories: next })));
   }
 
   function zoomSourceImage(direction: "in" | "out") {
@@ -408,16 +448,25 @@ export function SanbornPageWorkbench({
               Pan
             </button>
             <button className={`sanborn-button${editorMode === "draw" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("draw")} title={disabledToolReason} type="button">
-              Draw piece
+              Draw area
+            </button>
+            <button className={`sanborn-button${editorMode === "mark_point" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("mark_point")} title={disabledToolReason} type="button">
+              Mark point
+            </button>
+            <button className={`sanborn-button${editorMode === "draw_line" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("draw_line")} title={disabledToolReason} type="button">
+              Draw line
+            </button>
+            <button className={`sanborn-button${editorMode === "add_junction" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly} onClick={() => setEditorMode("add_junction")} title={disabledToolReason} type="button">
+              Add junction
             </button>
             <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={editorReadOnly || !selectedPiece} onClick={() => setEditorMode("add_vertex")} title={!selectedPiece ? "Select a map piece before adding a vertex." : disabledToolReason} type="button">
               Add vertex
             </button>
-            <button className="sanborn-button" disabled={editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiece.sourcePolygon.length <= 3} onClick={removeSelectedVertex} title={disabledToolReason} type="button">
+            <button className="sanborn-button" disabled={editorReadOnly || !selectedPiece || selectedVertexIndex === null || selectedPiecePointCount <= selectedPieceMinimumPoints} onClick={removeSelectedVertex} title={disabledToolReason} type="button">
               Remove vertex
             </button>
-            <button className="sanborn-button sanborn-button--primary" disabled={editorReadOnly || draftPoints.length < 3} onClick={finishDraft} title={disabledToolReason} type="button">
-              Finish polygon
+            <button className="sanborn-button sanborn-button--primary" disabled={editorReadOnly || draftPoints.length < (editorMode === "mark_point" || editorMode === "add_junction" ? 1 : editorMode === "draw_line" ? 2 : 3)} onClick={finishDraft} title={disabledToolReason} type="button">
+              Finish feature
             </button>
             <button className="sanborn-button" disabled={editorReadOnly || draftPoints.length === 0} onClick={clearDraft} title={disabledToolReason} type="button">
               Clear draft
@@ -477,12 +526,17 @@ export function SanbornPageWorkbench({
             >
               {sortedPieces.map((piece) => {
                 const selected = piece.pieceId === selectedPieceId;
-                const points = pointsToAttribute(piece.sourcePolygon, asset.width, asset.height);
+                const geometry = piece.sourceGeometry ?? { geometryType: "polygon" as const, points: piece.sourcePolygon };
+                const points = pointsToAttribute(geometry.points, asset.width, asset.height);
+                const firstPoint = geometry.points[0] ? normalizedToPixelPoint(geometry.points[0], asset.width, asset.height) : null;
 
                 return (
                   <g key={piece.pieceId}>
-                    <polygon
+                    {geometry.geometryType === "point" || geometry.geometryType === "junction" ? <circle
                       className={`sanborn-page-workbench__polygon${selected ? " is-selected" : ""}`}
+                      cx={firstPoint?.x ?? 0}
+                      cy={firstPoint?.y ?? 0}
+                      r={geometry.geometryType === "junction" ? 16 : 13}
                       onPointerDown={(event) => {
                         if (panActive) {
                           return;
@@ -494,10 +548,25 @@ export function SanbornPageWorkbench({
                         onSelectPiece(piece.pieceId);
                         setEditorMode("select");
                       }}
+                    /> : geometry.geometryType === "line" ? <polyline
+                      className={`sanborn-page-workbench__polygon${selected ? " is-selected" : ""}`}
+                      fill="none"
+                      onPointerDown={(event) => {
+                        if (panActive || event.button !== 0) return;
+                        event.stopPropagation(); onSelectPiece(piece.pieceId);
+                      }}
                       points={points}
-                    />
+                    /> : <polygon
+                      className={`sanborn-page-workbench__polygon${selected ? " is-selected" : ""}`}
+                      onPointerDown={(event) => {
+                        if (panActive) return;
+                        if (event.button !== 0) return;
+                        event.stopPropagation(); onSelectPiece(piece.pieceId);
+                      }}
+                      points={points}
+                    />}
                     {selected
-                      ? piece.sourcePolygon.map((point, index) => {
+                      ? geometry.points.map((point, index) => {
                           const pixel = normalizedToPixelPoint(point, asset.width, asset.height);
                           return (
                             <circle
@@ -549,6 +618,8 @@ export function SanbornPageWorkbench({
             onPatchPiece={onPatchPiece}
             onReorderPiece={onReorderPiece}
             onSelectPiece={onSelectPiece}
+            onSetReviewCategory={setReviewCategory}
+            reviewCategories={reviewCategories}
           />
         </aside>
       ) : null}

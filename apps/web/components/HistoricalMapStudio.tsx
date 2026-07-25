@@ -3517,6 +3517,17 @@ export function HistoricalMapStudio({
     setSaveMessage("Map pieces have unsaved changes.");
   }
 
+  function setSelectedPageReviewCategories(reviewCategories: SanbornMapPieceRecord["reviewCategories"]) {
+    if (!selectedAtlasPage) return;
+    setAtlasInventory((current) => ({
+      ...current,
+      pages: current.pages.map((page) => page.pageId === selectedAtlasPage.pageId ? { ...page, reviewCategories: reviewCategories ?? {} } : page),
+      pieces: current.pieces.map((piece) => piece.atlasPageId === selectedAtlasPage.pageId ? { ...piece, reviewCategories: reviewCategories ?? {} } : piece),
+    }));
+    setSaveStatus("idle");
+    setSaveMessage("Sheet review categories have unsaved changes.");
+  }
+
   async function saveAtlas(draft: {
     atlasId?: string;
     title: string;
@@ -3925,10 +3936,17 @@ export function HistoricalMapStudio({
           blockNumberText: piece.blockNumberText,
           titleText: piece.titleText,
           sourcePolygon: piece.sourcePolygon,
+          sourceGeometry: piece.sourceGeometry,
+          geometryType: piece.sourceGeometry?.geometryType,
+          featureCategory: piece.featureCategory,
+          placementEligibility: piece.placementEligibility,
+          printedSymbolText: piece.printedSymbolText,
+          reviewCategories: piece.reviewCategories,
           creationMethod: piece.creationMethod,
           inventoryStatus: piece.inventoryStatus,
           notes: piece.notes,
         })),
+        reviewCategories: selectedAtlasPage.reviewCategories ?? selectedAtlasPagePieces[0]?.reviewCategories ?? {},
       }),
     });
     const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; savedAt?: string } | null;
@@ -5548,12 +5566,14 @@ export function HistoricalMapStudio({
             onPatchPiece={patchMapPiece}
             onReorderPiece={reorderMapPiece}
             onSelectPiece={selectMapPieceAndFocus}
+            reviewCategories={selectedAtlasPage?.reviewCategories ?? {}}
+            onSetReviewCategory={(category, status) => setSelectedPageReviewCategories({ ...(selectedAtlasPage?.reviewCategories ?? {}), [category]: status })}
           />
           <div className="sanborn-station-actions">
             {selectedIndexRegionId ? <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep("town_index")} type="button">Back to Town Index</button> : null}
             {pieceInventoryBlocked ? <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || atlasSaveActionsDisabled} onClick={() => void saveAtlasPages({ continueToPieceInventory: true })} type="button">Save pages and continue</button> : null}
             <button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly || pieceInventoryBlocked || !selectedAtlasPage || !selectedPageSupportsMapPieces} onClick={() => void saveMapPieces()} type="button">Save pieces</button>
-            <button className="sanborn-button" disabled={!selectedMapPiece?.isPersisted || !selectedPageSupportsMapPlacement} onClick={() => changeAtlasWorkflowStep("gps_alignment")} type="button">Open in Map Placement</button>
+            <button className="sanborn-button" disabled={!selectedMapPiece?.isPersisted || selectedMapPiece.placementEligibility !== "available" || !selectedPageSupportsMapPlacement} onClick={() => changeAtlasWorkflowStep("gps_alignment")} title={selectedMapPiece?.placementEligibility !== "available" ? "This feature is reference-only or unresolved for placement." : undefined} type="button">Open in Map Placement</button>
             <button className="sanborn-button" disabled={!selectedAtlasPage} onClick={() => changeAtlasWorkflowStep("page_classification")} type="button">Reclassify page</button>
           </div>
         </>

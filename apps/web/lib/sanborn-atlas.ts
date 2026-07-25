@@ -1,4 +1,5 @@
 import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
+import type { SanbornMapPieceFeatureCategory, SanbornMapPiecePlacementEligibility, SanbornMapPieceReviewCategories, SanbornMapPieceSourceGeometry } from "./sanborn-map-piece-features.ts";
 
 export const sanbornPageTypes = [
   "cover",
@@ -117,6 +118,7 @@ export type SanbornAtlasPageRecord = {
   archiveReason: string | null;
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
+  reviewCategories?: SanbornMapPieceReviewCategories;
   updatedAt: string | null;
   isPersisted: boolean;
 };
@@ -133,6 +135,11 @@ export type SanbornMapPieceRecord = {
   titleText: string | null;
   sourcePolygon: SanbornNormalizedPoint[];
   sourceBBox: SanbornSourceBBox;
+  sourceGeometry?: SanbornMapPieceSourceGeometry;
+  featureCategory?: SanbornMapPieceFeatureCategory;
+  placementEligibility?: SanbornMapPiecePlacementEligibility;
+  printedSymbolText?: string | null;
+  reviewCategories?: SanbornMapPieceReviewCategories;
   creationMethod: SanbornMapPieceCreationMethod;
   inventoryStatus: SanbornMapPieceInventoryStatus;
   reviewStatus: ReviewStatus;

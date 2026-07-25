@@ -10,8 +10,13 @@ import {
   normalizeSanbornMapPieceInventoryStatus,
   normalizeSanbornPageType,
   pageTypeSupportsMapPieces,
-  validateNormalizedPolygon,
 } from "@/lib/sanborn-atlas";
+import {
+  normalizeSanbornMapPieceFeatureCategory,
+  normalizeSanbornMapPieceGeometry,
+  normalizeSanbornMapPieceReviewCategories,
+  type SanbornMapPiecePlacementEligibility,
+} from "@/lib/sanborn-map-piece-features";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
 export const runtime = "nodejs";
@@ -30,7 +35,14 @@ type MapPieceSaveBody = {
     creationMethod?: string | null;
     inventoryStatus?: string | null;
     notes?: string | null;
+    geometryType?: string | null;
+    sourceGeometry?: unknown;
+    featureCategory?: string | null;
+    placementEligibility?: string | null;
+    printedSymbolText?: string | null;
+    reviewCategories?: unknown;
   }>;
+  reviewCategories?: unknown;
 };
 
 export async function PUT(request: NextRequest) {
@@ -102,14 +114,14 @@ export async function PUT(request: NextRequest) {
   const normalizedPieces = body.pieces.map((piece, index) => {
     const pieceSequence = normalizePositiveInteger(piece.pieceSequence) ?? index + 1;
     const pieceType = piece.pieceType;
-    const polygon = validateNormalizedPolygon(piece.sourcePolygon);
+    const geometry = normalizeSanbornMapPieceGeometry(piece.sourceGeometry, piece.sourcePolygon);
 
     if (!isSanbornMapPieceType(pieceType)) {
       return { ok: false as const, error: "Map piece type is not allowed." };
     }
 
-    if (!polygon.ok) {
-      return { ok: false as const, error: polygon.error };
+    if (!geometry.ok) {
+      return { ok: false as const, error: geometry.error };
     }
 
     const pieceId =
@@ -133,8 +145,13 @@ export async function PUT(request: NextRequest) {
         pieceType,
         blockNumberText: normalizeOptionalSanbornText(piece.blockNumberText, 120),
         titleText: normalizeOptionalSanbornText(piece.titleText, 240),
-        sourcePolygon: polygon.polygon,
-        sourceBBox: polygon.bbox,
+        sourcePolygon: geometry.legacyPolygon,
+        sourceBBox: geometry.bbox,
+        sourceGeometry: geometry.geometry,
+        featureCategory: normalizeSanbornMapPieceFeatureCategory(piece.featureCategory),
+        placementEligibility: piece.placementEligibility === "reference_only" || piece.placementEligibility === "unresolved" ? piece.placementEligibility : "available" as SanbornMapPiecePlacementEligibility,
+        printedSymbolText: normalizeOptionalSanbornText(piece.printedSymbolText, 240),
+        reviewCategories: normalizeSanbornMapPieceReviewCategories(piece.reviewCategories),
         creationMethod: normalizeSanbornMapPieceCreationMethod(piece.creationMethod),
         inventoryStatus: normalizeSanbornMapPieceInventoryStatus(piece.inventoryStatus),
         notes: normalizeOptionalSanbornText(piece.notes, 4000),
@@ -168,6 +185,30 @@ export async function PUT(request: NextRequest) {
   if (saveResult.error) {
     const status = saveResult.error.code === "P0001" ? 400 : 503;
     return jsonError(status, `Sanborn map pieces could not be saved: ${saveResult.error.message}`);
+  }
+
+  if (body.reviewCategories !== undefined) {
+    const reviewUpdate = await supabase
+      .from("sanborn_atlas_pages")
+      .update({ review_categories: normalizeSanbornMapPieceReviewCategories(body.reviewCategories) })
+      .eq("id", pageScopeResult.data.id);
+    if (reviewUpdate.error) return jsonError(503, `Sheet review categories could not be saved: ${reviewUpdate.error.message}`);
+  }
+
+  for (const piece of pieces) {
+    const featureUpdate = await supabase
+      .from("sanborn_map_pieces")
+      .update({
+        geometry_type: piece.sourceGeometry.geometryType,
+        source_geometry: piece.sourceGeometry,
+        feature_category: piece.featureCategory,
+        placement_eligibility: piece.placementEligibility,
+        printed_symbol_text: piece.printedSymbolText,
+        review_categories: piece.reviewCategories,
+      })
+      .eq("piece_id", piece.pieceId)
+      .eq("atlas_page_id", pageScopeResult.data.id);
+    if (featureUpdate.error) return jsonError(503, `Map feature metadata could not be saved: ${featureUpdate.error.message}`);
   }
 
   return NextResponse.json({

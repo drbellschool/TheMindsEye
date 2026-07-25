@@ -32,6 +32,7 @@ import {
   validateSanbornEditionCreation,
   type SanbornMapPieceRecord,
 } from "./sanborn-atlas.ts";
+import { normalizeSanbornMapPieceGeometry, normalizeSanbornMapPieceReviewCategories, suggestSanbornFeatureLabel } from "./sanborn-map-piece-features.ts";
 
 const migrationPath = "../../supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql";
 const pageClassificationMigrationPath = "../../supabase/migrations/0015_page_classification_workflow.sql";
@@ -44,6 +45,28 @@ const piecePlacementRoutePath = "app/api/community/historical-map-studio/map-pie
 const uploadRoutePath = "app/api/community/sanborn-sheets/route.ts";
 const deleteRoutePath = "app/api/community/historical-map-studio/delete/route.ts";
 const replaceRoutePath = "app/api/community/historical-map-studio/replace/route.ts";
+
+test("normalizes and validates point, line, polygon, and junction feature geometry", () => {
+  const point = normalizeSanbornMapPieceGeometry({ geometryType: "point", points: [{ x: 0.2, y: 0.3 }] });
+  const line = normalizeSanbornMapPieceGeometry({ geometryType: "line", points: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.6 }] });
+  const polygon = normalizeSanbornMapPieceGeometry({ geometryType: "polygon", points: [{ x: 0.1, y: 0.1 }, { x: 0.8, y: 0.1 }, { x: 0.8, y: 0.8 }] });
+  const junction = normalizeSanbornMapPieceGeometry({ geometryType: "junction", points: [{ x: 0.4, y: 0.4 }] });
+  assert.equal(point.ok && point.geometry.geometryType, "point");
+  assert.equal(line.ok && line.geometry.geometryType, "line");
+  assert.equal(polygon.ok && polygon.geometry.geometryType, "polygon");
+  assert.equal(junction.ok && junction.geometry.geometryType, "junction");
+  assert.equal(normalizeSanbornMapPieceGeometry({ geometryType: "line", points: [{ x: 0.1, y: 0.1 }] }).ok, false);
+  assert.equal(normalizeSanbornMapPieceGeometry({ geometryType: "point", points: [{ x: 1.2, y: 0.1 }] }).ok, false);
+});
+
+test("feature review categories do not infer completion from zero objects", () => {
+  assert.deepEqual(normalizeSanbornMapPieceReviewCategories({ wells: "reviewed_none_found", hydrants: "invalid" }), { wells: "reviewed_none_found" });
+  assert.equal(suggestSanbornFeatureLabel("hydrants", 1, "2H"), "Hydrant 2H 01");
+  const migration = readFileSync("../../supabase/migrations/0021_map_piece_feature_geometry.sql", "utf8");
+  assert.match(migration, /add column if not exists source_geometry/i);
+  assert.match(migration, /geometry_type in \('point', 'line', 'polygon', 'junction'\)/i);
+  assert.match(migration, /source_polygon/);
+});
 
 function readMigration(): string {
   return readFileSync(migrationPath, "utf8");
