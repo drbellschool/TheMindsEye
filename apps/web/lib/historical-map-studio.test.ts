@@ -25,6 +25,13 @@ import {
 } from "./historical-map-geocode.ts";
 import { focusTargetForTask, focusTargetId } from "./studio-focus-target.ts";
 import {
+  getActiveEditionPages,
+  getPrimaryIndexState,
+  getSourceRecordQueue,
+  groupSourceOptionsForEdition,
+  suggestSourceRecordDisplayLabel,
+} from "./source-record-workflow.ts";
+import {
   applyInspectorTransformPatch,
   buildInitialHistory,
   canAutosaveStudioMode,
@@ -1752,4 +1759,46 @@ test("emergency tile paint diagnostics are visible and compact", () => {
   assert.match(css, /\.map-studio-plain-tile-counts/);
   assert.match(css, /z-index: 790/);
   assert.match(css, /max-height: 260px/);
+});
+
+test("Source Record queue stays inside the active edition and prioritizes unfinished work", () => {
+  const page = (pageId: string, atlasId: string, pageType: string, sequence: number, sourceRecordId: string | null, printedReference: string | null, archivedAt: string | null = null) => ({
+    pageId, atlasId, pageSequence: sequence, pageType, sanbornSheetAssetId: `${pageId}-asset`, archivedAt,
+    isPrimaryTownIndex: false, printedReference, sourceRecordId,
+  });
+  const pages = [
+    page("other-edition", "atlas-1890", "unknown", 1, null, null),
+    page("done", "atlas-1888", "sanborn_sheet", 1, "source-1", "1"),
+    page("needs-source", "atlas-1888", "sanborn_sheet", 2, null, "2"),
+    page("archived", "atlas-1888", "sanborn_sheet", 3, null, "3", "2026-01-01"),
+  ] as any;
+  const activePages = getActiveEditionPages(pages, "atlas-1888");
+  assert.deepEqual(activePages.map((candidate) => candidate.pageId), ["done", "needs-source"]);
+  const queue = getSourceRecordQueue(activePages, [
+    { assetId: "needs-source-asset", sourceRecordId: null },
+    { assetId: "done-asset", sourceRecordId: "source-1" },
+  ] as any, []);
+  assert.deepEqual(queue.map(({ page: candidate }) => candidate.pageId), ["needs-source"]);
+});
+
+test("Source Record primary index states preserve unresolved and conflict states", () => {
+  const page = (pageId: string, pageType: string, isPrimaryTownIndex = false) => ({ pageId, pageType, isPrimaryTownIndex }) as any;
+  assert.equal(getPrimaryIndexState([page("one", "unknown")]), "unresolved");
+  assert.equal(getPrimaryIndexState([page("one", "index_or_mixed")]), "candidate");
+  assert.equal(getPrimaryIndexState([page("one", "index_or_mixed", true)]), "confirmed");
+  assert.equal(getPrimaryIndexState([page("one", "index_or_mixed", true), page("two", "index_or_mixed", true)]), "conflict");
+});
+
+test("Source Record source options group active edition first and exclude invalid records", () => {
+  const source = (sourceRecordId: string, editionYear: number | null, sourceStatus = "active") => ({ sourceRecordId, sourceId: sourceRecordId, title: sourceRecordId, editionYear, sourceStatus }) as any;
+  const groups = groupSourceOptionsForEdition([source("other", 1885), source("edition", 1888), source("archived", 1888, "archived")], 1888);
+  assert.deepEqual(groups.editionSources.map((candidate) => candidate.sourceRecordId), ["edition"]);
+  assert.deepEqual(groups.otherTownSources.map((candidate) => candidate.sourceRecordId), ["other"]);
+});
+
+test("Source Record naming suggestions do not require changing persistent IDs", () => {
+  assert.equal(suggestSourceRecordDisplayLabel({ pageType: "index_or_mixed", sheetNumber: 2 }), "Sheet 2 — Index");
+  assert.equal(suggestSourceRecordDisplayLabel({ pageType: "sanborn_sheet", sheetNumber: 3 }), "Sheet 3");
+  assert.equal(suggestSourceRecordDisplayLabel({ regionType: "sheet_coverage_region", regionSequence: 2 }), "Coverage Region 2");
+  assert.equal(suggestSourceRecordDisplayLabel({ pageType: "legend" }), "Key / Legend");
 });
