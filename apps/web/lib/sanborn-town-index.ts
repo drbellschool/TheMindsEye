@@ -13,6 +13,7 @@ export const sanbornSourceRegionTypes = [
   "block_index_text",
   "legend_key",
   "inset_map",
+  "specials",
   "title_or_decoration",
   "notes",
   "other",
@@ -47,6 +48,10 @@ export type SanbornTownIndexRegionRecord = {
   progressStatus: SanbornTownIndexStatus;
   includeInTownIndex: boolean;
   availableToMapPieces: boolean;
+  displayColor?: string;
+  displayOpacity?: number;
+  referenceResolution?: "linked" | "missing" | "not_applicable" | "unresolved";
+  referenceResolutionNote?: string | null;
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
   notes: string | null;
@@ -99,6 +104,7 @@ export const sanbornSourceRegionTypeLabels: Record<SanbornSourceRegionType, stri
   block_index_text: "Block index text",
   legend_key: "Legend / key",
   inset_map: "Inset map",
+  specials: "Specials",
   title_or_decoration: "Title or decoration",
   notes: "Notes",
   other: "Other",

@@ -4232,6 +4232,119 @@ body:has(.minimal-sanborn-gps) {
   margin-right: auto;
 }
 
+.sanborn-town-index-chore-list {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(226, 190, 126, 0.2);
+  border-radius: 9px;
+  background: rgba(32, 23, 16, 0.72);
+  padding: 10px;
+}
+
+.sanborn-town-index-chore-list > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sanborn-town-index-chore-list > header strong,
+.sanborn-town-index-chore-list > header > span {
+  color: #f6e7cb;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.sanborn-town-index-chore-list__categories,
+.sanborn-town-index-region-list {
+  display: grid;
+  gap: 5px;
+}
+
+.sanborn-town-index-chore-list__item,
+.sanborn-town-index-region-list__item {
+  display: grid;
+  gap: 2px;
+  border: 1px solid rgba(226, 190, 126, 0.16);
+  border-radius: 7px;
+  background: rgba(12, 10, 8, 0.66);
+  color: rgba(246, 231, 203, 0.82);
+  cursor: pointer;
+  font: inherit;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.sanborn-town-index-chore-list__item strong {
+  color: #e2be7e;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.sanborn-town-index-chore-list__item span,
+.sanborn-town-index-region-list__item small {
+  color: rgba(246, 231, 203, 0.62);
+  font-size: 0.68rem;
+}
+
+.sanborn-town-index-region-list__item {
+  grid-template-columns: 12px minmax(0, 1fr);
+  column-gap: 7px;
+}
+
+.sanborn-town-index-region-list__item i,
+.sanborn-town-index-color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(246, 231, 203, 0.55);
+  border-radius: 50%;
+}
+
+.sanborn-town-index-region-list__item small {
+  grid-column: 2;
+}
+
+.sanborn-town-index-region-list details {
+  border-top: 1px solid rgba(226, 190, 126, 0.16);
+  padding-top: 5px;
+}
+
+.sanborn-town-index-region-list summary {
+  color: rgba(246, 231, 203, 0.64);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 4px;
+}
+
+.sanborn-town-index-region-list details[open] {
+  display: grid;
+  gap: 5px;
+}
+
+.sanborn-town-index-color-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.sanborn-station-inspector .sanborn-town-index-color-control input[type="color"] {
+  width: 30px;
+  height: 26px;
+  padding: 2px;
+}
+
+.sanborn-town-index-color-preset {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(246, 231, 203, 0.55);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+
 .sanborn-station-details {
   display: grid;
   grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);

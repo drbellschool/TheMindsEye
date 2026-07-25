@@ -31,6 +31,7 @@ import {
   groupSourceOptionsForEdition,
   suggestSourceRecordDisplayLabel,
 } from "./source-record-workflow.ts";
+import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, validateReferenceResolution } from "./town-index-review.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -1801,4 +1802,41 @@ test("Source Record naming suggestions do not require changing persistent IDs", 
   assert.equal(suggestSourceRecordDisplayLabel({ pageType: "sanborn_sheet", sheetNumber: 3 }), "Sheet 3");
   assert.equal(suggestSourceRecordDisplayLabel({ regionType: "sheet_coverage_region", regionSequence: 2 }), "Coverage Region 2");
   assert.equal(suggestSourceRecordDisplayLabel({ pageType: "legend" }), "Key / Legend");
+});
+
+test("Town Index display colors normalize safely and preserve opacity bounds", () => {
+  assert.equal(normalizeDisplayColor("#AABBCC"), "#aabbcc");
+  assert.equal(normalizeDisplayColor("not-a-color"), "#b98b57");
+  assert.equal(normalizeDisplayOpacity(2), 1);
+  assert.equal(normalizeDisplayOpacity(0), 0.15);
+});
+
+test("Town Index reference resolution requires reasons for missing and not applicable", () => {
+  assert.equal(validateReferenceResolution("linked", "").ok, true);
+  assert.equal(validateReferenceResolution("missing", "").ok, false);
+  assert.equal(validateReferenceResolution("not_applicable", "Not printed on this edition").ok, true);
+});
+
+test("Town Index checklist progress is calculated from saved region states", () => {
+  const progress = getTownIndexChecklistProgress([
+    { regionType: "sheet_coverage_region", workflowStatus: "reviewed", referenceResolution: "linked", sheetReference: "2" },
+    { regionType: "sheet_coverage_region", workflowStatus: "started", referenceResolution: "unresolved", sheetReference: "3" },
+    { regionType: "inset_map", workflowStatus: "reviewed", referenceResolution: "not_applicable", sheetReference: "Inset" },
+    { regionType: "specials", workflowStatus: "started", referenceResolution: "unresolved", sheetReference: "Specials" },
+    { regionType: "legend_key", workflowStatus: "reviewed", referenceResolution: "not_applicable", sheetReference: "Key" },
+  ] as any);
+  assert.deepEqual(progress.coverage, { reviewed: 1, total: 2 });
+  assert.deepEqual(progress.references, { resolved: 3, total: 5 });
+  assert.equal(progress.specials, "marked");
+  assert.equal(progress.key, "marked");
+  assert.equal(progress.completed, 3);
+});
+
+test("Town Index review metadata migration is additive and guarded", () => {
+  const migration = readFileSync("../../supabase/migrations/0020_town_index_review_tools.sql", "utf8");
+  assert.match(migration, /add column if not exists display_color/);
+  assert.match(migration, /reference_resolution in \('linked', 'missing', 'not_applicable', 'unresolved'\)/);
+  assert.match(migration, /reference_resolution_note/);
+  assert.match(migration, /'specials'/);
+  assert.doesNotMatch(migration, /drop table\s+public\.sanborn_source_regions/i);
 });

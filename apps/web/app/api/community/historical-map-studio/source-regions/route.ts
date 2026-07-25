@@ -11,6 +11,7 @@ import {
   sourceRegionSupportsMapPieces,
   validateTownIndexRegionPolygon,
 } from "@/lib/sanborn-town-index";
+import { normalizeDisplayColor, normalizeDisplayOpacity, validateReferenceResolution, type ReferenceResolution } from "@/lib/town-index-review";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,10 @@ type SourceRegionBody = {
     workflowStatus?: string | null;
     includeInTownIndex?: boolean | null;
     availableToMapPieces?: boolean | null;
+    displayColor?: string | null;
+    displayOpacity?: number | string | null;
+    referenceResolution?: string | null;
+    referenceResolutionNote?: string | null;
     notes?: string | null;
   } | null;
 };
@@ -56,6 +61,7 @@ function normalizeRegionPayload(body: SourceRegionBody, atlasId: string) {
   const workflowStatus = normalizeTownIndexStatus(requestedWorkflowStatus);
   const polygon = validateTownIndexRegionPolygon(region.normalizedPolygon ?? region.sourcePolygon);
   const availableToMapPieces = region.availableToMapPieces === true;
+  const referenceResolution = validateReferenceResolution(region.referenceResolution, region.referenceResolutionNote);
 
   if (!atlasPageId) {
     return { ok: false as const, error: "Source region must reference an atlas page." };
@@ -71,6 +77,10 @@ function normalizeRegionPayload(body: SourceRegionBody, atlasId: string) {
 
   if (!polygon.ok) {
     return { ok: false as const, error: polygon.error.replace("Index region", "Source region") };
+  }
+
+  if (!referenceResolution.ok) {
+    return referenceResolution;
   }
 
   if (
@@ -110,6 +120,10 @@ function normalizeRegionPayload(body: SourceRegionBody, atlasId: string) {
       progressStatus: workflowStatus,
       includeInTownIndex: region.includeInTownIndex === true,
       availableToMapPieces,
+      displayColor: normalizeDisplayColor(region.displayColor),
+      displayOpacity: normalizeDisplayOpacity(region.displayOpacity),
+      referenceResolution: referenceResolution.status as ReferenceResolution,
+      referenceResolutionNote: referenceResolution.note,
       notes: normalizeOptionalSanbornText(region.notes, 4000),
     },
   };
@@ -138,10 +152,13 @@ export async function PUT(request: NextRequest) {
     return jsonError(400, normalized.error);
   }
 
+  // The additive migration extends the canonical type allowlist; the legacy RPC is
+  // retained for compatibility and only knows the pre-0020 fallback type.
+  const rpcRegion = normalized.value.regionType === "specials" ? { ...normalized.value, regionType: "other" } : normalized.value;
   const saveResult = await access.supabase.rpc("save_sanborn_source_region", {
     p_town_package_id: townPackageResult.data.id,
     p_atlas_id: atlasId,
-    p_region: normalized.value,
+    p_region: rpcRegion,
   });
 
   if (saveResult.error) {
@@ -158,6 +175,21 @@ export async function PUT(request: NextRequest) {
   if (provenanceResult.error) {
     const status = provenanceResult.error.code === "P0001" ? 400 : 503;
     return jsonError(status, `Source region provenance could not be saved: ${provenanceResult.error.message}`);
+  }
+
+  const displayResult = await access.supabase
+    .from("sanborn_source_regions")
+    .update({
+      display_color: normalized.value.displayColor,
+      display_opacity: normalized.value.displayOpacity,
+      region_type: normalized.value.regionType,
+      reference_resolution: normalized.value.referenceResolution,
+      reference_resolution_note: normalized.value.referenceResolutionNote,
+    })
+    .eq("source_region_id", normalized.value.regionId)
+    .eq("town_package_id", townPackageResult.data.id);
+  if (displayResult.error) {
+    return jsonError(503, `Town Index display metadata could not be saved: ${displayResult.error.message}`);
   }
 
   const saved = saveResult.data as {
@@ -179,6 +211,10 @@ export async function PUT(request: NextRequest) {
       reviewStatus: saved?.review_status ?? "unknown",
       evidenceClassification: saved?.evidence_classification ?? "unknown",
       sourceRecordId: provenanceResult.data?.source_record_id ?? normalized.value.sourceRecordId ?? null,
+      displayColor: normalized.value.displayColor,
+      displayOpacity: normalized.value.displayOpacity,
+      referenceResolution: normalized.value.referenceResolution,
+      referenceResolutionNote: normalized.value.referenceResolutionNote,
       updatedAt: saved?.updated_at ?? new Date().toISOString(),
       isPersisted: true,
     },
