@@ -613,9 +613,9 @@ test("draft atlas pages block piece inventory until page assignments are saved",
   assert.match(studioComponent, /readOnly=\{atlasReadOnly \|\| !selectedAtlasPage \|\| !selectedAtlasPage\.isPersisted \|\| !selectedPageSupportsMapPieces\}/);
   assert.match(workbenchComponent, /Save the atlas page assignments before drawing map pieces\./);
   assert.match(workbenchComponent, /const editorReadOnly = readOnly \|\| pieceInventoryBlocked \|\| classificationBlocked/);
-  assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw piece/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly\}[\s\S]*Draw area/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !selectedPiece\}[\s\S]*Add vertex/);
-  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < 3\}[\s\S]*Finish polygon/);
+  assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length < .*\}[\s\S]*Finish feature/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| draftPoints\.length === 0\}[\s\S]*Clear draft/);
   assert.match(workbenchComponent, /disabled=\{editorReadOnly \|\| !page\}[\s\S]*Save pieces/);
   assert.match(studioComponent, /Save pages and continue/);
@@ -627,7 +627,7 @@ test("Map Pieces workbench keeps editing tools sticky and treats zoom pan as vie
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
 
-  assert.match(workbenchComponent, /type EditorMode = "select" \| "draw" \| "add_vertex" \| "pan"/);
+  assert.match(workbenchComponent, /type EditorMode = .*mark_point.*draw_line.*add_junction/);
   assert.match(workbenchComponent, /sourceZoom/);
   assert.match(workbenchComponent, /Zoom out/);
   assert.match(workbenchComponent, /Zoom in/);

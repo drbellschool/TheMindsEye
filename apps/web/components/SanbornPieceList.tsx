@@ -7,6 +7,7 @@ import {
   type SanbornMapPieceType,
   type SanbornMapPieceInventoryStatus,
 } from "@/lib/sanborn-atlas";
+import { sanbornMapPieceFeatureCategories, sanbornMapPieceGeometryTypes, sanbornMapPieceReviewStatuses, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
 
 type SanbornPieceListProps = {
   pieces: SanbornMapPieceRecord[];
@@ -16,6 +17,8 @@ type SanbornPieceListProps = {
   onPatchPiece: (pieceId: string, patch: Partial<SanbornMapPieceRecord>) => void;
   onReorderPiece: (pieceId: string, direction: "up" | "down") => void;
   onDeletePiece: (pieceId: string) => void;
+  onSetReviewCategory: (category: SanbornMapPieceFeatureCategory, status: SanbornMapPieceReviewStatus) => void;
+  reviewCategories?: SanbornMapPieceReviewCategories;
 };
 
 function pieceLabel(piece: SanbornMapPieceRecord): string {
@@ -30,15 +33,21 @@ export function SanbornPieceList({
   onPatchPiece,
   onReorderPiece,
   onDeletePiece,
+  onSetReviewCategory,
+  reviewCategories = {},
 }: SanbornPieceListProps) {
   const sortedPieces = [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence);
 
-  if (sortedPieces.length === 0) {
-    return <p className="sanborn-atlas-empty">No map pieces have been inventoried for this page.</p>;
-  }
-
   return (
     <div className="sanborn-piece-list">
+      <fieldset className="sanborn-piece-review-categories">
+        <legend>Sheet review categories</legend>
+        {sanbornMapPieceFeatureCategories.map((category) => {
+          const status = reviewCategories[category] ?? "not_reviewed";
+          return <label key={category}>{category.replaceAll("_", " ")}<select disabled={readOnly} value={status} onChange={(event) => onSetReviewCategory(category, event.target.value as SanbornMapPieceReviewStatus)}>{sanbornMapPieceReviewStatuses.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select></label>;
+        })}
+      </fieldset>
+      {sortedPieces.length === 0 ? <p className="sanborn-atlas-empty">No map pieces have been inventoried for this page. Use Mark point, Draw line, Draw area, or Add junction to record every geographically meaningful feature.</p> : null}
       {sortedPieces.map((piece, index) => (
         <article className={`sanborn-piece-list__item${piece.pieceId === selectedPieceId ? " is-selected" : ""}`} data-focus-target={`map-piece-inspector-card:${piece.pieceId}`} key={piece.pieceId} tabIndex={-1}>
           <button className="sanborn-piece-list__select" onClick={() => onSelectPiece(piece.pieceId)} type="button">
@@ -61,6 +70,18 @@ export function SanbornPieceList({
               </select>
             </label>
             <label>
+              Geometry
+              <select disabled={readOnly} value={piece.sourceGeometry?.geometryType ?? "polygon"} onChange={(event) => onPatchPiece(piece.pieceId, { sourceGeometry: { geometryType: event.target.value as SanbornMapPieceGeometryType, points: piece.sourceGeometry?.points ?? piece.sourcePolygon } })}>
+                {sanbornMapPieceGeometryTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </label>
+            <label>
+              Category
+              <select disabled={readOnly} value={piece.featureCategory ?? "blocks_and_lots"} onChange={(event) => onPatchPiece(piece.pieceId, { featureCategory: event.target.value as SanbornMapPieceFeatureCategory })}>
+                {sanbornMapPieceFeatureCategories.map((category) => <option key={category} value={category}>{category.replaceAll("_", " ")}</option>)}
+              </select>
+            </label>
+            <label>
               Block number
               <input
                 disabled={readOnly}
@@ -75,6 +96,16 @@ export function SanbornPieceList({
                 value={piece.titleText ?? ""}
                 onChange={(event) => onPatchPiece(piece.pieceId, { titleText: event.target.value })}
               />
+            </label>
+            <label>
+              Placement
+              <select disabled={readOnly} value={piece.placementEligibility ?? "available"} onChange={(event) => onPatchPiece(piece.pieceId, { placementEligibility: event.target.value as SanbornMapPieceRecord["placementEligibility"] })}>
+                <option value="available">available for placement</option><option value="reference_only">reference-only</option><option value="unresolved">unresolved</option>
+              </select>
+            </label>
+            <label>
+              Printed symbol / capacity
+              <input disabled={readOnly} value={piece.printedSymbolText ?? ""} onChange={(event) => onPatchPiece(piece.pieceId, { printedSymbolText: event.target.value })} />
             </label>
             <label>
               Inventory
