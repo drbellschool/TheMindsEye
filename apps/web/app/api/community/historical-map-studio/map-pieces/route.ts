@@ -195,22 +195,6 @@ export async function PUT(request: NextRequest) {
     if (reviewUpdate.error) return jsonError(503, `Sheet review categories could not be saved: ${reviewUpdate.error.message}`);
   }
 
-  for (const piece of pieces) {
-    const featureUpdate = await supabase
-      .from("sanborn_map_pieces")
-      .update({
-        geometry_type: piece.sourceGeometry.geometryType,
-        source_geometry: piece.sourceGeometry,
-        feature_category: piece.featureCategory,
-        placement_eligibility: piece.placementEligibility,
-        printed_symbol_text: piece.printedSymbolText,
-        review_categories: piece.reviewCategories,
-      })
-      .eq("piece_id", piece.pieceId)
-      .eq("atlas_page_id", pageScopeResult.data.id);
-    if (featureUpdate.error) return jsonError(503, `Map feature metadata could not be saved: ${featureUpdate.error.message}`);
-  }
-
   return NextResponse.json({
     ok: true,
     pageId,

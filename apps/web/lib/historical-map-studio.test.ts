@@ -672,6 +672,31 @@ test("Source Record and Town Index retain sticky tools, temporary pan, and resiz
   assert.match(studioComponent, /focusStudioTarget/);
 });
 
+test("Town Index is map-first and region focus stays inspector-scoped", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const missionMap = readFileSync("components/TownIndexMissionMap.tsx", "utf8");
+  const focusHelper = readFileSync("lib/studio-focus-target.ts", "utf8");
+  const townIndexStart = studioComponent.indexOf("function renderTownIndexWorkspace()");
+  const townIndexEnd = studioComponent.indexOf("function renderSheetInventoryWorkspace()", townIndexStart);
+  const townIndex = studioComponent.slice(townIndexStart, townIndexEnd);
+  assert.ok(townIndex.indexOf("<TownIndexMissionMap") < townIndex.indexOf('aria-label="Town Index guided checklist"'));
+  assert.doesNotMatch(townIndex, /setSelectedIndexRegionId\([^)]*\);\s*setSourceZoom\(1\.5\)/);
+  assert.match(townIndex, /sanborn-town-index-map-summary/);
+  assert.match(missionMap, /Wheel input is intentionally reserved for scrolling/);
+  assert.match(focusHelper, /scrollMode.*inspector/);
+  assert.match(focusHelper, /sanborn-station-inspector__body/);
+});
+
+test("Map Pieces keeps one save request and preserves the draft after an error", () => {
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const route = readFileSync("app/api/community/historical-map-studio/map-pieces/route.ts", "utf8");
+  assert.match(studioComponent, /saveMapPiecesInFlightRef/);
+  assert.match(studioComponent, /if \(saveMapPiecesInFlightRef\.current\)\s*\{\s*return;/s);
+  assert.match(studioComponent, /if \(!response\.ok \|\| !payload\?\.ok\) \{[\s\S]*setSaveStatus\("error"\);[\s\S]*return;/);
+  assert.match(route, /\.rpc\("save_sanborn_map_pieces"/);
+  assert.doesNotMatch(route, /for \(const piece of pieces\)/);
+});
+
 test("edition controls do not synthesize town-package years as saved Sanborn editions", () => {
   const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
   const contextBar = readFileSync("components/ReconstructionContextBar.tsx", "utf8");
