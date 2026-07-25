@@ -168,6 +168,7 @@ export function SanbornPageWorkbench({
       }
 
       if (event.code === "Space") {
+        event.preventDefault();
         setSpacePanActive(true);
       }
     }
@@ -254,7 +255,7 @@ export function SanbornPageWorkbench({
     onPiecesChange([...sortedPieces, nextPiece]);
     onSelectPiece(nextPiece.pieceId);
     setDraftPoints([]);
-    setEditorMode("select");
+    setEditorMode("draw");
   }
 
   function removeSelectedVertex() {
@@ -335,7 +336,7 @@ export function SanbornPageWorkbench({
   }
 
   function handleViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!panActive && event.button !== 1) {
+    if (!panActive && event.button !== 1 && !(editorMode === "select" && event.button === 0)) {
       return;
     }
 

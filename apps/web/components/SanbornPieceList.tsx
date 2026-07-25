@@ -40,7 +40,7 @@ export function SanbornPieceList({
   return (
     <div className="sanborn-piece-list">
       {sortedPieces.map((piece, index) => (
-        <article className={`sanborn-piece-list__item${piece.pieceId === selectedPieceId ? " is-selected" : ""}`} key={piece.pieceId}>
+        <article className={`sanborn-piece-list__item${piece.pieceId === selectedPieceId ? " is-selected" : ""}`} data-focus-target={`map-piece-inspector-card:${piece.pieceId}`} key={piece.pieceId} tabIndex={-1}>
           <button className="sanborn-piece-list__select" onClick={() => onSelectPiece(piece.pieceId)} type="button">
             <strong>{pieceLabel(piece)}</strong>
             <span>{piece.pieceType.replaceAll("_", " ")}</span>
