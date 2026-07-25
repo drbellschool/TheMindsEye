@@ -16,7 +16,7 @@ import {
   type SanbornTownIndexStatus,
 } from "@/lib/sanborn-town-index";
 
-export type TownIndexMissionMapMode = "select" | "draw" | "move";
+export type TownIndexMissionMapMode = "select" | "draw" | "move" | "pan";
 
 type TownIndexMissionMapProps = {
   indexPage: SanbornAtlasPageRecord | null;
@@ -109,6 +109,8 @@ export function TownIndexMissionMap({
   onZoomChange,
 }: TownIndexMissionMapProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const panDragRef = useRef<{ x: number; y: number } | null>(null);
   const [draggingVertex, setDraggingVertex] = useState<{ regionId: string; vertexIndex: number } | null>(null);
   const [draggingRegion, setDraggingRegion] = useState<{ regionId: string; start: SanbornNormalizedPoint; original: SanbornNormalizedPoint[] } | null>(null);
   const selectedRegion = regions.find((region) => region.regionId === selectedRegionId) ?? null;
@@ -138,6 +140,24 @@ export function TownIndexMissionMap({
     if (point) {
       onDraftPointsChange([...draftPoints, point]);
     }
+  }
+
+  function handleFramePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (mode !== "pan" || !frameRef.current) return;
+    panDragRef.current = { x: event.clientX, y: event.clientY };
+    frameRef.current.setPointerCapture(event.pointerId);
+  }
+
+  function handleFramePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (mode !== "pan" || !panDragRef.current || !frameRef.current) return;
+    frameRef.current.scrollLeft -= event.clientX - panDragRef.current.x;
+    frameRef.current.scrollTop -= event.clientY - panDragRef.current.y;
+    panDragRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handleFramePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    panDragRef.current = null;
+    frameRef.current?.releasePointerCapture(event.pointerId);
   }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
@@ -190,12 +210,12 @@ export function TownIndexMissionMap({
           <span>{indexAsset.originalFilename}</span>
         </div>
         <div className="town-index-mission-map__mode" aria-live="polite">
-          {mode === "draw" ? "Mark source region: click points, then finish from the inspector." : mode === "move" ? "Move source region" : "Select source region"}
+          {mode === "draw" ? "Mark source region: click points, then finish from the inspector." : mode === "move" ? "Move source region" : mode === "pan" ? "Pan image" : "Select source region"}
         </div>
       </header>
 
-      <div className="town-index-mission-map__frame" onWheel={handleWheel}>
-        <div className="town-index-mission-map__canvas" style={{ transform: `scale(${zoom})` }}>
+      <div className={`town-index-mission-map__frame${mode === "pan" ? " is-pan" : ""}`} onPointerCancel={handleFramePointerUp} onPointerDown={handleFramePointerDown} onPointerMove={handleFramePointerMove} onPointerUp={handleFramePointerUp} onWheel={handleWheel} ref={frameRef}>
+        <div className="town-index-mission-map__canvas" style={{ width: `${zoom * 100}%` }}>
           {indexAsset.signedUrl ? (
             <img alt={`Town Index source page ${indexPage.displayLabel || indexPage.pageSequence}`} src={indexAsset.signedUrl} />
           ) : (

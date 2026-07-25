@@ -23,6 +23,7 @@ type SourceRegionBody = {
     atlasPageId?: string | null;
     indexAtlasPageId?: string | null;
     sourceAssetId?: string | null;
+    sourceRecordId?: string | null;
     linkedAtlasPageId?: string | null;
     linkedSheetAssetId?: string | null;
     regionLabel?: string | null;
@@ -96,6 +97,7 @@ function normalizeRegionPayload(body: SourceRegionBody, atlasId: string) {
       atlasPageId,
       indexAtlasPageId: atlasPageId,
       sourceAssetId,
+      sourceRecordId: normalizeOptionalSanbornText(region.sourceRecordId, 180),
       linkedAtlasPageId: normalizeOptionalSanbornText(region.linkedAtlasPageId, 220),
       linkedSheetAssetId: normalizeOptionalSanbornText(region.linkedSheetAssetId, 180),
       regionLabel,
@@ -147,6 +149,17 @@ export async function PUT(request: NextRequest) {
     return jsonError(status, `Source region could not be saved: ${saveResult.error.message}`);
   }
 
+  const provenanceResult = await access.supabase.rpc("set_sanborn_source_region_provenance", {
+    p_town_package_id: townPackageResult.data.id,
+    p_atlas_id: atlasId,
+    p_source_region_id: normalized.value.regionId,
+    p_source_record_id: normalized.value.sourceRecordId,
+  });
+  if (provenanceResult.error) {
+    const status = provenanceResult.error.code === "P0001" ? 400 : 503;
+    return jsonError(status, `Source region provenance could not be saved: ${provenanceResult.error.message}`);
+  }
+
   const saved = saveResult.data as {
     id?: string;
     source_region_id?: string;
@@ -165,6 +178,7 @@ export async function PUT(request: NextRequest) {
       atlasId,
       reviewStatus: saved?.review_status ?? "unknown",
       evidenceClassification: saved?.evidence_classification ?? "unknown",
+      sourceRecordId: provenanceResult.data?.source_record_id ?? normalized.value.sourceRecordId ?? null,
       updatedAt: saved?.updated_at ?? new Date().toISOString(),
       isPersisted: true,
     },
