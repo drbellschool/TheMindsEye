@@ -31,6 +31,7 @@ type PieceRow = {
   id: string;
   piece_id: string;
   atlas_page_id: string;
+  placement_eligibility?: string | null;
 };
 
 type PageRow = {
@@ -78,11 +79,15 @@ type SavedPieceGeoreferenceRow = {
   review_status: string | null;
   evidence_classification: string | null;
   notes: string | null;
+  geographic_geometry: unknown;
+  unable_to_place_reason: string | null;
+  reviewer_identity: string | null;
+  reviewed_at: string | null;
   updated_at: string | null;
 };
 
 const savedPieceSelect =
-  "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, is_visible, is_locked, review_status, evidence_classification, notes, updated_at";
+  "piece_georeference_id, atlas_page_id, map_piece_id, northwest_latitude, northwest_longitude, northeast_latitude, northeast_longitude, southeast_latitude, southeast_longitude, southwest_latitude, southwest_longitude, center_latitude, center_longitude, rotation, opacity, layer_order, placement_status, target_geometry, geographic_geometry, unable_to_place_reason, reviewer_identity, reviewed_at, is_visible, is_locked, review_status, evidence_classification, notes, updated_at";
 
 function sanitizeWorkspaceId(value: string | null | undefined, fallback: string): string {
   const normalized = (value ?? fallback)
@@ -98,7 +103,7 @@ function sanitizeWorkspaceId(value: string | null | undefined, fallback: string)
 async function resolvePieceScope(supabase: SupabaseAdminClient, pieceId: string, townPackageId: string) {
   const pieceResult = await supabase
     .from("sanborn_map_pieces")
-    .select("id, piece_id, atlas_page_id")
+    .select("id, piece_id, atlas_page_id, placement_eligibility")
     .eq("piece_id", pieceId)
     .maybeSingle<PieceRow>();
 
@@ -130,10 +135,6 @@ async function resolvePieceScope(supabase: SupabaseAdminClient, pieceId: string,
 }
 
 function mapSavedPiece(row: SavedPieceGeoreferenceRow, piece: PieceRow, page: PageRow): SanbornMapPieceGeoreference {
-  if (row.target_geometry !== persistedMapPieceTargetGeometry) {
-    throw new Error("Saved map piece placement target geometry is invalid.");
-  }
-
   const corners = {
     northwest: { latitude: row.northwest_latitude, longitude: row.northwest_longitude },
     northeast: { latitude: row.northeast_latitude, longitude: row.northeast_longitude },
@@ -141,8 +142,7 @@ function mapSavedPiece(row: SavedPieceGeoreferenceRow, piece: PieceRow, page: Pa
     southwest: { latitude: row.southwest_latitude, longitude: row.southwest_longitude },
   };
   const validation = validateMapPieceGeographicCorners(corners);
-
-  if (!validation.ok) {
+  if (row.target_geometry === persistedMapPieceTargetGeometry && !validation.ok) {
     throw new Error(validation.error);
   }
 
@@ -150,7 +150,7 @@ function mapSavedPiece(row: SavedPieceGeoreferenceRow, piece: PieceRow, page: Pa
     pieceGeoreferenceId: row.piece_georeference_id,
     pieceId: piece.piece_id,
     atlasPageId: page.page_id,
-    targetGeometry: persistedMapPieceTargetGeometry,
+    targetGeometry: row.target_geometry ?? persistedMapPieceTargetGeometry,
     centerLatitude: row.center_latitude,
     centerLongitude: row.center_longitude,
     corners,
@@ -163,6 +163,10 @@ function mapSavedPiece(row: SavedPieceGeoreferenceRow, piece: PieceRow, page: Pa
     reviewStatus: row.review_status ?? undefined,
     evidenceClassification: row.evidence_classification ?? undefined,
     notes: row.notes,
+    geographicGeometry: row.geographic_geometry as SanbornMapPieceGeoreference["geographicGeometry"],
+    unableToPlaceReason: row.unable_to_place_reason,
+    reviewerIdentity: row.reviewer_identity,
+    reviewedAt: row.reviewed_at,
     updatedAt: row.updated_at,
     isPersisted: true,
   });
@@ -302,11 +306,16 @@ export async function PUT(request: NextRequest) {
 
   const mapYear = Number.isInteger(body.mapYear) && body.mapYear! > 0 ? body.mapYear! : townPackage.year;
   const workspaceId = sanitizeWorkspaceId(body.workspaceId, `${townPackage.package_id}-${mapYear}-historical-map-studio`);
+  if (scope.piece.placement_eligibility && scope.piece.placement_eligibility !== "available") {
+    return jsonError(400, "This feature is reference-only or unresolved for placement.");
+  }
+
   const normalizedPlacement = normalizeSanbornMapPieceGeoreference({
     ...body.placement,
     pieceId: body.pieceId,
     atlasPageId: scope.page.page_id,
   });
+  const rpcPlacement = { ...normalizedPlacement, targetGeometry: persistedMapPieceTargetGeometry, placementStatus: normalizedPlacement.placementStatus === "unable_to_place" ? "draft" : normalizedPlacement.placementStatus };
   const saveResult = await supabase.rpc("save_sanborn_map_piece_georeference", {
     p_town_package_id: townPackage.id,
     p_workspace_id: workspaceId,
@@ -315,13 +324,26 @@ export async function PUT(request: NextRequest) {
     p_map_center: body.mapCenter && isOperationalMapCenter(body.mapCenter) ? body.mapCenter : null,
     p_map_zoom: body.mapZoom,
     p_piece_id: body.pieceId,
-    p_placement: normalizedPlacement,
+    p_placement: rpcPlacement,
   });
 
   if (saveResult.error) {
     const status = saveResult.error.code === "P0001" ? 400 : 503;
     return jsonError(status, `Sanborn map piece placement could not be saved: ${saveResult.error.message}`);
   }
+
+  const featurePlacementUpdate = await supabase.rpc("save_sanborn_map_piece_feature_placement", {
+    p_town_package_id: townPackage.id,
+    p_map_year: mapYear,
+    p_piece_id: body.pieceId,
+    p_target_geometry: normalizedPlacement.targetGeometry,
+    p_geographic_geometry: normalizedPlacement.geographicGeometry ?? null,
+    p_placement_status: normalizedPlacement.placementStatus,
+    p_unable_to_place_reason: normalizedPlacement.unableToPlaceReason ?? null,
+    p_reviewer_identity: normalizedPlacement.reviewerIdentity ?? null,
+    p_reviewed_at: normalizedPlacement.reviewedAt ?? null,
+  });
+  if (featurePlacementUpdate.error) return jsonError(503, `Feature placement metadata could not be saved: ${featurePlacementUpdate.error.message}`);
 
   const workspaceResult = await supabase
     .from("historical_map_workspaces")

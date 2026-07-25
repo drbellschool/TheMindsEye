@@ -33,6 +33,7 @@ import {
 } from "./source-record-workflow.ts";
 import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, validateReferenceResolution } from "./town-index-review.ts";
 import { deriveSheetInventoryQueue } from "./sheet-inventory-queue.ts";
+import { deriveMapPiecePlacementQueue } from "./map-piece-placement-queue.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -1867,4 +1868,55 @@ test("Sheet Inventory cards route active sheets into Map Pieces and the focused 
   const studio = readFileSync(new URL("../components/HistoricalMapStudio.tsx", import.meta.url), "utf8");
   assert.match(studio, /selectAtlasPage\(item\.pageId, "piece_inventory"\)/);
   assert.match(studio, /workflow-status:piece-inventory/);
+});
+
+test("PR85 placement migration adds feature geometry and scoped review metadata without replacing blocks", () => {
+  const migration = readFileSync("../../supabase/migrations/0022_map_piece_feature_placements.sql", "utf8").toLowerCase();
+  assert.match(migration, /add column if not exists geographic_geometry jsonb/);
+  assert.match(migration, /unable_to_place_reason text/);
+  assert.match(migration, /target_geometry in \('polygon', 'line', 'point', 'junction'\)/);
+  assert.match(migration, /placement_status in \('unplaced', 'draft', 'placed', 'aligned', 'reviewed', 'unable_to_place'\)/);
+  assert.match(migration, /save_sanborn_map_piece_feature_placement/);
+  assert.match(migration, /where workspace_id = workspace_row and map_piece_id = piece_row/);
+});
+
+test("Map Placement serializes point, line, and junction geometry and rejects bad coordinates", () => {
+  const base = { pieceId: "feature-1", atlasPageId: "page-1" };
+  for (const geometryType of ["point", "junction"] as const) {
+    const normalized = normalizeSanbornMapPieceGeoreference({
+      ...base,
+      targetGeometry: geometryType,
+      geographicGeometry: { geometryType, coordinates: [{ latitude: 33.43, longitude: -94.04 }] },
+    });
+    assert.equal(validateMapPiecePlacementForPersistence(normalized).ok, true);
+    assert.equal(normalized.geographicGeometry?.geometryType, geometryType);
+  }
+  const line = normalizeSanbornMapPieceGeoreference({
+    ...base,
+    targetGeometry: "line",
+    geographicGeometry: { geometryType: "line", coordinates: [{ latitude: 33.43, longitude: -94.04 }, { latitude: 33.44, longitude: -94.03 }] },
+  });
+  assert.equal(validateMapPiecePlacementForPersistence(line).ok, true);
+  assert.equal(validateMapPiecePlacementForPersistence({ ...line, geographicGeometry: { geometryType: "point", coordinates: [{ latitude: 0, longitude: 0 }] } }).ok, false);
+  assert.equal(validateMapPiecePlacementForPersistence({ targetGeometry: "point", geographicGeometry: { geometryType: "point", coordinates: [{ latitude: 91, longitude: -94 }] } }).ok, false);
+  assert.equal(validateMapPiecePlacementForPersistence({ placementStatus: "unable_to_place" }).ok, false);
+  assert.equal(validateMapPiecePlacementForPersistence({ placementStatus: "unable_to_place", unableToPlaceReason: "Not legible" }).ok, true);
+});
+
+test("Map Placement queue filters archived and unavailable features and reports counts", () => {
+  const activePage = atlasPage("page-1", { atlasId: "atlas-active" });
+  const archivedPage = atlasPage("page-archived", { atlasId: "atlas-active", archivedAt: "2026-01-01T00:00:00Z" });
+  const pieces = [
+    mapPiece("block", { atlasPageId: activePage.pageId, titleText: "Block 68" }),
+    mapPiece("well", { atlasPageId: activePage.pageId, titleText: "Public Well 01", placementEligibility: "available", sourceGeometry: { geometryType: "point", points: [{ x: 0.2, y: 0.2 }] } }),
+    mapPiece("reference", { atlasPageId: activePage.pageId, placementEligibility: "reference_only" }),
+    mapPiece("archived", { atlasPageId: archivedPage.pageId }),
+  ];
+  const unable = normalizeSanbornMapPieceGeoreference({ pieceId: "well", atlasPageId: activePage.pageId, targetGeometry: "point", geographicGeometry: { geometryType: "point", coordinates: [{ latitude: 33.43, longitude: -94.04 }] }, placementStatus: "unable_to_place", unableToPlaceReason: "Obscured" });
+  const queue = deriveMapPiecePlacementQueue({ activeAtlasId: "atlas-active", pages: [activePage, archivedPage], pieces, placements: [unable] });
+  assert.deepEqual(queue.items.map((item) => item.pieceId), ["block", "well"]);
+  assert.equal(queue.items.find((item) => item.pieceId === "well")?.status, "unable_to_place");
+  assert.equal(queue.counts.totalPlaceable, 2);
+  assert.equal(queue.counts.unableToPlace, 1);
+  assert.equal(queue.counts.remaining, 1);
 });

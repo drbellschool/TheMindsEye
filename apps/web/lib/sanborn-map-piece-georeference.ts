@@ -2,9 +2,10 @@ import { reviewStatuses, type ReviewStatus } from "./community-status.ts";
 import { isOperationalMapCenter, isValidLatitude, isValidLongitude, validateGeoCoordinate, type GeoBounds, type GeoCoordinate, type GeoCorners } from "./historical-map-georeference.ts";
 import { clampHistoricalOpacity, clampNumber, defaultHistoricalSheetOpacity, normalizeReviewClassification, normalizeRotation, type StudioSheetAsset } from "./historical-map-studio.ts";
 import { calculateSourceBoundingBox, type SanbornAtlasPageRecord, type SanbornMapPieceRecord, type SanbornNormalizedPoint, type SanbornSourceBBox } from "./sanborn-atlas.ts";
+import type { SanbornMapPieceGeometryType } from "./sanborn-map-piece-features.ts";
 
-export const mapPiecePlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed"] as const;
-export const mapPlacementTargetGeometries = ["polygon", "line", "point"] as const;
+export const mapPiecePlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed", "unable_to_place"] as const;
+export const mapPlacementTargetGeometries = ["polygon", "line", "point", "junction"] as const;
 export const mapPlacementTargetTypes = ["sanborn_map_piece"] as const;
 export const persistedMapPieceTargetGeometry = "polygon" as const;
 
@@ -12,12 +13,17 @@ export type MapPiecePlacementStatus = (typeof mapPiecePlacementStatuses)[number]
 export type MapPlacementTargetGeometry = (typeof mapPlacementTargetGeometries)[number];
 export type MapPlacementTargetType = (typeof mapPlacementTargetTypes)[number];
 
+export type SanbornMapPieceGeographicGeometry = {
+  geometryType: Exclude<SanbornMapPieceGeometryType, "polygon">;
+  coordinates: GeoCoordinate[];
+};
+
 export type SanbornMapPieceGeoreference = {
   pieceGeoreferenceId: string;
   pieceId: string;
   atlasPageId: string;
   targetType: MapPlacementTargetType;
-  targetGeometry: typeof persistedMapPieceTargetGeometry;
+  targetGeometry: MapPlacementTargetGeometry;
   centerLatitude: number;
   centerLongitude: number;
   corners: GeoCorners;
@@ -30,6 +36,10 @@ export type SanbornMapPieceGeoreference = {
   reviewStatus: ReviewStatus;
   evidenceClassification: ReviewStatus;
   notes: string | null;
+  geographicGeometry?: SanbornMapPieceGeographicGeometry | null;
+  unableToPlaceReason?: string | null;
+  reviewerIdentity?: string | null;
+  reviewedAt?: string | null;
   updatedAt: string | null;
   isPersisted: boolean;
 };
@@ -225,13 +235,29 @@ export function validateMapPiecePlacementForPersistence(input: {
   targetType?: string | null;
   targetGeometry?: string | null;
   corners?: GeoCorners | null;
+  geographicGeometry?: SanbornMapPieceGeographicGeometry | null;
+  placementStatus?: string | null;
+  unableToPlaceReason?: string | null;
 }): { ok: true } | { ok: false; message: string } {
   if (input.targetType && input.targetType !== "sanborn_map_piece") {
     return { ok: false, message: "Map piece placement target type must be sanborn_map_piece." };
   }
 
-  if (input.targetGeometry && input.targetGeometry !== persistedMapPieceTargetGeometry) {
-    return { ok: false, message: "Map piece placement target geometry must be polygon." };
+  if (input.placementStatus === "unable_to_place") {
+    return input.unableToPlaceReason?.trim() ? { ok: true } : { ok: false, message: "Unable to place requires a reason." };
+  }
+
+  const targetGeometry = input.targetGeometry && mapPlacementTargetGeometries.includes(input.targetGeometry as MapPlacementTargetGeometry) ? input.targetGeometry as MapPlacementTargetGeometry : persistedMapPieceTargetGeometry;
+  if (targetGeometry !== persistedMapPieceTargetGeometry) {
+    const coordinates = input.geographicGeometry?.coordinates ?? [];
+    if (coordinates.length === 0 && input.corners) {
+      return { ok: false, message: "Map piece placement target geometry must be polygon." };
+    }
+    const minimum = targetGeometry === "line" ? 2 : 1;
+    if (coordinates.length < minimum || !coordinates.every((coordinate) => validateGeoCoordinate(coordinate).ok)) {
+      return { ok: false, message: `${targetGeometry} placement requires valid geographic coordinates.` };
+    }
+    return { ok: true };
   }
 
   const cornerValidation = validateMapPieceGeographicCorners(input.corners);
@@ -333,7 +359,7 @@ export function normalizeSanbornMapPieceGeoreference(
     pieceId: input.pieceId,
     atlasPageId: input.atlasPageId,
     targetType: "sanborn_map_piece",
-    targetGeometry: persistedMapPieceTargetGeometry,
+    targetGeometry: mapPlacementTargetGeometries.includes(input.targetGeometry as MapPlacementTargetGeometry) ? input.targetGeometry as MapPlacementTargetGeometry : persistedMapPieceTargetGeometry,
     centerLatitude,
     centerLongitude,
     corners,
@@ -346,6 +372,10 @@ export function normalizeSanbornMapPieceGeoreference(
     reviewStatus: reviewStatuses.includes(input.reviewStatus as ReviewStatus) ? (input.reviewStatus as ReviewStatus) : "unknown",
     evidenceClassification: normalizeReviewClassification(input.evidenceClassification),
     notes: input.notes ?? null,
+    geographicGeometry: input.geographicGeometry ?? null,
+    unableToPlaceReason: input.unableToPlaceReason ?? null,
+    reviewerIdentity: input.reviewerIdentity ?? null,
+    reviewedAt: input.reviewedAt ?? null,
     updatedAt: input.updatedAt ?? null,
     isPersisted: input.isPersisted ?? false,
   };
@@ -368,6 +398,16 @@ export function createDefaultMapPieceGeoreference(piece: SanbornMapPieceRecord, 
 
 export function placeMapPieceAtCenter(piece: SanbornMapPieceRecord, placement: SanbornMapPieceGeoreference, center: GeoCoordinate): SanbornMapPieceGeoreference {
   const span = getMapPiecePlacementSpan(piece);
+  const sourceGeometry = piece.sourceGeometry;
+  const geographicGeometry = sourceGeometry && sourceGeometry.geometryType !== "polygon"
+    ? {
+        geometryType: sourceGeometry.geometryType,
+        coordinates: sourceGeometry.points.map((point) => ({
+          latitude: clampNumber(center.latitude + (point.y - 0.5) * span.latitudeSpan, -90, 90),
+          longitude: clampNumber(center.longitude + (point.x - 0.5) * span.longitudeSpan, -180, 180),
+        })),
+      }
+    : null;
 
   return normalizeSanbornMapPieceGeoreference({
     ...placement,
@@ -382,6 +422,8 @@ export function placeMapPieceAtCenter(piece: SanbornMapPieceRecord, placement: S
     }),
     isVisible: true,
     placementStatus: "draft",
+    targetGeometry: geographicGeometry?.geometryType ?? persistedMapPieceTargetGeometry,
+    geographicGeometry,
     isPersisted: false,
   });
 }
@@ -500,12 +542,16 @@ export function rotateMapPieceGeoreference(
 }
 
 export function hasOperationalMapPiecePlacement(placement: SanbornMapPieceGeoreference | null | undefined): boolean {
-  if (!placement || !placement.isVisible || placement.placementStatus === "unplaced") {
+  if (!placement || !placement.isVisible || placement.placementStatus === "unplaced" || placement.placementStatus === "unable_to_place") {
     return false;
   }
 
-  if (placement.targetType !== "sanborn_map_piece" || placement.targetGeometry !== persistedMapPieceTargetGeometry) {
+  if (placement.targetType !== "sanborn_map_piece") {
     return false;
+  }
+
+  if (placement.targetGeometry !== persistedMapPieceTargetGeometry) {
+    return Boolean(placement.geographicGeometry?.coordinates.length && placement.geographicGeometry.coordinates.every((coordinate) => validateGeoCoordinate(coordinate).ok) && placement.geographicGeometry.coordinates.some((coordinate) => isOperationalMapCenter(coordinate)));
   }
 
   const validation = validateMapPieceGeographicCorners(placement.corners);
@@ -596,7 +642,7 @@ export function buildOperationalMapPieceLayers(input: {
 export function getMapPieceLayerBounds(layers: SanbornMapPieceMapLayer[]): GeoBounds | null {
   const coordinates = layers
     .filter((layer) => layer.isVisible && hasOperationalMapPiecePlacement(layer))
-    .flatMap((layer) => [layer.corners.northwest, layer.corners.northeast, layer.corners.southeast, layer.corners.southwest])
+    .flatMap((layer) => layer.geographicGeometry?.coordinates ?? [layer.corners.northwest, layer.corners.northeast, layer.corners.southeast, layer.corners.southwest])
     .filter((coordinate): coordinate is GeoCoordinate => Boolean(coordinate) && isOperationalMapCenter(coordinate));
 
   if (coordinates.length < 2) {
@@ -670,8 +716,7 @@ export function piecePlacementMatchesForPersistence(
   return (
     expected.pieceId === saved.pieceId &&
     expected.targetType === saved.targetType &&
-    expected.targetGeometry === persistedMapPieceTargetGeometry &&
-    saved.targetGeometry === persistedMapPieceTargetGeometry &&
+    expected.targetGeometry === saved.targetGeometry &&
     coordinatesMatch({ latitude: expected.centerLatitude, longitude: expected.centerLongitude }, { latitude: saved.centerLatitude, longitude: saved.centerLongitude }) &&
     Math.abs(expected.rotation - saved.rotation) <= 0.001 &&
     Math.abs(expected.opacity - saved.opacity) <= 0.0001 &&
@@ -683,7 +728,9 @@ export function piecePlacementMatchesForPersistence(
     coordinatesMatch(expected.corners.northwest, saved.corners.northwest) &&
     coordinatesMatch(expected.corners.northeast, saved.corners.northeast) &&
     coordinatesMatch(expected.corners.southeast, saved.corners.southeast) &&
-    coordinatesMatch(expected.corners.southwest, saved.corners.southwest)
+    coordinatesMatch(expected.corners.southwest, saved.corners.southwest) &&
+    JSON.stringify(expected.geographicGeometry ?? null) === JSON.stringify(saved.geographicGeometry ?? null) &&
+    (expected.unableToPlaceReason ?? null) === (saved.unableToPlaceReason ?? null)
   );
 }
 
