@@ -34,6 +34,7 @@ export type SanbornTownIndexRegionRecord = {
   indexAtlasPageId: string;
   sourceAssetRowId: string | null;
   sourceAssetId: string | null;
+  sourceRecordId?: string | null;
   linkedAtlasPageRowId: string | null;
   linkedAtlasPageId: string | null;
   linkedSheetAssetRowId: string | null;

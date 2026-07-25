@@ -4440,13 +4440,22 @@ body:has(.minimal-sanborn-gps) {
   border: 1px solid rgba(226, 190, 126, 0.22);
   background: #ede9dd;
   overflow: auto;
-  max-height: calc(100vh - 230px);
 }
 
 .town-index-mission-map__canvas {
   position: relative;
   width: 100%;
   transform-origin: top left;
+}
+
+.town-index-mission-map__frame.is-pan { cursor: grab; }
+.town-index-mission-map__frame.is-pan:active { cursor: grabbing; }
+
+.town-index-mission-map__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(32, 33, 31, 0.96);
 }
 
 .town-index-mission-map__frame img {

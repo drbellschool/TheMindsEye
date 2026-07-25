@@ -302,6 +302,7 @@ type TownIndexRegionRow = {
   index_atlas_page_id?: string;
   atlas_page_id?: string;
   source_asset_id?: string | null;
+  source_record_id?: string | null;
   linked_atlas_page_id: string | null;
   linked_sheet_asset_id: string | null;
   region_label: string;
@@ -851,6 +852,7 @@ function mapTownIndexRegions(
         indexAtlasPageId: indexPage.pageId,
         sourceAssetRowId: sourceAssetRowId ?? indexPage.sanbornSheetAssetRowId,
         sourceAssetId: sourceAsset?.assetId ?? indexPage.sanbornSheetAssetId,
+        sourceRecordId: row.source_record_id ?? sourceAsset?.sourceRecordId ?? null,
         linkedAtlasPageRowId: row.linked_atlas_page_id,
         linkedAtlasPageId: linkedPage?.pageId ?? null,
         linkedSheetAssetRowId: row.linked_sheet_asset_id,
@@ -1136,7 +1138,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     let townIndexRegionsResult = (await supabase
       .from("sanborn_source_regions")
       .select(
-        "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, workflow_status, review_status, evidence_classification, notes, updated_at",
+        "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, source_record_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, workflow_status, review_status, evidence_classification, notes, updated_at",
       )
       .eq("town_package_id", activeTownPackage.id)
       .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))

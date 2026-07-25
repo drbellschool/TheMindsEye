@@ -1699,6 +1699,13 @@ export function HistoricalMapStudio({
   }, [selectedAssetId]);
 
   useEffect(() => {
+    if (atlasWorkflowStep !== "gps_alignment" && saveStatus === "error" && saveMessage.includes("select a placed Sanborn sheet")) {
+      setSaveStatus("idle");
+      setSaveMessage("");
+    }
+  }, [atlasWorkflowStep, selectedAtlasPageId, selectedIndexRegionId, saveMessage, saveStatus]);
+
+  useEffect(() => {
     const transformer = transformerRef.current;
     const node = selectedAssetId ? sheetNodeRefs.current.get(selectedAssetId) : null;
     const shouldAttach =
@@ -1720,7 +1727,7 @@ export function HistoricalMapStudio({
   }, [selectedAssetId, selectedPlacement, history.present.placements]);
 
   useEffect(() => {
-    if (!isDirty || !canAutosaveStudioMode(initialData.mode)) {
+    if (!isDirty || !canAutosaveStudioMode(initialData.mode) || (atlasWorkflowStep !== "gps_alignment" && studioMode !== "stitching")) {
       return;
     }
 
@@ -1733,7 +1740,7 @@ export function HistoricalMapStudio({
     }, studioAutosaveDelayMs);
 
     return () => window.clearTimeout(timeout);
-  }, [isDirty, present, geoPresent, studioMode, initialData.mode]);
+  }, [atlasWorkflowStep, isDirty, present, geoPresent, studioMode, initialData.mode]);
 
   useEffect(() => {
     if (initialData.mode === "read_only") {
@@ -2041,6 +2048,25 @@ export function HistoricalMapStudio({
 
     setAtlasWorkflowStep(step);
     setLastNonGpsWorkflowStep(step);
+    if (saveStatus === "error" && saveMessage.includes("select a placed Sanborn sheet")) {
+      setSaveStatus("idle");
+      setSaveMessage("");
+    }
+  }
+
+  async function saveActiveWorkflow() {
+    switch (atlasWorkflowStep) {
+      case "source":
+      case "page_classification":
+      case "numbered_sheets":
+        return saveAtlasPages();
+      case "town_index":
+        return saveSelectedTownIndexRegion();
+      case "piece_inventory":
+        return saveMapPieces();
+      case "gps_alignment":
+        return selectedMapPieceHasGeographicFootprint ? saveSelectedMapPiecePlacement() : saveSheetGeoreferences("manual", selectedAssetId);
+    }
   }
 
   function backToLastNonGpsWorkflowStep() {
@@ -3911,6 +3937,7 @@ export function HistoricalMapStudio({
       indexAtlasPageId: sourcePage.pageId,
       sourceAssetRowId: sourceAsset?.rowId ?? sourcePage.sanbornSheetAssetRowId ?? null,
       sourceAssetId: sourceAsset?.assetId ?? sourcePage.sanbornSheetAssetId ?? null,
+      sourceRecordId: sourceAsset?.sourceRecordId ?? null,
       linkedAtlasPageRowId: null,
       linkedAtlasPageId: null,
       linkedSheetAssetRowId: null,
@@ -3968,6 +3995,7 @@ export function HistoricalMapStudio({
           atlasPageId: regionToSave.indexAtlasPageId,
           indexAtlasPageId: regionToSave.indexAtlasPageId,
           sourceAssetId: regionToSave.sourceAssetId,
+          sourceRecordId: regionToSave.sourceRecordId,
           linkedAtlasPageId: regionToSave.linkedAtlasPageId,
           linkedSheetAssetId: regionToSave.linkedSheetAssetId,
           regionLabel: regionToSave.regionLabel,
@@ -4002,6 +4030,7 @@ export function HistoricalMapStudio({
       rowId: payload.region?.rowId ?? regionToSave.rowId,
       regionId: payload.region?.regionId ?? regionToSave.regionId,
       sourceAssetId: payload.region?.sourceAssetId ?? regionToSave.sourceAssetId,
+      sourceRecordId: payload.region?.sourceRecordId ?? regionToSave.sourceRecordId,
       linkedAtlasPageId: payload.region?.linkedAtlasPageId ?? regionToSave.linkedAtlasPageId,
       linkedSheetAssetId: payload.region?.linkedSheetAssetId ?? regionToSave.linkedSheetAssetId,
       regionType: payload.region?.regionType ?? regionToSave.regionType,
@@ -5112,6 +5141,11 @@ export function HistoricalMapStudio({
                     linkedSheetAssetRowId: linkedPage?.sanbornSheetAssetRowId ?? null,
                   });
                 }}><option value="">Unresolved / no link</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
+                <label>Region provenance<select disabled={atlasReadOnly} value={selectedSourceRegion.sourceRecordId ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sourceRecordId: event.target.value || null })}>
+                  <option value="">Inherit from source sheet</option>
+                  {initialData.sourceOptions.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} — {source.title}</option>)}
+                </select></label>
+                <p className="sanborn-atlas-empty">{selectedSourceRegion.sourceRecordId ? "Region-level source override" : `Inherited from ${selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "the source sheet"}.`}</p>
                 <label>Status<select disabled={atlasReadOnly} value={selectedSourceRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
                 <label><input checked={selectedSourceRegion.includeInTownIndex} disabled={atlasReadOnly} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { includeInTownIndex: event.target.checked })} type="checkbox" /> Include in Town Index</label>
                 <label><input checked={selectedSourceRegion.availableToMapPieces} disabled={atlasReadOnly || !sourceRegionSupportsMapPieces({ regionType: selectedSourceRegion.regionType, availableToMapPieces: true })} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { availableToMapPieces: event.target.checked })} type="checkbox" /> Available to Map Pieces</label>
@@ -5183,6 +5217,7 @@ export function HistoricalMapStudio({
                 selectAtlasPage(reconstructionModel.index.indexPage.pageId, "page_classification");
               }
             }} type="button">Edit source regions</button>
+            <button className={`sanborn-button${townIndexMapMode === "pan" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("pan")} type="button">Pan image</button>
             <button className={`sanborn-button${townIndexMapMode === "move" ? " sanborn-button--primary" : ""}`} disabled={atlasReadOnly || !selectedTownIndexRegion} onClick={() => setTownIndexMapMode("move")} type="button">Move region</button>
           </div>
           {selectedTownIndexRegion ? (
@@ -6192,8 +6227,8 @@ export function HistoricalMapStudio({
           <span className="tag state-reviewing">Workspace: {studioMode === "stitching" ? "Optional Prep Canvas" : studioMode === "georeferencing" ? "Georeference Sheets" : "Presentation Overlay"}</span>
         </div>
         <div className="map-studio-actions">
-          <button className="sanborn-button sanborn-button--primary" disabled={!isDirty || saveStatus === "saving"} onClick={() => (studioMode === "stitching" ? void saveLayout("manual") : void saveSheetGeoreferences("manual"))} type="button">
-            {studioMode === "stitching" ? "Save prep layout" : "Save geographic layout"}
+          <button className="sanborn-button sanborn-button--primary" disabled={saveStatus === "saving" || (atlasWorkflowStep !== "town_index" && !isDirty)} onClick={() => (studioMode === "stitching" ? void saveLayout("manual") : void saveActiveWorkflow())} type="button">
+            {studioMode === "stitching" ? "Save prep layout" : `Save ${activeStationLabel.toLowerCase()}`}
           </button>
           <button className="sanborn-button" disabled={studioMode === "stitching" ? history.past.length === 0 : geoHistory.past.length === 0} onClick={undo} type="button">Undo</button>
           <button className="sanborn-button" disabled={studioMode === "stitching" ? history.future.length === 0 : geoHistory.future.length === 0} onClick={redo} type="button">Redo</button>
