@@ -23,6 +23,7 @@ import {
   parseDirectCoordinates,
   parseNominatimBoundingBox,
 } from "./historical-map-geocode.ts";
+import { focusTargetForTask, focusTargetId } from "./studio-focus-target.ts";
 import {
   applyInspectorTransformPatch,
   buildInitialHistory,
@@ -636,6 +637,29 @@ test("Map Pieces workbench keeps editing tools sticky and treats zoom pan as vie
   assert.match(css, /\.sanborn-page-workbench__viewport\s*\{[\s\S]*overflow: auto;[\s\S]*overscroll-behavior: contain;/);
   assert.match(css, /\.sanborn-page-workbench__viewport\.is-panning\s*\{[\s\S]*cursor: grabbing;/);
   assert.match(css, /\.sanborn-page-workbench__image-frame\s*\{[\s\S]*max-width: none;/);
+});
+
+test("guided reconstruction tasks resolve stable focus targets", () => {
+  assert.equal(focusTargetId("map-piece-inspector-card", "piece-1"), "map-piece-inspector-card:piece-1");
+  assert.deepEqual(
+    focusTargetForTask({ workflow: "piece_inventory", mapPieceId: "piece-1" }),
+    { targetId: "map-piece-inspector-card:piece-1", instruction: "Review and complete this map piece in the inspector." },
+  );
+  assert.deepEqual(
+    focusTargetForTask({ workflow: "town_index", indexRegionId: "region-1" }),
+    { targetId: "source-region-linked-page:region-1", instruction: "Complete the linked sheet and provenance fields for this source region." },
+  );
+});
+
+test("Source Record and Town Index retain sticky tools, temporary pan, and resize observation", () => {
+  const missionMap = readFileSync("components/TownIndexMissionMap.tsx", "utf8");
+  const studioComponent = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  assert.match(missionMap, /ResizeObserver/);
+  assert.match(missionMap, /event\.code === "Space"/);
+  assert.match(missionMap, /mode === "select" \|\| spacePanActive/);
+  assert.match(studioComponent, /setTownIndexMapMode\("draw"\);\s*setSaveStatus/s);
+  assert.match(studioComponent, /focusWorkflowTask/);
+  assert.match(studioComponent, /focusStudioTarget/);
 });
 
 test("edition controls do not synthesize town-package years as saved Sanborn editions", () => {

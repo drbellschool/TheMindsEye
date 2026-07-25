@@ -172,6 +172,7 @@ import {
   getSourcePersistentUrl,
   getSourceRepositoryLabel,
 } from "@/lib/town-reconstruction";
+import { focusStudioTarget, focusTargetForTask, focusTargetId, type StudioFocusTarget } from "@/lib/studio-focus-target";
 
 type UploadStatus = {
   filename: string;
@@ -909,6 +910,8 @@ export function HistoricalMapStudio({
   const [townIndexMapMode, setTownIndexMapMode] = useState<TownIndexMissionMapMode>("select");
   const [townIndexDraftPoints, setTownIndexDraftPoints] = useState<SanbornNormalizedPoint[]>([]);
   const [sourceZoom, setSourceZoom] = useState(1);
+  const [focusRequest, setFocusRequest] = useState<(StudioFocusTarget & { token: number }) | null>(null);
+  const [focusInstruction, setFocusInstruction] = useState("");
   const [lastNonGpsWorkflowStep, setLastNonGpsWorkflowStep] = useState<Exclude<SanbornAtlasWorkflowStep, "gps_alignment">>("source");
   const pendingStudioSelectionRef = useRef<PendingStudioSelection | null>(null);
   const initialSelectionAppliedRef = useRef(false);
@@ -1149,6 +1152,19 @@ export function HistoricalMapStudio({
     setStudioLayoutPreference(readStudioLayoutPreference());
     setStudioLayoutPreferenceLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    let frame = 0;
+    let attempts = 0;
+    const tryFocus = () => {
+      attempts += 1;
+      if (focusStudioTarget(focusRequest.targetId) || attempts >= 8) return;
+      frame = requestAnimationFrame(tryFocus);
+    };
+    frame = requestAnimationFrame(tryFocus);
+    return () => cancelAnimationFrame(frame);
+  }, [atlasWorkflowStep, focusRequest, rightPanelCollapsed, selectedAtlasPageId, selectedIndexRegionId, selectedMapPieceId]);
 
   useEffect(() => {
     if (!studioLayoutPreferenceLoaded) {
@@ -2048,10 +2064,43 @@ export function HistoricalMapStudio({
 
     setAtlasWorkflowStep(step);
     setLastNonGpsWorkflowStep(step);
+    if (step === "page_classification") setTownIndexMapMode("select");
     if (saveStatus === "error" && saveMessage.includes("select a placed Sanborn sheet")) {
       setSaveStatus("idle");
       setSaveMessage("");
     }
+  }
+
+  function requestFocusTarget(target: StudioFocusTarget) {
+    setRightPanelCollapsed(false);
+    setFocusInstruction(target.instruction);
+    setFocusRequest({ ...target, token: Date.now() });
+  }
+
+  function focusWorkflowTask(task: { context: { workflow?: string | null; atlasPageId?: string | null; sheetAssetId?: string | null; indexRegionId?: string | null; mapPieceId?: string | null } }) {
+    const nextStep = normalizeAtlasWorkflowStep(task.context.workflow) ?? "source";
+    if (task.context.indexRegionId) setSelectedIndexRegionId(task.context.indexRegionId);
+    if (task.context.sheetAssetId) selectAndCenter(task.context.sheetAssetId);
+    if (task.context.atlasPageId) setSelectedAtlasPageId(task.context.atlasPageId);
+    if (task.context.mapPieceId) setSelectedMapPieceId(task.context.mapPieceId);
+    changeAtlasWorkflowStep(nextStep);
+    requestFocusTarget(focusTargetForTask(task.context));
+  }
+
+  function selectSourceRegionAndFocus(regionId: string) {
+    setSelectedIndexRegionId(regionId);
+    requestFocusTarget({
+      targetId: focusTargetId("source-region-linked-page", regionId),
+      instruction: "Review the selected source region and complete its linked page or provenance fields.",
+    });
+  }
+
+  function selectMapPieceAndFocus(pieceId: string) {
+    setSelectedMapPieceId(pieceId);
+    requestFocusTarget({
+      targetId: focusTargetId("map-piece-inspector-card", pieceId),
+      instruction: "Review the selected map piece in the inspector.",
+    });
   }
 
   async function saveActiveWorkflow() {
@@ -3960,7 +4009,7 @@ export function HistoricalMapStudio({
     setTownIndexRegions((current) => [...current, region]);
     setSelectedIndexRegionId(region.regionId);
     setTownIndexDraftPoints([]);
-    setTownIndexMapMode("select");
+    setTownIndexMapMode("draw");
     setSaveStatus("idle");
     setSaveMessage("Source region draft created. Complete its purpose, label, and links, then save.");
   }
@@ -4622,11 +4671,7 @@ export function HistoricalMapStudio({
                   className={`reconstruction-task-list__item is-${task.priority}`}
                   key={task.id}
                   onClick={() => {
-                    if (task.context.indexRegionId) setSelectedIndexRegionId(task.context.indexRegionId);
-                    if (task.context.sheetAssetId) selectAndCenter(task.context.sheetAssetId);
-                    if (task.context.atlasPageId) setSelectedAtlasPageId(task.context.atlasPageId);
-                    if (task.context.mapPieceId) setSelectedMapPieceId(task.context.mapPieceId);
-                    changeAtlasWorkflowStep(normalizeAtlasWorkflowStep(task.context.workflow) ?? "source");
+                    focusWorkflowTask(task);
                   }}
                   type="button"
                 >
@@ -4649,6 +4694,7 @@ export function HistoricalMapStudio({
         <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "page_classification")} />
         <div className="sanborn-source-region-toolbar" aria-label="Functional source region tools">
           <button className={`sanborn-button${townIndexMapMode === "select" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("select")} type="button">Select</button>
+          <button className={`sanborn-button${townIndexMapMode === "pan" ? " sanborn-button--primary" : ""}`} onClick={() => setTownIndexMapMode("pan")} type="button">Pan</button>
           <button
             className={`sanborn-button${townIndexMapMode === "draw" ? " sanborn-button--primary" : ""}`}
             disabled={atlasReadOnly || !selectedAtlasPage}
@@ -4683,8 +4729,8 @@ export function HistoricalMapStudio({
             regions={selectedPageSourceRegions}
             selectedRegionId={selectedSourceRegion?.regionId ?? selectedIndexRegionId}
             onDraftPointsChange={setTownIndexDraftPoints}
-            onOpenLinkedRegion={(region) => openTownIndexRegionLink(region, "numbered_sheets")}
-            onSelectRegion={setSelectedIndexRegionId}
+            onOpenLinkedRegion={(region) => selectSourceRegionAndFocus(region.regionId)}
+            onSelectRegion={selectSourceRegionAndFocus}
             onUpdateRegionPolygon={(regionId, polygon) => patchTownIndexRegion(regionId, { sourcePolygon: polygon })}
             onZoomChange={setSourceZoom}
             zoom={sourceZoom}
@@ -4740,8 +4786,8 @@ export function HistoricalMapStudio({
         regions={displayTownIndexRegions}
         selectedRegionId={selectedTownIndexRegion?.regionId ?? selectedIndexRegionId}
         onDraftPointsChange={setTownIndexDraftPoints}
-        onOpenLinkedRegion={(region) => openTownIndexRegionLink(region, "numbered_sheets")}
-        onSelectRegion={setSelectedIndexRegionId}
+        onOpenLinkedRegion={(region) => selectSourceRegionAndFocus(region.regionId)}
+        onSelectRegion={selectSourceRegionAndFocus}
         onUpdateRegionPolygon={(regionId, polygon) => patchTownIndexRegion(regionId, { sourcePolygon: polygon })}
         onZoomChange={setSourceZoom}
         zoom={sourceZoom}
@@ -4815,7 +4861,7 @@ export function HistoricalMapStudio({
         onReorderPiece={reorderMapPiece}
         onSavePieces={() => void saveMapPieces()}
         onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
-        onSelectPiece={setSelectedMapPieceId}
+        onSelectPiece={selectMapPieceAndFocus}
       />
       </section>
     );
@@ -5065,11 +5111,11 @@ export function HistoricalMapStudio({
             </dl>
             {selectedAtlasPage ? (
               <>
-                <label>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
+                <label data-focus-target={`page-classification:${selectedAtlasPage.pageId}`}>Page type<select disabled={atlasReadOnly} value={selectedAtlasPage.pageType} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { pageType: event.target.value as SanbornPageType })}>{sanbornPageTypes.map((type) => <option key={type} value={type}>{sanbornPageTypeLabels[type]}</option>)}</select></label>
                 <p className="sanborn-atlas-empty">{getSanbornPageTypeDescription(selectedAtlasPage.pageType)}</p>
                 <label>Printed reference<input disabled={atlasReadOnly} value={selectedAtlasPage.printedReference ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { printedReference: event.target.value })} placeholder="2, 2A, East inset, Unnumbered" /></label>
                 <label>Display title<input disabled={atlasReadOnly} value={selectedAtlasPage.displayLabel ?? ""} onChange={(event) => patchAtlasPage(selectedAtlasPage.pageId, { displayLabel: event.target.value })} placeholder="Cover, Town Index, Sheet 2" /></label>
-                <label>
+                <label data-focus-target={`primary-page-designation:${selectedAtlasPage.pageId}`}>
                   <input
                     checked={selectedAtlasPage.isPrimaryTownIndex}
                     disabled={atlasReadOnly || !pageTypeCanBePrimaryTownIndex(selectedAtlasPage.pageType)}
@@ -5132,7 +5178,7 @@ export function HistoricalMapStudio({
                   });
                 }}>{sanbornSourceRegionTypes.map((type) => <option key={type} value={type}>{getSourceRegionTypeLabel(type)}</option>)}</select></label>
                 <label>Printed reference<input disabled={atlasReadOnly} value={selectedSourceRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sheetReference: event.target.value })} placeholder="2, 2A, East inset, Business district" /></label>
-                <label>Linked sheet/page<select disabled={atlasReadOnly} value={selectedSourceRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
+                <label data-focus-target={`source-region-linked-page:${selectedSourceRegion.regionId}`}>Linked sheet/page<select disabled={atlasReadOnly} value={selectedSourceRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
                   const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
                   patchTownIndexRegion(selectedSourceRegion.regionId, {
                     linkedAtlasPageId: linkedPage?.pageId ?? null,
@@ -5141,12 +5187,12 @@ export function HistoricalMapStudio({
                     linkedSheetAssetRowId: linkedPage?.sanbornSheetAssetRowId ?? null,
                   });
                 }}><option value="">Unresolved / no link</option>{activeAtlasPages.map((page) => <option key={page.pageId} value={page.pageId}>{getSanbornPageDisplayLabel(page)}</option>)}</select></label>
-                <label>Region provenance<select disabled={atlasReadOnly} value={selectedSourceRegion.sourceRecordId ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sourceRecordId: event.target.value || null })}>
+                <label data-focus-target={`source-region-provenance:${selectedSourceRegion.regionId}`}>Region provenance<select disabled={atlasReadOnly} value={selectedSourceRegion.sourceRecordId ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { sourceRecordId: event.target.value || null })}>
                   <option value="">Inherit from source sheet</option>
                   {initialData.sourceOptions.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} — {source.title}</option>)}
                 </select></label>
                 <p className="sanborn-atlas-empty">{selectedSourceRegion.sourceRecordId ? "Region-level source override" : `Inherited from ${selectedSourceRecord ? getSourceDisplayId(selectedSourceRecord) : "the source sheet"}.`}</p>
-                <label>Status<select disabled={atlasReadOnly} value={selectedSourceRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
+                <label data-focus-target={`workflow-status:${selectedSourceRegion.regionId}`}>Status<select disabled={atlasReadOnly} value={selectedSourceRegion.workflowStatus} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { workflowStatus: event.target.value as SanbornTownIndexStatus, progressStatus: event.target.value as SanbornTownIndexStatus })}>{sanbornTownIndexStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
                 <label><input checked={selectedSourceRegion.includeInTownIndex} disabled={atlasReadOnly} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { includeInTownIndex: event.target.checked })} type="checkbox" /> Include in Town Index</label>
                 <label><input checked={selectedSourceRegion.availableToMapPieces} disabled={atlasReadOnly || !sourceRegionSupportsMapPieces({ regionType: selectedSourceRegion.regionType, availableToMapPieces: true })} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { availableToMapPieces: event.target.checked })} type="checkbox" /> Available to Map Pieces</label>
                 <label>Notes<textarea disabled={atlasReadOnly} value={selectedSourceRegion.notes ?? ""} onChange={(event) => patchTownIndexRegion(selectedSourceRegion.regionId, { notes: event.target.value })} /></label>
@@ -5181,7 +5227,7 @@ export function HistoricalMapStudio({
             <button className="sanborn-button" disabled={!selectedSourceRecord} onClick={() => selectedSourceRecord && navigator.clipboard?.writeText(getSourceDisplayId(selectedSourceRecord))} type="button">Copy source ID</button>
             {selectedSourceUrl ? <a className="sanborn-button" href={selectedSourceUrl} rel="noreferrer" target="_blank">Open repository record</a> : null}
           </div>
-          <label>Link selected sheet to source<select value={metadataDraft.sourceRecordId} onChange={(event) => {
+          <label data-focus-target={`page-source-record:${selectedAtlasPage?.pageId ?? selectedAssetId}`}>Link selected sheet to source<select value={metadataDraft.sourceRecordId} onChange={(event) => {
             const source = initialData.sourceOptions.find((candidate) => candidate.sourceRecordId === event.target.value);
             setMetadataDraft({ ...metadataDraft, sourceRecordId: event.target.value, sourceUrl: source?.persistentUrl ?? source?.sourceUrl ?? metadataDraft.sourceUrl, archiveName: source?.archiveName ?? metadataDraft.archiveName, rightsNote: source?.rightsNote ?? metadataDraft.rightsNote });
           }}><option value="">Source unavailable</option>{initialData.sourceOptions.map((source) => <option key={source.sourceRecordId} value={source.sourceRecordId}>{source.sourceId} - {source.title}</option>)}</select></label>
@@ -5225,7 +5271,7 @@ export function HistoricalMapStudio({
               <label>Region label<input disabled={atlasReadOnly} value={selectedTownIndexRegion.regionLabel} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionLabel: event.target.value })} /></label>
               <label>Printed sheet reference<input disabled={atlasReadOnly} value={selectedTownIndexRegion.sheetReference ?? ""} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { sheetReference: event.target.value })} /></label>
               <label>Region type<select disabled={atlasReadOnly} value={selectedTownIndexRegion.regionType} onChange={(event) => patchTownIndexRegion(selectedTownIndexRegion.regionId, { regionType: event.target.value as SanbornTownIndexRegionType })}>{sanbornSourceRegionTypes.map((type) => <option key={type} value={type}>{getSourceRegionTypeLabel(type)}</option>)}</select></label>
-              <label>Linked sheet/page<select disabled={atlasReadOnly} value={selectedTownIndexRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
+              <label data-focus-target={`source-region-linked-page:${selectedTownIndexRegion.regionId}`}>Linked sheet/page<select disabled={atlasReadOnly} value={selectedTownIndexRegion.linkedAtlasPageId ?? ""} onChange={(event) => {
                 const linkedPage = activeAtlasPages.find((page) => page.pageId === event.target.value) ?? null;
                 patchTownIndexRegion(selectedTownIndexRegion.regionId, {
                   linkedAtlasPageId: linkedPage?.pageId ?? null,
@@ -5381,7 +5427,7 @@ export function HistoricalMapStudio({
             onDeletePiece={deleteMapPiece}
             onPatchPiece={patchMapPiece}
             onReorderPiece={reorderMapPiece}
-            onSelectPiece={setSelectedMapPieceId}
+            onSelectPiece={selectMapPieceAndFocus}
           />
           <div className="sanborn-station-actions">
             {selectedIndexRegionId ? <button className="sanborn-button" onClick={() => changeAtlasWorkflowStep("town_index")} type="button">Back to Town Index</button> : null}
@@ -5591,6 +5637,7 @@ export function HistoricalMapStudio({
             {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
             {uploadStatusText ? <span className={`minimal-sanborn-gps__message ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</span> : null}
             {toolbarSaveMessage ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
+            {focusInstruction ? <span className="minimal-sanborn-gps__message sanborn-focus-instruction" aria-live="polite">{focusInstruction}</span> : null}
           </div>
         </div>
       </header>

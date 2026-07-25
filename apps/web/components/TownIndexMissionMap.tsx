@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
 import {
@@ -111,6 +111,8 @@ export function TownIndexMissionMap({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const panDragRef = useRef<{ x: number; y: number } | null>(null);
+  const [spacePanActive, setSpacePanActive] = useState(false);
+  const [, setFrameSize] = useState({ width: 0, height: 0 });
   const [draggingVertex, setDraggingVertex] = useState<{ regionId: string; vertexIndex: number } | null>(null);
   const [draggingRegion, setDraggingRegion] = useState<{ regionId: string; start: SanbornNormalizedPoint; original: SanbornNormalizedPoint[] } | null>(null);
   const selectedRegion = regions.find((region) => region.regionId === selectedRegionId) ?? null;
@@ -118,6 +120,44 @@ export function TownIndexMissionMap({
     () => [...regions].sort((left, right) => left.regionLabel.localeCompare(right.regionLabel) || left.regionId.localeCompare(right.regionId)),
     [regions],
   );
+
+  useEffect(() => {
+    const target = frameRef.current;
+    if (!target || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const observer = new ResizeObserver((entry) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = entry[0]?.contentRect;
+        if (rect) setFrameSize({ width: rect.width, height: rect.height });
+      });
+    });
+    observer.observe(target);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        setSpacePanActive(true);
+      }
+    }
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.code === "Space") setSpacePanActive(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
 
   if (!indexPage || !indexAsset) {
     return (
@@ -131,7 +171,7 @@ export function TownIndexMissionMap({
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || mode !== "draw" || !indexAsset) {
+    if (readOnly || mode !== "draw" || spacePanActive || !indexAsset) {
       return;
     }
 
@@ -143,13 +183,14 @@ export function TownIndexMissionMap({
   }
 
   function handleFramePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (mode !== "pan" || !frameRef.current) return;
+    if (!(mode === "pan" || mode === "select" || spacePanActive) || !frameRef.current) return;
+    event.preventDefault();
     panDragRef.current = { x: event.clientX, y: event.clientY };
     frameRef.current.setPointerCapture(event.pointerId);
   }
 
   function handleFramePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (mode !== "pan" || !panDragRef.current || !frameRef.current) return;
+    if (!(mode === "pan" || mode === "select" || spacePanActive) || !panDragRef.current || !frameRef.current) return;
     frameRef.current.scrollLeft -= event.clientX - panDragRef.current.x;
     frameRef.current.scrollTop -= event.clientY - panDragRef.current.y;
     panDragRef.current = { x: event.clientX, y: event.clientY };
@@ -167,7 +208,7 @@ export function TownIndexMissionMap({
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (readOnly || !indexAsset) {
+    if (readOnly || spacePanActive || !indexAsset) {
       return;
     }
 
