@@ -538,7 +538,11 @@ test("configures OpenStreetMap and a no-secret fallback street basemap", () => {
   assert.match(osm.attribution, /OpenStreetMap/);
   assert.match(fallback.url, /server\.arcgisonline\.com/);
   assert.match(fallback.attribution, /Esri/);
-  assert.deepEqual(configuredBasemaps.map((basemap) => basemap.key), ["osm", "esri_world_street"]);
+  assert.deepEqual(configuredBasemaps.map((basemap) => basemap.key), ["osm", "esri_world_street", "esri_world_imagery"]);
+  const aerial = getBasemap("esri_world_imagery");
+  assert.match(aerial.url, /World_Imagery/);
+  assert.match(aerial.attribution, /Esri/);
+  assert.equal(aerial.maxZoom, 22);
 });
 
 test("minimal Map placement workflow renders upload controls inside the early-return interface", () => {
@@ -952,6 +956,15 @@ test("map piece layer construction spans active atlas pages and resolves each so
   assert.equal(layers.some((layer) => layer.pieceId === "piece-unplaced"), false);
   assert.equal(layers.some((layer) => layer.pieceId === "piece-other"), false);
 
+  const editedSaved = buildOperationalMapPieceLayers({
+    atlasId: "atlas-1",
+    pages: [page2],
+    pieces: [block68],
+    placements: [placedMapPieceGeoreference(block68.pieceId, page2.pageId, 33.425, -94.047, { placementStatus: "draft", isPersisted: true })],
+    assets: [sheetAsset("asset-2", { signedUrl: "https://example.test/sheet-2.png" })],
+  });
+  assert.equal(editedSaved[0]?.pieceId, block68.pieceId);
+
   const currentPageOnly = buildOperationalMapPieceLayers({
     atlasId: "atlas-1",
     pages: [page2, page3],
@@ -1180,6 +1193,17 @@ test("interactive map piece dragging commits valid raw corner geometry", () => {
   assert.notDeepEqual(committed.placement.corners.northeast, original.corners.northeast);
   assert.equal(validateMapPieceGeographicCorners(committed.placement.corners).ok, true);
   assert.equal(committed.placement.placementStatus, "draft");
+});
+
+test("editing a persisted map piece keeps persistence through rotation and interactive drafts", () => {
+  const piece = mapPiece("piece-68");
+  const saved = { ...placeMapPieceAtCenter(piece, createDefaultMapPieceGeoreference(piece), { latitude: 33.425, longitude: -94.047 }), isPersisted: true, placementStatus: "placed" as const };
+  const rotated = rotateMapPieceGeoreference(saved, 7);
+  const draft = createMapPieceInteractiveDraft(saved, { corners: rotated.corners, rotation: rotated.rotation, placementStatus: "draft" });
+
+  assert.equal(rotated.isPersisted, true);
+  assert.equal(draft.ok, true);
+  if (draft.ok) assert.equal(draft.placement.isPersisted, true);
 });
 
 test("map piece persistence validator rejects route payloads before normalization", () => {
@@ -1793,6 +1817,15 @@ test("CSP permits OSM, fallback tiles, data/blob images, and Supabase signed ima
   assert.equal(isConfiguredImageSourceAllowed("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/15/13185/7823"), true);
   assert.equal(isConfiguredImageSourceAllowed("https://example.supabase.co/storage/v1/object/sign/sanborn-sheets/file.png"), true);
   assert.equal(isConfiguredImageSourceAllowed("https://untrusted.example.test/tile.png"), false);
+});
+
+test("Map Placement exposes aerial basemap controls and keeps debug closed until opened", () => {
+  const leafletComponent = readFileSync("components/HistoricalMapLeaflet.tsx", "utf8");
+  const basemapConfig = readFileSync("lib/historical-map-basemap.ts", "utf8");
+  assert.match(basemapConfig, /World_Imagery|Aerial/);
+  assert.match(leafletComponent, /map-studio-runtime-debug__toggle/);
+  assert.doesNotMatch(leafletComponent, /<details className="map-studio-runtime-debug" open/);
+  assert.match(leafletComponent, /setDebugOpen\(\(value\) => !value\)/);
 });
 
 test("Leaflet panes keep visible tiles below transparent Sanborn overlays", () => {

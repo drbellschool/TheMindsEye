@@ -104,6 +104,7 @@ import {
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import { findNextUnplacedPlacementItem, mergePlacementStateFromServer, type PlacementSaveResult } from "@/lib/map-placement-continuity";
+import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
@@ -330,11 +331,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function getMapPieceDisplayLabel(piece: SanbornMapPieceRecord | null | undefined): string {
-  if (!piece) {
-    return "No map piece selected";
-  }
-
-  return piece.titleText || (piece.blockNumberText ? `Block ${piece.blockNumberText}` : `Piece ${piece.pieceSequence}`);
+  return formatMapPiecePlacementLabel(piece);
 }
 
 function hasMapPieceGeographicFootprint(placement: SanbornMapPieceGeoreference | null | undefined): boolean {
@@ -905,6 +902,8 @@ export function HistoricalMapStudio({
   const [mapPieceGeoreferences, setMapPieceGeoreferences] = useState<SanbornMapPieceGeoreference[]>(
     mergeSavedAndDefaultMapPieceGeoreferences(initialData.atlasInventory.pieces, initialData.mapPieceGeoreferences),
   );
+  const savedMapPieceBaselinesRef = useRef(new Map(initialData.mapPieceGeoreferences.filter((placement) => placement.isPersisted).map((placement) => [placement.pieceId, placement])));
+  const [dirtyMapPieceIds, setDirtyMapPieceIds] = useState<Set<string>>(new Set());
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
@@ -2389,12 +2388,25 @@ export function HistoricalMapStudio({
 
   function replaceMapPieceGeoreference(nextPlacement: SanbornMapPieceGeoreference) {
     setMapPieceGeoreferences((current) => {
-      const exists = current.some((placement) => placement.pieceId === nextPlacement.pieceId);
+      const currentPlacement = current.find((placement) => placement.pieceId === nextPlacement.pieceId);
+      const persistedNext = currentPlacement ? { ...nextPlacement, isPersisted: currentPlacement.isPersisted } : nextPlacement;
+      const exists = current.some((placement) => placement.pieceId === persistedNext.pieceId);
       const next = exists
-        ? current.map((placement) => (placement.pieceId === nextPlacement.pieceId ? nextPlacement : placement))
-        : [...current, nextPlacement];
+        ? current.map((placement) => (placement.pieceId === persistedNext.pieceId ? persistedNext : placement))
+        : [...current, persistedNext];
 
       return next.sort((left, right) => left.layerOrder - right.layerOrder);
+    });
+    const baseline = savedMapPieceBaselinesRef.current.get(nextPlacement.pieceId);
+    const persistedNext = { ...nextPlacement, isPersisted: baseline ? true : nextPlacement.isPersisted };
+    const isDirty = persistedNext.isPersisted
+      ? !baseline || !piecePlacementMatchesForPersistence({ ...persistedNext, placementStatus: "placed" }, { ...baseline, placementStatus: "placed" })
+      : deriveCanonicalMapPiecePlacementStatus({ placement: persistedNext }) === "draft";
+    setDirtyMapPieceIds((current) => {
+      const next = new Set(current);
+      if (isDirty) next.add(nextPlacement.pieceId);
+      else next.delete(nextPlacement.pieceId);
+      return next;
     });
     setIsDirty(true);
     setSaveStatus("idle");
@@ -2414,8 +2426,22 @@ export function HistoricalMapStudio({
         ...patch,
         pieceId,
         atlasPageId: piece.atlasPageId,
-        isPersisted: false,
+        isPersisted: currentPlacement.isPersisted,
       }),
+    );
+  }
+
+  function confirmMapPieceSelectionChange(nextPieceId: string): boolean {
+    if (!selectedMapPieceId || selectedMapPieceId === nextPieceId || !dirtyMapPieceIds.has(selectedMapPieceId)) {
+      return true;
+    }
+
+    if (typeof window === "undefined") {
+      return true;
+    }
+
+    return window.confirm(
+      "This map piece has unsaved changes. Choose Cancel to save them first, or OK to discard the edits and continue.",
     );
   }
 
@@ -2431,6 +2457,10 @@ export function HistoricalMapStudio({
     });
 
     if (!selection) {
+      return;
+    }
+
+    if (!confirmMapPieceSelectionChange(selection.piece.pieceId)) {
       return;
     }
 
@@ -2452,6 +2482,9 @@ export function HistoricalMapStudio({
     }
     const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === item.pieceId);
     if (!piece) return;
+    if (!confirmMapPieceSelectionChange(piece.pieceId)) {
+      return;
+    }
     if (saveStatus === "error") {
       setSaveStatus("idle");
       setSaveMessage("");
@@ -2527,17 +2560,16 @@ export function HistoricalMapStudio({
       return;
     }
 
-    replaceMapPieceGeoreference(
-      normalizeSanbornMapPieceGeoreference({
-        ...selectedMapPieceGeoreference,
-        pieceId: selectedMapPiece.pieceId,
-        atlasPageId: selectedMapPiece.atlasPageId,
-        isVisible: false,
-        isLocked: false,
-        placementStatus: "unplaced",
-        isPersisted: false,
-      }),
-    );
+    const savedBaseline = savedMapPieceBaselinesRef.current.get(selectedMapPiece.pieceId);
+    replaceMapPieceGeoreference(savedBaseline ? savedBaseline : normalizeSanbornMapPieceGeoreference({
+      ...selectedMapPieceGeoreference,
+      pieceId: selectedMapPiece.pieceId,
+      atlasPageId: selectedMapPiece.atlasPageId,
+      isVisible: false,
+      isLocked: false,
+      placementStatus: "unplaced",
+      isPersisted: false,
+    }));
     setPiecePlacementAnchorId("");
     setSaveStatus("idle");
     setSaveMessage("Piece placement reset. Save placement to persist the reset.");
@@ -2599,7 +2631,7 @@ export function HistoricalMapStudio({
     }
 
     const placementForSave = capturedPlacement.placementStatus === "unable_to_place"
-      ? normalizeSanbornMapPieceGeoreference({ ...capturedPlacement, unableToPlaceReason: unableToPlaceReason || capturedPlacement.unableToPlaceReason, isPersisted: false })
+      ? normalizeSanbornMapPieceGeoreference({ ...capturedPlacement, unableToPlaceReason: unableToPlaceReason || capturedPlacement.unableToPlaceReason, isPersisted: capturedPlacement.isPersisted })
       : capturedPlacement;
     if (placementForSave.placementStatus === "unable_to_place" && !placementForSave.unableToPlaceReason?.trim()) {
       setSaveStatus("error");
@@ -2675,11 +2707,17 @@ export function HistoricalMapStudio({
       return { ok: false, message: "Save failed: database confirmation did not match the current map piece placement." };
     }
 
+    savedMapPieceBaselinesRef.current.set(capturedPieceId, savedPlacement);
+    setDirtyMapPieceIds((current) => {
+      const next = new Set(current);
+      next.delete(capturedPieceId);
+      return next;
+    });
     setMapPieceGeoreferences((current) => mergePlacementStateFromServer(current, [savedPlacement]));
     if (payload.workspaceId) setResolvedMapPlacementWorkspaceId(payload.workspaceId);
     if (selectedMapPieceIdRef.current === capturedPieceId) {
       setSaveStatus("saved");
-      setSaveMessage(`${capturedPiece.titleText || capturedPiece.blockNumberText || "Map piece"} saved.`);
+      setSaveMessage(`${getMapPieceDisplayLabel(capturedPiece)} saved to database.`);
       setLastSavedAt(payload.savedAt ?? new Date().toISOString());
       setIsDirty(false);
     }
@@ -2776,6 +2814,12 @@ export function HistoricalMapStudio({
     }
 
     const reloaded = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: selectedMapPiece.pieceId, atlasPageId: selectedMapPiece.atlasPageId, isPersisted: true });
+    savedMapPieceBaselinesRef.current.set(selectedMapPiece.pieceId, reloaded);
+    setDirtyMapPieceIds((current) => {
+      const next = new Set(current);
+      next.delete(selectedMapPiece.pieceId);
+      return next;
+    });
     replaceMapPieceGeoreference(reloaded);
 
     if (hasOperationalMapPiecePlacement(reloaded)) {
@@ -4745,12 +4789,12 @@ export function HistoricalMapStudio({
   const visibleLoadedTileCount = tileRuntimeDebug?.visibleLoadedTileCount ?? 0;
   const modernMapStatusText =
     visibleLoadedTileCount > 0
-      ? `Modern map: ${selectedBasemap.label} ${visibleLoadedTileCount} visible tiles`
+      ? `Modern map: ${selectedBasemap.label} · Zoom ${modernMapZoom} · ${visibleLoadedTileCount} visible tiles`
       : modernTileDiagnostics.status === "error"
-        ? `Modern map failed: ${selectedBasemap.label} ${modernTileDiagnostics.failedTiles} tiles failed`
+        ? `Modern map failed: ${selectedBasemap.label} · Zoom ${modernMapZoom} · ${modernTileDiagnostics.failedTiles} tiles failed`
         : modernTileDiagnostics.successfulTiles > 0
-          ? `Modern map: ${modernTileDiagnostics.successfulTiles} tiles loaded but not visibly painted`
-        : `Modern map: loading ${selectedBasemap.label}`;
+          ? `Modern map: ${selectedBasemap.label} · Zoom ${modernMapZoom} · ${modernTileDiagnostics.successfulTiles} tiles loaded but not visibly painted`
+        : `Modern map: loading ${selectedBasemap.label} · Zoom ${modernMapZoom}`;
   const mapInteractionStatusText =
     mapInteractionStatus === "panning"
       ? "Panning map"
@@ -5219,6 +5263,7 @@ export function HistoricalMapStudio({
             onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
             onTileDiagnosticsChange={handleTileDiagnosticsChange}
             onTileRuntimeDebugChange={setTileRuntimeDebug}
+            onBasemapChange={(basemapKey) => setGeoreferenceDraft((current) => ({ ...current, selectedBasemap: basemapKey }))}
             overlayRenderMode={overlayRenderMode}
             overlayOpacity={0.5}
             overlayVisible={false}
@@ -5310,6 +5355,7 @@ export function HistoricalMapStudio({
           saveStatus={saveStatus}
           selectedAssetId={selectedAssetId}
           selectedMapPieceHasGeographicFootprint={selectedMapPieceHasGeographicFootprint}
+          selectedMapPieceDirty={dirtyMapPieceIds.has(selectedMapPieceId)}
           selectedMapPieceLocked={selectedMapPieceGeoreference?.isLocked === true}
           selectedMapPieceOpacity={selectedMapPieceOpacity}
           selectedMapPiecePlaced={selectedMapPiecePlaced}
@@ -6478,6 +6524,7 @@ export function HistoricalMapStudio({
             onSheetTransformCommit={(assetId, patch) => commitSheetGeoreference(assetId, patch)}
             onTileDiagnosticsChange={handleTileDiagnosticsChange}
             onTileRuntimeDebugChange={setTileRuntimeDebug}
+            onBasemapChange={(basemapKey) => setGeoreferenceDraft((current) => ({ ...current, selectedBasemap: basemapKey }))}
             overlayRenderMode={overlayRenderMode}
             overlayOpacity={0.5}
             overlayVisible={false}

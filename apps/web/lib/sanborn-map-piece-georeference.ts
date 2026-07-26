@@ -4,6 +4,7 @@ import { clampHistoricalOpacity, clampNumber, defaultHistoricalSheetOpacity, nor
 import { calculateSourceBoundingBox, type SanbornAtlasPageRecord, type SanbornMapPieceRecord, type SanbornNormalizedPoint, type SanbornSourceBBox } from "./sanborn-atlas.ts";
 import type { SanbornMapPieceGeometryType } from "./sanborn-map-piece-features.ts";
 import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
+import { formatMapPiecePlacementLabel } from "./map-piece-label.ts";
 
 export const mapPiecePlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed", "unable_to_place"] as const;
 export const mapPlacementTargetGeometries = ["polygon", "line", "point", "junction"] as const;
@@ -455,7 +456,7 @@ export function createMapPieceInteractiveDraft(
       corners: validation.corners,
       isVisible: true,
       placementStatus: patch.placementStatus ?? "draft",
-      isPersisted: false,
+      isPersisted: placement.isPersisted,
     }),
   };
 }
@@ -538,7 +539,7 @@ export function rotateMapPieceGeoreference(
     },
     isVisible: true,
     placementStatus: placement.placementStatus === "reviewed" || placement.placementStatus === "aligned" ? placement.placementStatus : "draft",
-    isPersisted: false,
+    isPersisted: placement.isPersisted,
   });
 }
 
@@ -564,15 +565,7 @@ export function hasOperationalMapPiecePlacement(placement: SanbornMapPieceGeoref
 }
 
 function defaultMapPieceLayerLabel(piece: SanbornMapPieceRecord): string {
-  if (piece.blockNumberText) {
-    return `Block ${piece.blockNumberText}`;
-  }
-
-  if (piece.titleText) {
-    return piece.titleText;
-  }
-
-  return piece.pieceType.replaceAll("_", " ");
+  return formatMapPiecePlacementLabel(piece);
 }
 
 export function buildOperationalMapPieceLayers(input: {
@@ -607,7 +600,7 @@ export function buildOperationalMapPieceLayers(input: {
     .reduce<SanbornMapPieceMapLayer[]>((layers, placement) => {
       const piece = piecesById.get(placement.pieceId);
       const canonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement });
-      if (!piece || !placement.isVisible || (canonicalStatus !== "placed" && canonicalStatus !== "reviewed")) {
+      if (!piece || !placement.isVisible || (canonicalStatus !== "placed" && canonicalStatus !== "reviewed" && canonicalStatus !== "draft")) {
         return layers;
       }
 

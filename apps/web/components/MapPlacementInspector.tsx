@@ -6,11 +6,12 @@ import type { MapPiecePlacementCounts, MapPiecePlacementQueueItem } from "@/lib/
 import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "@/lib/sanborn-atlas";
 import type { PlacementSaveResult } from "@/lib/map-placement-continuity";
 import { deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
+import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 
 type Props = {
   selectedPiece: SanbornMapPieceRecord | null; selectedPage: SanbornAtlasPageRecord | null; placement: SanbornMapPieceGeoreference | null;
   queue: { items: MapPiecePlacementQueueItem[]; counts: MapPiecePlacementCounts }; selectedPageSourceRegionLabel: string | null; selectedPageAssetName: string | null;
-  selectedMapPieceHasGeographicFootprint: boolean; selectedMapPiecePlaced: boolean; selectedPlacementSaveable: boolean; selectedMapPieceOpacity: number; selectedMapPieceRotation: number;
+  selectedMapPieceHasGeographicFootprint: boolean; selectedMapPiecePlaced: boolean; selectedMapPieceDirty: boolean; selectedPlacementSaveable: boolean; selectedMapPieceOpacity: number; selectedMapPieceRotation: number;
   unableToPlaceReason: string; atlasReadOnly: boolean; selectedPageSupportsMapPlacement: boolean; selectedPageToolBlockMessage: string;
   saveStatus: "idle" | "saving" | "saved" | "error"; saveMessage: string; showReferenceSheetAlignment: boolean; selectedAssetId: string; selectedSheetPlaced: boolean; hasSelectedSheetGeoreference: boolean;
   geoEditMode: "pan_modern_map" | "edit_historical_sheets"; selectedMapPieceLocked: boolean; selectedMapPieceVisible: boolean; pieceDisplayScope: MapPieceDisplayScope; allMapPieceBounds: boolean;
@@ -37,13 +38,13 @@ export function MapPlacementInspector(props: Props) {
   useEffect(() => {
     if (queueFilter === "need_placement" && props.queue.counts.needPlacement === 0 && props.queue.counts.placedAwaitingReview > 0) setQueueFilter("awaiting_review");
   }, [props.queue.counts.needPlacement, props.queue.counts.placedAwaitingReview, queueFilter]);
-  const selectedLabel = props.selectedPiece?.titleText || props.selectedPiece?.blockNumberText || "Geographic object";
+  const selectedLabel = props.selectedPiece ? formatMapPiecePlacementLabel(props.selectedPiece) : "Geographic object";
   const sourceLabel = props.selectedPage?.displayLabel || (props.selectedPage?.sheetNumber ? "Sheet " + props.selectedPage.sheetNumber : "Source sheet");
-  const showAlignment = state === "draft" || editing;
+  const showAlignment = state === "draft" || editing || props.selectedMapPieceDirty;
   function selectQueueItem(item: MapPiecePlacementQueueItem) { setQueueOpen(false); setEditing(false); setExceptionOpen(false); props.onSelectQueueItem(item); }
   return (
     <section className="map-placement-inspector" aria-label="Map Placement inspector">
-      <header className="map-placement-inspector__header"><div><span className="panel__eyebrow">Map Placement</span><strong>{props.selectedPiece ? selectedLabel : "Select a geographic object"}</strong>{props.selectedPiece ? <small>{sourceLabel} · {props.selectedPiece.featureCategory?.replaceAll("_", " ") ?? "blocks and lots"}</small> : null}</div><div className="map-placement-inspector__header-actions"><span className={"map-placement-inspector__status is-" + state}>{mapPlacementInspectorStatusLabel(state)}</span><button className="sanborn-station-inspector__close" onClick={props.onHide} type="button">Hide</button></div></header>
+      <header className="map-placement-inspector__header"><div><span className="panel__eyebrow">Map Placement</span><strong>{props.selectedPiece ? selectedLabel : "Select a geographic object"}</strong>{props.selectedPiece ? <small>{sourceLabel} · {props.selectedPiece.featureCategory?.replaceAll("_", " ") ?? "blocks and lots"}{props.selectedMapPieceDirty ? " · Unsaved changes" : ""}</small> : null}</div><div className="map-placement-inspector__header-actions"><span className={"map-placement-inspector__status is-" + state}>{mapPlacementInspectorStatusLabel(state)}</span><button className="sanborn-station-inspector__close" onClick={props.onHide} type="button">Hide</button></div></header>
       {props.saveStatus === "error" && props.saveMessage ? <div className="map-placement-inspector__error" role="alert"><span>{shortPlacementError(props.saveMessage)}</span><div><button className="sanborn-button" onClick={() => void props.onSavePlacement()} type="button">Retry save</button><button className="sanborn-button" onClick={props.onDismissError} type="button">Dismiss</button></div></div> : null}
       <div className="map-placement-inspector__primary">
         {state === "no_selection" ? <p>Select an object from the queue to begin placement.</p> : null}

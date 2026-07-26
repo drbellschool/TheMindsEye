@@ -37,6 +37,14 @@ export const basemaps: BasemapConfig[] = [
     maxNativeZoom: 19,
     maxZoom: 22,
   },
+  {
+    key: "esri_world_imagery",
+    label: "Aerial",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxNativeZoom: 19,
+    maxZoom: 22,
+  },
 ];
 
 export const leafletPaneStack = {
