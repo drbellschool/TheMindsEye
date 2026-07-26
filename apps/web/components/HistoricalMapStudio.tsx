@@ -105,6 +105,7 @@ import {
 } from "@/lib/sanborn-map-piece-georeference";
 import { findNextUnplacedPlacementItem, mergePlacementStateFromServer, type PlacementSaveResult } from "@/lib/map-placement-continuity";
 import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
+import type { PlacementGeometryMeasurements } from "@/lib/placement-geometry-measurements";
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
@@ -904,6 +905,8 @@ export function HistoricalMapStudio({
   );
   const savedMapPieceBaselinesRef = useRef(new Map(initialData.mapPieceGeoreferences.filter((placement) => placement.isPersisted).map((placement) => [placement.pieceId, placement])));
   const [dirtyMapPieceIds, setDirtyMapPieceIds] = useState<Set<string>>(new Set());
+  const [showGeometryGuides, setShowGeometryGuides] = useState(true);
+  const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
@@ -5271,6 +5274,7 @@ export function HistoricalMapStudio({
             onMapViewMutation={handleMapViewMutation}
             onMarkerDrag={() => undefined}
             onPieceTransformCommit={(pieceId, patch) => commitMapPieceGeoreference(pieceId, patch)}
+            onPlacementGeometryMeasurementsChange={setPlacementGeometryMeasurements}
             onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
             onSelectPiece={selectMapPieceForPlacement}
             onSelectSheet={(assetId) => {
@@ -5295,6 +5299,7 @@ export function HistoricalMapStudio({
             sheetEditMode={geoEditMode}
             sheetLayers={mapSheetLayers}
             showControlPoints={false}
+            showGeometryGuides={showGeometryGuides}
             showSheetBoundaries={showReferenceSheetAlignment}
             showSheetLabels={showReferenceSheetAlignment}
             viewRefreshRequest={mapViewRefreshRequest}
@@ -5357,6 +5362,7 @@ export function HistoricalMapStudio({
           onSelectQueueItem={openPlacementQueueItem}
           onSetDisplayScope={setPieceDisplayScope}
           onSetGeoEditMode={(mode) => { setGeoEditMode(mode); setPiecePlacementAnchorId(""); commitGeographicMapSettings({ editMode: mode, globalHistoricalOpacity: 1 }, false); }}
+          onSetGeometryGuides={setShowGeometryGuides}
           onSetOpacity={(value) => selectedMapPiece && commitMapPieceGeoreference(selectedMapPiece.pieceId, { opacity: value })}
           onSetRotation={(value) => selectedMapPiece && selectedMapPieceGeoreference && replaceMapPieceGeoreference(rotateMapPieceGeoreference(selectedMapPieceGeoreference, value))}
           onSetShowReferenceSheetAlignment={setShowReferenceSheetAlignment}
@@ -5375,6 +5381,7 @@ export function HistoricalMapStudio({
           saveStatus={saveStatus}
           selectedAssetId={selectedAssetId}
           selectedMapPieceHasGeographicFootprint={selectedMapPieceHasGeographicFootprint}
+          selectedMapPieceIsPolygon={selectedMapPiece?.sourceGeometry?.geometryType === "polygon"}
           selectedMapPieceDirty={dirtyMapPieceIds.has(selectedMapPieceId)}
           selectedMapPieceLocked={selectedMapPieceGeoreference?.isLocked === true}
           selectedMapPieceOpacity={selectedMapPieceOpacity}
@@ -5389,6 +5396,8 @@ export function HistoricalMapStudio({
           selectedPiece={selectedMapPiece}
           selectedPlacementSaveable={selectedPlacementSaveable}
           selectedSheetPlaced={selectedSheetPlaced}
+          geometryMeasurements={placementGeometryMeasurements}
+          showGeometryGuides={showGeometryGuides}
           showReferenceSheetAlignment={showReferenceSheetAlignment}
           unableToPlaceReason={unableToPlaceReason}
         />
@@ -6533,6 +6542,7 @@ export function HistoricalMapStudio({
             onMapViewMutation={handleMapViewMutation}
             onMarkerDrag={() => undefined}
             onPieceTransformCommit={(pieceId, patch) => commitMapPieceGeoreference(pieceId, patch)}
+            onPlacementGeometryMeasurementsChange={setPlacementGeometryMeasurements}
             onRefreshSheetSignedUrl={(assetId) => void refreshSignedUrl(assetId)}
             onSelectPiece={selectMapPieceForPlacement}
             onSelectSheet={(assetId) => {
@@ -6557,6 +6567,7 @@ export function HistoricalMapStudio({
             sheetEditMode={geoEditMode}
             sheetLayers={mapSheetLayers}
             showControlPoints={false}
+            showGeometryGuides={showGeometryGuides}
             showSheetBoundaries={showReferenceSheetAlignment}
             showSheetLabels={showReferenceSheetAlignment}
             viewRefreshRequest={mapViewRefreshRequest}

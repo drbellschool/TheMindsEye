@@ -31,6 +31,7 @@ import {
   clientPointToContainerPoint,
 } from "@/lib/sanborn-map-piece-rendering";
 import type { SanbornNormalizedPoint, SanbornSourceBBox } from "@/lib/sanborn-atlas";
+import { calculatePlacementGeometryMeasurements, formatGeometryMeasurement, type PlacementGeometryMeasurements, type ScreenPoint } from "@/lib/placement-geometry-measurements";
 
 export { basemaps };
 
@@ -65,6 +66,7 @@ type HistoricalMapLeafletProps = {
   onSelectSheet?: (assetId: string) => void;
   onSheetTransformCommit?: (assetId: string, patch: Partial<SheetGeographicTransform>) => void;
   onPieceTransformCommit?: (pieceId: string, patch: Partial<SanbornMapPieceGeoreference>) => void;
+  onPlacementGeometryMeasurementsChange?: (measurements: PlacementGeometryMeasurements | null) => void;
   onRefreshSheetSignedUrl?: (assetId: string) => void;
   onSelectPiece?: (pieceId: string) => void;
   onSheetImageStateChange?: (state: SheetImageLoadState) => void;
@@ -78,6 +80,7 @@ type HistoricalMapLeafletProps = {
   overlayRenderMode?: "projective" | "rectangular";
   requestedViewSource?: string;
   onMapInteractionChange?: (state: "idle" | "panning" | "zooming", source: string) => void;
+  showGeometryGuides?: boolean;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -687,6 +690,75 @@ function getPieceCornerPoints(map: L.Map, piece: SanbornMapPieceGeoreference): Q
   };
 }
 
+function getPieceCornerContainerPoints(map: L.Map, piece: SanbornMapPieceGeoreference): [ScreenPoint, ScreenPoint, ScreenPoint, ScreenPoint] {
+  return [piece.corners.northwest, piece.corners.northeast, piece.corners.southeast, piece.corners.southwest].map((corner) => {
+    const point = map.latLngToContainerPoint([corner?.latitude ?? piece.centerLatitude, corner?.longitude ?? piece.centerLongitude]);
+    return { x: point.x, y: point.y };
+  }) as [ScreenPoint, ScreenPoint, ScreenPoint, ScreenPoint];
+}
+
+function renderPlacementGeometryGuide(
+  guide: SVGSVGElement,
+  map: L.Map,
+  piece: SanbornMapPieceGeoreference,
+  visible: boolean,
+  onMeasurementsChange?: (measurements: PlacementGeometryMeasurements | null) => void,
+  invalidMessage?: string,
+) {
+  if (!visible || piece.targetGeometry !== "polygon") {
+    guide.style.display = "none";
+    onMeasurementsChange?.(null);
+    return;
+  }
+
+  const measurements = calculatePlacementGeometryMeasurements(getPieceCornerContainerPoints(map, piece));
+  onMeasurementsChange?.(measurements);
+  guide.style.display = "block";
+  guide.setAttribute("width", String(map.getSize().x));
+  guide.setAttribute("height", String(map.getSize().y));
+  guide.setAttribute("viewBox", `0 0 ${map.getSize().x} ${map.getSize().y}`);
+
+  if (!measurements.valid) {
+    const center = getPieceCornerContainerPoints(map, piece).reduce((sum, point) => ({ x: sum.x + point.x / 4, y: sum.y + point.y / 4 }), { x: 0, y: 0 });
+    guide.innerHTML = `<text class="map-studio-geometry-guide__warning" x="${center.x}" y="${center.y}">${measurements.message ?? "Invalid corner order"}</text>`;
+    return;
+  }
+
+  const points = measurements.corners.map((corner) => corner.point);
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const detailed = maxX - minX >= 120 && maxY - minY >= 90;
+  const radius = Math.max(18, Math.min(28, Math.min(maxX - minX, maxY - minY) * 0.18));
+  const arcMarkup = detailed ? measurements.corners.map((corner, index) => {
+    const point = corner.point;
+    const previous = points[(index + points.length - 1) % points.length];
+    const next = points[(index + 1) % points.length];
+    const firstLength = Math.hypot(previous.x - point.x, previous.y - point.y);
+    const secondLength = Math.hypot(next.x - point.x, next.y - point.y);
+    const first = { x: (previous.x - point.x) / firstLength, y: (previous.y - point.y) / firstLength };
+    const second = { x: (next.x - point.x) / secondLength, y: (next.y - point.y) / secondLength };
+    const start = { x: point.x + first.x * radius, y: point.y + first.y * radius };
+    const end = { x: point.x + second.x * radius, y: point.y + second.y * radius };
+    const sweep = first.x * second.y - first.y * second.x > 0 ? 1 : 0;
+    const bisectorLength = Math.hypot(first.x + second.x, first.y + second.y) || 1;
+    const label = { x: point.x + ((first.x + second.x) / bisectorLength) * (radius + 17), y: point.y + ((first.y + second.y) / bisectorLength) * (radius + 17) };
+    const deviation = corner.deviation >= 0 ? `+${formatGeometryMeasurement(corner.deviation)}` : formatGeometryMeasurement(corner.deviation);
+    return `<path class="map-studio-geometry-guide__arc" d="M ${start.x} ${start.y} A ${radius} ${radius} 0 ${corner.angle > 180 ? 1 : 0} ${sweep} ${end.x} ${end.y}"/><text class="map-studio-geometry-guide__label" x="${label.x}" y="${label.y}">${formatGeometryMeasurement(corner.angle)}°</text><text class="map-studio-geometry-guide__deviation" x="${label.x}" y="${label.y + 12}">${deviation}</text>`;
+  }).join("") : "";
+  const edgeMarkup = detailed ? measurements.edges.map((edge, index) => {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    return `<text class="map-studio-geometry-guide__bearing" x="${(start.x + end.x) / 2}" y="${(start.y + end.y) / 2}">${edge.name} ${formatGeometryMeasurement(edge.bearing)}°</text>`;
+  }).join("") : "";
+  const center = points.reduce((sum, point) => ({ x: sum.x + point.x / points.length, y: sum.y + point.y / points.length }), { x: 0, y: 0 });
+  const warning = invalidMessage ? `<text class="map-studio-geometry-guide__warning" x="${center.x}" y="${center.y - (detailed ? 32 : 16)}">${invalidMessage}</text>` : "";
+  guide.innerHTML = detailed
+    ? `${arcMarkup}${edgeMarkup}${warning}`
+    : `${warning}<text class="map-studio-geometry-guide__label" x="${center.x}" y="${center.y}">Max drift ${formatGeometryMeasurement(measurements.maximumCornerDeviation)}°</text>`;
+}
+
 function getPointCenter(points: QuadPoints) {
   const values = [points.northwest, points.northeast, points.southeast, points.southwest];
 
@@ -1138,7 +1210,6 @@ function TransformedSheetLayer({
         element.style.display = "none";
       }
     }
-
     let animationFrame = 0;
 
     function scheduleUpdateFromMap() {
@@ -1357,17 +1428,22 @@ function TransformedPieceLayer({
   mode,
   onSelect,
   onCommit,
+  onPlacementGeometryMeasurementsChange,
+  showGeometryGuides = false,
 }: {
   layer: HistoricalPieceMapLayer;
   isSelected: boolean;
   mode: HistoricalMapLeafletProps["sheetEditMode"];
   onSelect?: (pieceId: string) => void;
   onCommit?: (pieceId: string, patch: Partial<SanbornMapPieceGeoreference>) => void;
+  onPlacementGeometryMeasurementsChange?: (measurements: PlacementGeometryMeasurements | null) => void;
+  showGeometryGuides?: boolean;
 }) {
   const map = useMap();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit });
-  latestRef.current = { layer, isSelected, mode, onSelect, onCommit };
+  const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides });
+  latestRef.current = { layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides };
+  const updateFromMapRef = useRef<(() => void) | null>(null);
   const [maskedImage, setMaskedImage] = useState<{ url: string; width: number; height: number } | null>(null);
   const maskedImageRef = useRef<{ url: string; width: number; height: number } | null>(null);
   const [maskError, setMaskError] = useState("");
@@ -1424,6 +1500,17 @@ function TransformedPieceLayer({
     const boundary = L.DomUtil.create("span", "map-studio-piece-overlay__boundary", element);
     const label = L.DomUtil.create("span", "map-studio-piece-overlay__label", element);
     const diagnostics = L.DomUtil.create("span", "map-studio-piece-overlay__diagnostics", element);
+    const geometryGuide = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    geometryGuide.classList.add("map-studio-geometry-guide");
+    geometryGuide.setAttribute("aria-hidden", "true");
+    geometryGuide.style.position = "absolute";
+    geometryGuide.style.left = "0";
+    geometryGuide.style.top = "0";
+    geometryGuide.style.width = "100%";
+    geometryGuide.style.height = "100%";
+    geometryGuide.style.pointerEvents = "none";
+    geometryGuide.style.zIndex = "2000";
+    map.getContainer().appendChild(geometryGuide);
     const handles = [
       ["rotate", "rotate"],
       ["center", "drag"],
@@ -1520,9 +1607,9 @@ function TransformedPieceLayer({
           ? `Piece mask: ${maskError}`
           : geometryError
             ? `Geometry: ${geometryError}`
-          : !projectiveTransform.valid
-            ? "Transform: rectangular fallback"
-            : "";
+            : !projectiveTransform.valid
+              ? "Transform: rectangular fallback"
+              : "";
       handles.forEach((handle) => {
         const point = handlePositions[handle.dataset.position ?? ""];
         handle.style.display = visibleHandles ? "block" : "none";
@@ -1531,6 +1618,7 @@ function TransformedPieceLayer({
           handle.style.top = `${point.y - offset.y}px`;
         }
       });
+      renderPlacementGeometryGuide(geometryGuide, map, piece, selected && editMode && latestRef.current.showGeometryGuides, selected && editMode ? latestRef.current.onPlacementGeometryMeasurementsChange : undefined, geometryError);
     }
 
     function updateFromMap() {
@@ -1542,6 +1630,7 @@ function TransformedPieceLayer({
         element.style.display = "none";
       }
     }
+    updateFromMapRef.current = updateFromMap;
 
     let animationFrame = 0;
     function scheduleUpdateFromMap() {
@@ -1727,18 +1816,16 @@ function TransformedPieceLayer({
       element.removeEventListener("pointerdown", startPointerInteraction);
       map.off("moveend zoomend viewreset resize", scheduleUpdateFromMap);
       element.remove();
+      geometryGuide.remove();
+      updateFromMapRef.current = null;
+      if (latestRef.current.isSelected) latestRef.current.onPlacementGeometryMeasurementsChange?.(null);
       containerRef.current = null;
     };
   }, [map, maskedImage, maskError, geometryError]);
 
   useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-
-    map.fire("moveend");
-  }, [layer, isSelected, mode, maskedImage, maskError, geometryError, map]);
+    updateFromMapRef.current?.();
+  }, [layer.corners, layer.rotation, layer.opacity, layer.isVisible, layer.isLocked, isSelected, mode, showGeometryGuides]);
 
   return null;
 }
@@ -1889,7 +1976,9 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             layer={piece}
             mode={props.sheetEditMode ?? "pan_modern_map"}
             onCommit={props.onPieceTransformCommit}
+            onPlacementGeometryMeasurementsChange={props.onPlacementGeometryMeasurementsChange}
             onSelect={props.onSelectPiece}
+            showGeometryGuides={props.showGeometryGuides}
           />
         ))}
 

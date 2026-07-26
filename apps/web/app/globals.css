@@ -5284,6 +5284,16 @@ body:has(.minimal-sanborn-gps) {
 .map-studio-runtime-debug__panel { border-top: 1px solid rgba(246, 231, 203, 0.16); }
 .map-studio-runtime-debug__panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; }
 
+.map-studio-geometry-guide { overflow: visible; z-index: 2000; }
+.map-studio-geometry-guide__arc { fill: none; stroke: #f6d37e; stroke-width: 2; filter: drop-shadow(0 1px 2px rgba(24, 12, 5, 0.85)); }
+.map-studio-geometry-guide__label, .map-studio-geometry-guide__deviation, .map-studio-geometry-guide__bearing, .map-studio-geometry-guide__warning { fill: #fff1c9; font: 600 11px/1.1 ui-monospace, SFMono-Regular, Consolas, monospace; paint-order: stroke; stroke: #3c2114; stroke-width: 3px; text-anchor: middle; dominant-baseline: middle; }
+.map-studio-geometry-guide__deviation { fill: #e8bd7b; font-size: 9px; }
+.map-studio-geometry-guide__bearing { fill: #f0dfb5; font-size: 9px; }
+.map-studio-geometry-guide__warning { fill: #ffbf9a; font-size: 12px; }
+.map-placement-inspector__geometry-toggle { display: flex; align-items: center; gap: 6px; }
+.map-placement-inspector__geometry-summary { display: grid; gap: 4px; margin-top: 8px; padding: 8px; border: 1px solid rgba(246, 231, 203, 0.18); border-radius: 6px; background: rgba(25, 13, 8, 0.28); font-size: 12px; }
+.map-placement-inspector__geometry-summary strong { color: #f6d37e; font-size: 10px; letter-spacing: 0.08em; }
+
 .map-studio-runtime-debug dl {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
