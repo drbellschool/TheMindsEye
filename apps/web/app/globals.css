@@ -4289,6 +4289,16 @@ body:has(.minimal-sanborn-gps) {
 .map-studio-street-guide__line { stroke: #f0c36a; stroke-width: 3; stroke-dasharray: 10 8; fill: none; opacity: .82; vector-effect: non-scaling-stroke; }
 .map-studio-street-guide__junction { fill: #f0c36a; stroke: #321d12; stroke-width: 2; opacity: .9; }
 .map-studio-street-guide__label { fill: #ffe0a1; font-size: 12px; font-weight: 600; paint-order: stroke; stroke: #321d12; stroke-width: 3px; stroke-linejoin: round; }
+.sanborn-page-workbench__angle-guide { pointer-events: none; fill: none; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.sanborn-page-workbench__angle-guide path { fill: none; }
+.sanborn-page-workbench__angle-guide text { stroke: #321d12; stroke-width: 3px; paint-order: stroke; font-size: 14px; font-weight: 700; }
+.sanborn-page-workbench__angle-guide.is-good { stroke: #9dd8a6; fill: #9dd8a6; }
+.sanborn-page-workbench__angle-guide.is-caution { stroke: #f0c36a; fill: #f0c36a; }
+.sanborn-page-workbench__angle-guide.is-warning { stroke: #e58b78; fill: #e58b78; }
+.sanborn-piece-list__geometry { display: grid; gap: 4px; margin-top: 6px; padding: 8px; border: 1px solid rgba(240,195,106,.24); border-radius: 6px; background: rgba(45,25,18,.35); }
+.sanborn-piece-list__geometry strong { font-size: .72rem; letter-spacing: .08em; }
+.sanborn-piece-list__geometry small { color: var(--muted-text, #b8a28c); }
+.sanborn-piece-list__inline-toggle { display: flex; gap: 6px; align-items: center; }
 
 .sanborn-source-context__filename {
   display: block;

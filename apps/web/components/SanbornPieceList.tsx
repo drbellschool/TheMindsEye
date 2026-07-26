@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import {
+  calculateSourceBoundingBox,
   sanbornMapPieceInventoryStatuses,
   sanbornMapPieceTypes,
   type SanbornMapPieceRecord,
@@ -8,6 +11,9 @@ import {
   type SanbornMapPieceInventoryStatus,
 } from "@/lib/sanborn-atlas";
 import { sanbornMapPieceFeatureCategories, sanbornMapPieceFeatureCategoryLabels, sanbornMapPieceGeometryTypes, sanbornMapPieceReviewStatuses, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
+import { calculateSourceQuadrilateralMeasurements, isSourceQuadrilateralAlreadySquare, squareSanbornQuadrilateral } from "@/lib/sanborn-source-geometry";
+import { formatGeometryMeasurement } from "@/lib/placement-geometry-measurements";
+import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 
 type SanbornPieceListProps = {
   pieces: SanbornMapPieceRecord[];
@@ -19,10 +25,14 @@ type SanbornPieceListProps = {
   onDeletePiece: (pieceId: string) => void;
   onSetReviewCategory: (category: SanbornMapPieceFeatureCategory, status: SanbornMapPieceReviewStatus) => void;
   reviewCategories?: SanbornMapPieceReviewCategories;
+  selectedAssetDimensions?: { width: number; height: number } | null;
+  selectedPieceHasPlacement?: boolean;
+  showAngleGuides?: boolean;
+  onSetShowAngleGuides?: (value: boolean) => void;
 };
 
 function pieceLabel(piece: SanbornMapPieceRecord): string {
-  return piece.titleText || piece.blockNumberText || `Piece ${piece.pieceSequence}`;
+  return formatMapPiecePlacementLabel(piece);
 }
 
 export function SanbornPieceList({
@@ -35,8 +45,35 @@ export function SanbornPieceList({
   onDeletePiece,
   onSetReviewCategory,
   reviewCategories = {},
+  selectedAssetDimensions = null,
+  selectedPieceHasPlacement = false,
+  showAngleGuides: showAngleGuidesProp,
+  onSetShowAngleGuides,
 }: SanbornPieceListProps) {
+  const [localShowAngleGuides, setLocalShowAngleGuides] = useState(true);
+  const [squareUndo, setSquareUndo] = useState<{ pieceId: string; points: SanbornMapPieceRecord["sourcePolygon"] } | null>(null);
   const sortedPieces = [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence);
+  const selectedPiece = pieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
+  const selectedPoints = selectedPiece?.sourceGeometry?.points ?? selectedPiece?.sourcePolygon ?? [];
+  const selectedMeasurements = selectedPiece && selectedAssetDimensions ? calculateSourceQuadrilateralMeasurements(selectedPoints, selectedAssetDimensions.width, selectedAssetDimensions.height) : null;
+  const alreadySquare = selectedPiece && selectedAssetDimensions ? isSourceQuadrilateralAlreadySquare(selectedPoints, selectedAssetDimensions.width, selectedAssetDimensions.height) : false;
+  const canSquare = Boolean(selectedPiece && selectedPiece.sourceGeometry?.geometryType === "polygon" && selectedPoints.length === 4 && selectedAssetDimensions && !readOnly && selectedMeasurements?.valid);
+  const showAngleGuides = showAngleGuidesProp ?? localShowAngleGuides;
+  useEffect(() => { setSquareUndo(null); setLocalShowAngleGuides(true); }, [selectedPieceId]);
+  useEffect(() => { if (selectedPiece?.isPersisted) setSquareUndo(null); }, [selectedPiece?.isPersisted, selectedPiece?.updatedAt]);
+  function squareSelectedPiece() {
+    if (!selectedPiece || !selectedAssetDimensions || !canSquare || alreadySquare) return;
+    if (selectedPieceHasPlacement && typeof window !== "undefined" && !window.confirm("Changing this source outline may require you to realign and review its existing Map Placement. Geographic coordinates will not be changed.\n\nSquare corners?")) return;
+    const result = squareSanbornQuadrilateral(selectedPoints, selectedAssetDimensions.width, selectedAssetDimensions.height);
+    if (!result.ok) return;
+    setSquareUndo({ pieceId: selectedPiece.pieceId, points: [...selectedPoints] });
+    onPatchPiece(selectedPiece.pieceId, { sourceGeometry: { geometryType: "polygon", points: result.points }, sourcePolygon: result.points, sourceBBox: calculateSourceBoundingBox(result.points) });
+  }
+  function undoSquare() {
+    if (!squareUndo || squareUndo.pieceId !== selectedPiece?.pieceId) return;
+    onPatchPiece(squareUndo.pieceId, { sourceGeometry: { geometryType: "polygon", points: squareUndo.points }, sourcePolygon: squareUndo.points, sourceBBox: calculateSourceBoundingBox(squareUndo.points) });
+    setSquareUndo(null);
+  }
 
   return (
     <div className="sanborn-piece-list">
@@ -121,6 +158,14 @@ export function SanbornPieceList({
                 ))}
               </select>
             </label>
+            {piece.pieceId === selectedPieceId ? <section className="sanborn-piece-list__geometry" aria-label="Source geometry measurements">
+              <strong>GEOMETRY</strong>
+              {selectedMeasurements?.valid && showAngleGuides ? <><span>NW {formatGeometryMeasurement(selectedMeasurements.corners[0]?.angle ?? 0)}° · NE {formatGeometryMeasurement(selectedMeasurements.corners[1]?.angle ?? 0)}°</span><span>SW {formatGeometryMeasurement(selectedMeasurements.corners[3]?.angle ?? 0)}° · SE {formatGeometryMeasurement(selectedMeasurements.corners[2]?.angle ?? 0)}°</span><span>Maximum corner drift: {formatGeometryMeasurement(selectedMeasurements.maximumCornerDeviation)}°</span><span>Top/bottom parallel drift: {formatGeometryMeasurement(selectedMeasurements.oppositeEdgeDrift.topBottom)}°</span><span>Left/right parallel drift: {formatGeometryMeasurement(selectedMeasurements.oppositeEdgeDrift.leftRight)}°</span></> : <span>{piece.sourceGeometry?.geometryType === "polygon" ? "Square corners requires a valid four-corner polygon." : "Square corners applies only to polygon features."}</span>}
+              {selectedMeasurements?.valid ? <label className="sanborn-piece-list__inline-toggle"><input checked={showAngleGuides} onChange={(event) => { setLocalShowAngleGuides(event.target.checked); onSetShowAngleGuides?.(event.target.checked); }} type="checkbox" /> Show angle guides</label> : null}
+              <button className="sanborn-button" disabled={!canSquare || alreadySquare} onClick={squareSelectedPiece} title={!canSquare ? "Square corners requires a valid four-corner polygon." : alreadySquare ? "This piece is already squared." : undefined} type="button">{alreadySquare ? "Already squared" : "Square corners"}</button>
+              {squareUndo?.pieceId === piece.pieceId ? <button className="sanborn-button" onClick={undoSquare} type="button">Undo square-up</button> : null}
+              <small>Makes all four corners 90 while preserving orientation and proportions.</small>
+            </section> : null}
             <label className="sanborn-piece-list__notes">
               Notes
               <textarea disabled={readOnly} value={piece.notes ?? ""} onChange={(event) => onPatchPiece(piece.pieceId, { notes: event.target.value })} />
