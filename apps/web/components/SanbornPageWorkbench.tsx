@@ -24,6 +24,8 @@ import {
   type SanbornNormalizedPoint,
 } from "@/lib/sanborn-atlas";
 import { normalizeSanbornMapPieceGeometry, sanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses, suggestSanbornFeatureLabel, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
+import { calculateSourceQuadrilateralMeasurements } from "@/lib/sanborn-source-geometry";
+import { formatGeometryMeasurement } from "@/lib/placement-geometry-measurements";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
 import {
   clampSanbornSourceImageZoom,
@@ -51,6 +53,8 @@ type SanbornPageWorkbenchProps = {
   repairClassificationAction?: ReactNode;
   reviewCategories?: SanbornMapPieceReviewCategories;
   onReviewCategoriesChange?: (categories: SanbornMapPieceReviewCategories) => void;
+  showAngleGuides?: boolean;
+  onSetShowAngleGuides?: (value: boolean) => void;
 };
 
 type EditorMode = "select" | "draw" | "mark_point" | "draw_line" | "add_junction" | "add_vertex" | "pan";
@@ -141,6 +145,8 @@ export function SanbornPageWorkbench({
   repairClassificationAction = null,
   reviewCategories = {},
   onReviewCategoriesChange,
+  showAngleGuides = true,
+  onSetShowAngleGuides,
 }: SanbornPageWorkbenchProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -163,6 +169,7 @@ export function SanbornPageWorkbench({
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
   const selectedPiecePointCount = selectedPiece?.sourceGeometry?.points.length ?? selectedPiece?.sourcePolygon.length ?? 0;
   const selectedPieceMinimumPoints = selectedPiece?.sourceGeometry?.geometryType === "point" || selectedPiece?.sourceGeometry?.geometryType === "junction" ? 1 : selectedPiece?.sourceGeometry?.geometryType === "line" ? 2 : 3;
+  const sourceMeasurements = selectedPiece && asset ? calculateSourceQuadrilateralMeasurements(selectedPiece.sourceGeometry?.points ?? selectedPiece.sourcePolygon, asset.width, asset.height) : null;
   const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
   const classificationBlocked = Boolean(classificationBlockedMessage);
   const editorReadOnly = readOnly || pieceInventoryBlocked || classificationBlocked;
@@ -617,6 +624,24 @@ export function SanbornPageWorkbench({
                   })}
                 </>
               ) : null}
+              {showAngleGuides && sourceMeasurements?.valid ? sourceMeasurements.corners.map((corner, index) => {
+                const point = corner.point;
+                const points = sourceMeasurements.corners.map((item) => item.point);
+                const previous = points[(index + 3) % 4];
+                const next = points[(index + 1) % 4];
+                const firstLength = Math.max(1, Math.hypot(previous.x - point.x, previous.y - point.y));
+                const secondLength = Math.max(1, Math.hypot(next.x - point.x, next.y - point.y));
+                const first = { x: (previous.x - point.x) / firstLength, y: (previous.y - point.y) / firstLength };
+                const second = { x: (next.x - point.x) / secondLength, y: (next.y - point.y) / secondLength };
+                const radius = 28;
+                const start = { x: point.x + first.x * radius, y: point.y + first.y * radius };
+                const end = { x: point.x + second.x * radius, y: point.y + second.y * radius };
+                const bisectorLength = Math.max(1, Math.hypot(first.x + second.x, first.y + second.y));
+                const label = { x: point.x + ((first.x + second.x) / bisectorLength) * (radius + 22), y: point.y + ((first.y + second.y) / bisectorLength) * (radius + 22) };
+                const deviation = corner.deviation >= 0 ? `+${formatGeometryMeasurement(corner.deviation)}` : formatGeometryMeasurement(corner.deviation);
+                const tone = Math.abs(corner.deviation) <= 1 ? "is-good" : Math.abs(corner.deviation) <= 3 ? "is-caution" : "is-warning";
+                return <g className={`sanborn-page-workbench__angle-guide ${tone}`} key={`angle-${index}`}><path d={`M ${start.x} ${start.y} A ${radius} ${radius} 0 ${corner.angle > 180 ? 1 : 0} 1 ${end.x} ${end.y}`} /><text x={label.x} y={label.y}>{formatGeometryMeasurement(corner.angle)}°</text><text x={label.x} y={label.y + 16}>{deviation}</text></g>;
+              }) : null}
             </svg>
           </div>
         </div>

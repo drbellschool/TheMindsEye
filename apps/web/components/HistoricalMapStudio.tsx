@@ -907,6 +907,7 @@ export function HistoricalMapStudio({
   const savedMapPieceBaselinesRef = useRef(new Map(initialData.mapPieceGeoreferences.filter((placement) => placement.isPersisted).map((placement) => [placement.pieceId, placement])));
   const [dirtyMapPieceIds, setDirtyMapPieceIds] = useState<Set<string>>(new Set());
   const [showGeometryGuides, setShowGeometryGuides] = useState(true);
+  const [showSourceAngleGuides, setShowSourceAngleGuides] = useState(true);
   const [showStreetGuides, setShowStreetGuides] = useState(true);
   const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
@@ -5231,6 +5232,8 @@ export function HistoricalMapStudio({
         onSavePieces={() => void saveMapPieces()}
         onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
         onSelectPiece={selectMapPieceAndFocus}
+        showAngleGuides={showSourceAngleGuides}
+        onSetShowAngleGuides={setShowSourceAngleGuides}
       />
       </section>
     );
@@ -5901,6 +5904,10 @@ export function HistoricalMapStudio({
             onPatchPiece={patchMapPiece}
             onReorderPiece={reorderMapPiece}
             onSelectPiece={selectMapPieceAndFocus}
+            selectedAssetDimensions={selectedAtlasPageAsset ? { width: selectedAtlasPageAsset.width, height: selectedAtlasPageAsset.height } : null}
+            selectedPieceHasPlacement={Boolean(selectedMapPieceGeoreference?.isPersisted)}
+            showAngleGuides={showSourceAngleGuides}
+            onSetShowAngleGuides={setShowSourceAngleGuides}
             reviewCategories={selectedAtlasPage?.reviewCategories ?? {}}
             onSetReviewCategory={(category, status) => setSelectedPageReviewCategories({ ...(selectedAtlasPage?.reviewCategories ?? {}), [category]: status })}
           />
@@ -6737,6 +6744,8 @@ export function HistoricalMapStudio({
               onSavePieces={() => void saveMapPieces()}
               onSavePagesAndContinue={() => void saveAtlasPages({ continueToPieceInventory: true })}
               onSelectPiece={setSelectedMapPieceId}
+              showAngleGuides={showSourceAngleGuides}
+              onSetShowAngleGuides={setShowSourceAngleGuides}
             />
           </div>
         )}
