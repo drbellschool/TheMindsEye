@@ -4285,6 +4285,10 @@ body:has(.minimal-sanborn-gps) {
   stroke-width: 5;
   vector-effect: non-scaling-stroke;
 }
+.sanborn-source-context__street-guide { stroke: #f0c36a; stroke-width: 8; stroke-dasharray: 18 12; fill: none; vector-effect: non-scaling-stroke; opacity: .9; pointer-events: none; }
+.map-studio-street-guide__line { stroke: #f0c36a; stroke-width: 3; stroke-dasharray: 10 8; fill: none; opacity: .82; vector-effect: non-scaling-stroke; }
+.map-studio-street-guide__junction { fill: #f0c36a; stroke: #321d12; stroke-width: 2; opacity: .9; }
+.map-studio-street-guide__label { fill: #ffe0a1; font-size: 12px; font-weight: 600; paint-order: stroke; stroke: #321d12; stroke-width: 3px; stroke-linejoin: round; }
 
 .sanborn-source-context__filename {
   display: block;

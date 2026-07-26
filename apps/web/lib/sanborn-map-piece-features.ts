@@ -1,9 +1,19 @@
 import { calculateSourceBoundingBox, validateNormalizedPolygon, type SanbornNormalizedPoint, type SanbornSourceBBox } from "./sanborn-atlas.ts";
 
 export const sanbornMapPieceGeometryTypes = ["point", "line", "polygon", "junction"] as const;
-export const sanbornMapPieceFeatureCategories = ["blocks_and_lots", "wells", "hydrants", "water_routes_and_junctions", "rail_and_transportation", "detached_or_unusual", "printed_notes_and_miscellaneous"] as const;
+export const sanbornMapPieceFeatureCategories = ["blocks_and_lots", "wells", "hydrants", "water_routes_and_junctions", "rail_and_transportation", "streets_and_intersections", "detached_or_unusual", "printed_notes_and_miscellaneous"] as const;
 export const sanbornMapPieceReviewStatuses = ["not_reviewed", "in_progress", "reviewed_found", "reviewed_none_found"] as const;
 export const sanbornMapPiecePlacementEligibilities = ["available", "reference_only", "unresolved"] as const;
+export const sanbornMapPieceFeatureCategoryLabels: Record<(typeof sanbornMapPieceFeatureCategories)[number], string> = {
+  blocks_and_lots: "Blocks and lots",
+  wells: "Wells",
+  hydrants: "Hydrants",
+  water_routes_and_junctions: "Water routes and junctions",
+  rail_and_transportation: "Rail and transportation",
+  streets_and_intersections: "Streets and intersections",
+  detached_or_unusual: "Detached or unusual features",
+  printed_notes_and_miscellaneous: "Printed notes and miscellaneous",
+};
 
 export type SanbornMapPieceGeometryType = (typeof sanbornMapPieceGeometryTypes)[number];
 export type SanbornMapPieceFeatureCategory = (typeof sanbornMapPieceFeatureCategories)[number];
@@ -78,8 +88,13 @@ export function suggestSanbornFeatureLabel(category: SanbornMapPieceFeatureCateg
     hydrants: "Hydrant",
     water_routes_and_junctions: "Water Feature",
     rail_and_transportation: "Rail Feature",
+    streets_and_intersections: "Street",
     detached_or_unusual: "Unusual Feature",
     printed_notes_and_miscellaneous: "Special Feature",
   };
-  return `${prefix[category]} ${detail?.trim() ? `${detail.trim()} ` : ""}${String(sequence).padStart(2, "0")}`;
+  const cleanedDetail = detail?.trim() ?? "";
+  if (category === "streets_and_intersections" && /\bstreet\b/i.test(cleanedDetail)) {
+    return `${cleanedDetail} ${String(sequence).padStart(2, "0")}`.trim();
+  }
+  return `${prefix[category]} ${cleanedDetail ? `${cleanedDetail} ` : ""}${String(sequence).padStart(2, "0")}`;
 }
