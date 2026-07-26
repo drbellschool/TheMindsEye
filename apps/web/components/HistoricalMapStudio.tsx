@@ -2431,6 +2431,23 @@ export function HistoricalMapStudio({
     );
   }
 
+  function discardSelectedMapPiecePlacementChanges() {
+    if (!selectedMapPieceId) return;
+    const baseline = savedMapPieceBaselinesRef.current.get(selectedMapPieceId);
+    if (!baseline) return;
+    replaceMapPieceGeoreference(baseline);
+    setDirtyMapPieceIds((current) => {
+      const next = new Set(current);
+      next.delete(selectedMapPieceId);
+      return next;
+    });
+    setPiecePlacementAnchorId("");
+    setPlacementAnchorAssetId("");
+    setSaveStatus("saved");
+    setSaveMessage("Discarded unsaved placement changes.");
+    setIsDirty(false);
+  }
+
   function confirmMapPieceSelectionChange(nextPieceId: string): boolean {
     if (!selectedMapPieceId || selectedMapPieceId === nextPieceId || !dirtyMapPieceIds.has(selectedMapPieceId)) {
       return true;
@@ -2440,9 +2457,11 @@ export function HistoricalMapStudio({
       return true;
     }
 
-    return window.confirm(
+    const discard = window.confirm(
       "This map piece has unsaved changes. Choose Cancel to save them first, or OK to discard the edits and continue.",
     );
+    if (discard) discardSelectedMapPiecePlacementChanges();
+    return discard;
   }
 
   function selectMapPieceForPlacement(pieceId: string) {
@@ -5330,6 +5349,7 @@ export function HistoricalMapStudio({
           onReloadSheet={() => void reloadSavedPlacement()}
           onResetAllSheets={resetAllSheetPlacementsToCurrentTownLocation}
           onResetPiece={resetSelectedMapPiecePlacement}
+          onDiscardChanges={discardSelectedMapPiecePlacementChanges}
           onResetSheet={resetSelectedPlacementToTownCenter}
           onSaveAndNext={savePlacementAndNext}
           onSavePlacement={saveSelectedMapPiecePlacement}

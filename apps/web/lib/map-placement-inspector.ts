@@ -1,5 +1,7 @@
 export type MapPlacementInspectorState = "no_selection" | "unplaced" | "armed" | "draft" | "saved" | "reviewed" | "unable_to_place";
 
+export type MapPlacementInspectorActionMode = "none" | "start" | "armed" | "save_new" | "save_dirty" | "edit" | "review" | "unable";
+
 export type MapPlacementInspectorStateInput = {
   hasSelection: boolean;
   hasPlacement: boolean;
@@ -37,6 +39,23 @@ export function mapPlacementInspectorStatusLabel(state: MapPlacementInspectorSta
     case "reviewed": return "REVIEWED";
     case "unable_to_place": return "UNABLE TO PLACE";
   }
+}
+
+export function deriveMapPlacementInspectorActionMode(input: {
+  state: MapPlacementInspectorState;
+  isPersisted: boolean;
+  hasGeographicFootprint: boolean;
+  isDirty: boolean;
+}): MapPlacementInspectorActionMode {
+  if (input.state === "no_selection") return "none";
+  if (input.state === "unplaced") return "start";
+  if (input.state === "armed") return "armed";
+  if (input.isDirty && input.isPersisted && input.hasGeographicFootprint) return "save_dirty";
+  if (input.state === "draft") return "save_new";
+  if (input.state === "saved") return "edit";
+  if (input.state === "reviewed") return "review";
+  if (input.state === "unable_to_place") return "unable";
+  return "none";
 }
 
 export type MapPlacementQueueFilter = "need_placement" | "drafts" | "awaiting_review" | "reviewed" | "unable" | "current_sheet" | "all" | "unplaced" | "placed_reviewed";

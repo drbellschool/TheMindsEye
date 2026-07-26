@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deriveMapPlacementInspectorState, mapPlacementInspectorStatusLabel, mapPlacementQueueFilterItems } from "./map-placement-inspector.ts";
+import { deriveMapPlacementInspectorActionMode, deriveMapPlacementInspectorState, mapPlacementInspectorStatusLabel, mapPlacementQueueFilterItems } from "./map-placement-inspector.ts";
 
 const base = { hasSelection: true, hasPlacement: true, hasGeographicFootprint: false, isPersisted: true, hasPlacementAnchor: false };
 
@@ -26,4 +26,11 @@ test("labels and filters keep the canonical placement queue compact", () => {
   assert.equal(mapPlacementQueueFilterItems(items, "unplaced").length, 2);
   assert.equal(mapPlacementQueueFilterItems(items, "current_sheet", "p1").length, 2);
   assert.equal(mapPlacementQueueFilterItems(items, "placed_reviewed").length, 2);
+});
+
+test("dirty persisted placements expose save changes while new drafts retain save placement", () => {
+  assert.equal(deriveMapPlacementInspectorActionMode({ state: "saved", isPersisted: true, hasGeographicFootprint: true, isDirty: true }), "save_dirty");
+  assert.equal(deriveMapPlacementInspectorActionMode({ state: "saved", isPersisted: true, hasGeographicFootprint: true, isDirty: false }), "edit");
+  assert.equal(deriveMapPlacementInspectorActionMode({ state: "draft", isPersisted: false, hasGeographicFootprint: true, isDirty: true }), "save_new");
+  assert.equal(deriveMapPlacementInspectorActionMode({ state: "reviewed", isPersisted: true, hasGeographicFootprint: true, isDirty: true }), "save_dirty");
 });
