@@ -7,7 +7,7 @@ import {
   type SanbornMapPieceType,
   type SanbornMapPieceInventoryStatus,
 } from "@/lib/sanborn-atlas";
-import { sanbornMapPieceFeatureCategories, sanbornMapPieceGeometryTypes, sanbornMapPieceReviewStatuses, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
+import { sanbornMapPieceFeatureCategories, sanbornMapPieceFeatureCategoryLabels, sanbornMapPieceGeometryTypes, sanbornMapPieceReviewStatuses, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
 
 type SanbornPieceListProps = {
   pieces: SanbornMapPieceRecord[];
@@ -44,7 +44,7 @@ export function SanbornPieceList({
         <legend>Sheet review categories</legend>
         {sanbornMapPieceFeatureCategories.map((category) => {
           const status = reviewCategories[category] ?? "not_reviewed";
-          return <label key={category}>{category.replaceAll("_", " ")}<select disabled={readOnly} value={status} onChange={(event) => onSetReviewCategory(category, event.target.value as SanbornMapPieceReviewStatus)}>{sanbornMapPieceReviewStatuses.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select></label>;
+          return <label key={category}>{sanbornMapPieceFeatureCategoryLabels[category]}<select disabled={readOnly} value={status} onChange={(event) => onSetReviewCategory(category, event.target.value as SanbornMapPieceReviewStatus)}>{sanbornMapPieceReviewStatuses.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select></label>;
         })}
       </fieldset>
       {sortedPieces.length === 0 ? <p className="sanborn-atlas-empty">No map pieces have been inventoried for this page. Use Mark point, Draw line, Draw area, or Add junction to record every geographically meaningful feature.</p> : null}
@@ -78,7 +78,7 @@ export function SanbornPieceList({
             <label>
               Category
               <select disabled={readOnly} value={piece.featureCategory ?? "blocks_and_lots"} onChange={(event) => onPatchPiece(piece.pieceId, { featureCategory: event.target.value as SanbornMapPieceFeatureCategory })}>
-                {sanbornMapPieceFeatureCategories.map((category) => <option key={category} value={category}>{category.replaceAll("_", " ")}</option>)}
+                {sanbornMapPieceFeatureCategories.map((category) => <option key={category} value={category}>{sanbornMapPieceFeatureCategoryLabels[category]}</option>)}
               </select>
             </label>
             <label>

@@ -106,6 +106,7 @@ import {
 import { findNextUnplacedPlacementItem, mergePlacementStateFromServer, type PlacementSaveResult } from "@/lib/map-placement-continuity";
 import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 import type { PlacementGeometryMeasurements } from "@/lib/placement-geometry-measurements";
+import { findNearbyStreetAlignmentGuides } from "@/lib/street-alignment-guides";
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
@@ -906,6 +907,7 @@ export function HistoricalMapStudio({
   const savedMapPieceBaselinesRef = useRef(new Map(initialData.mapPieceGeoreferences.filter((placement) => placement.isPersisted).map((placement) => [placement.pieceId, placement])));
   const [dirtyMapPieceIds, setDirtyMapPieceIds] = useState<Set<string>>(new Set());
   const [showGeometryGuides, setShowGeometryGuides] = useState(true);
+  const [showStreetGuides, setShowStreetGuides] = useState(true);
   const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
@@ -1036,6 +1038,10 @@ export function HistoricalMapStudio({
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
+  const streetAlignmentGuides = useMemo(
+    () => findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }),
+    [selectedAtlasPagePieces, selectedMapPiece],
+  );
   const atlasSaveActionsDisabled = saveStatus === "saving";
   const studioWriteUnavailable = initialData.mode === "read_only";
   const atlasDataUnavailable = atlasInventory.mode === "read_only";
@@ -5300,6 +5306,8 @@ export function HistoricalMapStudio({
             sheetLayers={mapSheetLayers}
             showControlPoints={false}
             showGeometryGuides={showGeometryGuides}
+            streetAlignmentGuides={streetAlignmentGuides}
+            showStreetGuides={showStreetGuides}
             showSheetBoundaries={showReferenceSheetAlignment}
             showSheetLabels={showReferenceSheetAlignment}
             viewRefreshRequest={mapViewRefreshRequest}
@@ -5310,6 +5318,7 @@ export function HistoricalMapStudio({
           asset={selectedAtlasPageAsset}
           piece={selectedMapPiece}
           sourceLabel={selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "Selected source sheet"}
+          streetGuides={streetAlignmentGuides}
         />
       </section>
     );
@@ -5363,6 +5372,8 @@ export function HistoricalMapStudio({
           onSetDisplayScope={setPieceDisplayScope}
           onSetGeoEditMode={(mode) => { setGeoEditMode(mode); setPiecePlacementAnchorId(""); commitGeographicMapSettings({ editMode: mode, globalHistoricalOpacity: 1 }, false); }}
           onSetGeometryGuides={setShowGeometryGuides}
+          hasStreetGuides={streetAlignmentGuides.length > 0}
+          onSetStreetGuides={setShowStreetGuides}
           onSetOpacity={(value) => selectedMapPiece && commitMapPieceGeoreference(selectedMapPiece.pieceId, { opacity: value })}
           onSetRotation={(value) => selectedMapPiece && selectedMapPieceGeoreference && replaceMapPieceGeoreference(rotateMapPieceGeoreference(selectedMapPieceGeoreference, value))}
           onSetShowReferenceSheetAlignment={setShowReferenceSheetAlignment}
@@ -5398,6 +5409,7 @@ export function HistoricalMapStudio({
           selectedSheetPlaced={selectedSheetPlaced}
           geometryMeasurements={placementGeometryMeasurements}
           showGeometryGuides={showGeometryGuides}
+          showStreetGuides={showStreetGuides}
           showReferenceSheetAlignment={showReferenceSheetAlignment}
           unableToPlaceReason={unableToPlaceReason}
         />

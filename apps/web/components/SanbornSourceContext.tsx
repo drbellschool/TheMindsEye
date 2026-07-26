@@ -7,14 +7,16 @@ import { buildSanbornSourceContextViewport, normalizedPointToSourceContextPoint,
 import type { SanbornMapPieceRecord } from "@/lib/sanborn-atlas";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
 import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
+import type { StreetAlignmentGuide } from "@/lib/street-alignment-guides";
 
 type SanbornSourceContextProps = {
   piece: SanbornMapPieceRecord | null;
   asset: StudioSheetAsset | null;
   sourceLabel: string;
+  streetGuides?: StreetAlignmentGuide[];
 };
 
-export function SanbornSourceContext({ piece, asset, sourceLabel }: SanbornSourceContextProps) {
+export function SanbornSourceContext({ piece, asset, sourceLabel, streetGuides = [] }: SanbornSourceContextProps) {
   const [hidden, setHidden] = useState(false);
   const [manualViewport, setManualViewport] = useState<{ key: string; viewport: SanbornSourceContextViewport } | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; viewport: SanbornSourceContextViewport } | null>(null);
@@ -95,6 +97,12 @@ export function SanbornSourceContext({ piece, asset, sourceLabel }: SanbornSourc
           <svg aria-label={`Source context for ${formatMapPiecePlacementLabel(piece)}`} className="sanborn-source-context__svg" preserveAspectRatio="none" role="img" viewBox={`0 0 ${viewport.width} ${viewport.height}`}>
             <image className="sanborn-source-context__image" href={asset.signedUrl} height={asset.height} key={sourceImage.imageKey} onError={sourceImage.onError} onLoad={sourceImage.onLoad} preserveAspectRatio="xMidYMid slice" width={asset.width} x={-viewport.x} y={-viewport.y} />
             {sourceImage.isLoaded && overlayPoints ? <polygon className="sanborn-source-context__highlight" points={overlayPoints} /> : null}
+            {sourceImage.isLoaded ? streetGuides.map((guide) => {
+              const points = guide.sourcePoints.map((point) => { const mapped = normalizedPointToSourceContextPoint(point, viewport, asset.width, asset.height); return `${mapped.x * viewport.width},${mapped.y * viewport.height}`; }).join(" ");
+              return guide.geometryType === "junction"
+                ? (() => { const mapped = guide.sourcePoints[0] ? normalizedPointToSourceContextPoint(guide.sourcePoints[0], viewport, asset.width, asset.height) : null; return <circle className="sanborn-source-context__street-guide" cx={mapped ? mapped.x * viewport.width : 0} cy={mapped ? mapped.y * viewport.height : 0} key={guide.pieceId} r={Math.max(8, Math.min(viewport.width, viewport.height) * 0.012)} />; })()
+                : <polyline className="sanborn-source-context__street-guide" fill={guide.geometryType === "polygon" ? "rgba(240,195,106,.16)" : "none"} key={guide.pieceId} points={points} />;
+            }) : null}
           </svg>
         ) : null}
         <SanbornSourceImageStatus filename={asset.originalFilename} onRetry={sourceImage.retryImage} state={sourceImage.state} />

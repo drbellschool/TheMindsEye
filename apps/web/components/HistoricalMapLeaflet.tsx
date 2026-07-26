@@ -32,6 +32,7 @@ import {
 } from "@/lib/sanborn-map-piece-rendering";
 import type { SanbornNormalizedPoint, SanbornSourceBBox } from "@/lib/sanborn-atlas";
 import { calculatePlacementGeometryMeasurements, formatGeometryMeasurement, type PlacementGeometryMeasurements, type ScreenPoint } from "@/lib/placement-geometry-measurements";
+import { projectNormalizedPointThroughPlacement, type StreetAlignmentGuide } from "@/lib/street-alignment-guides";
 
 export { basemaps };
 
@@ -81,6 +82,8 @@ type HistoricalMapLeafletProps = {
   requestedViewSource?: string;
   onMapInteractionChange?: (state: "idle" | "panning" | "zooming", source: string) => void;
   showGeometryGuides?: boolean;
+  streetAlignmentGuides?: StreetAlignmentGuide[];
+  showStreetGuides?: boolean;
 };
 
 export type HistoricalSheetMapLayer = SheetGeographicTransform & {
@@ -759,6 +762,21 @@ function renderPlacementGeometryGuide(
     : `${warning}<text class="map-studio-geometry-guide__label" x="${center.x}" y="${center.y}">Max drift ${formatGeometryMeasurement(measurements.maximumCornerDeviation)}°</text>`;
 }
 
+function renderStreetAlignmentGuides(guide: SVGSVGElement, map: L.Map, piece: SanbornMapPieceGeoreference, visible: boolean, guides: StreetAlignmentGuide[]) {
+  if (!visible || guides.length === 0) { guide.style.display = "none"; return; }
+  guide.style.display = "block";
+  const size = map.getSize();
+  guide.setAttribute("width", String(size.x)); guide.setAttribute("height", String(size.y)); guide.setAttribute("viewBox", `0 0 ${size.x} ${size.y}`);
+  guide.innerHTML = guides.map((street) => {
+    const points = street.sourcePoints.map((point) => projectNormalizedPointThroughPlacement(point, piece.corners)).filter(Boolean).map((point) => { const p = map.latLngToContainerPoint([point!.latitude, point!.longitude]); return `${p.x},${p.y}`; }).join(" ");
+    const labelPoint = street.sourcePoints[Math.floor(street.sourcePoints.length / 2)];
+    const labelGeo = labelPoint ? projectNormalizedPointThroughPlacement(labelPoint, piece.corners) : null;
+    const label = labelGeo ? map.latLngToContainerPoint([labelGeo.latitude, labelGeo.longitude]) : null;
+    const safeLabel = street.label.replace(/[<>&"']/g, "");
+    return street.geometryType === "junction" ? `<circle class="map-studio-street-guide__junction" cx="${label?.x ?? 0}" cy="${label?.y ?? 0}" r="7"/>` : `<polyline class="map-studio-street-guide__line" points="${points}"/><text class="map-studio-street-guide__label" x="${label?.x ?? 0}" y="${(label?.y ?? 0) - 8}">${safeLabel}</text>`;
+  }).join("");
+}
+
 function getPointCenter(points: QuadPoints) {
   const values = [points.northwest, points.northeast, points.southeast, points.southwest];
 
@@ -1430,6 +1448,8 @@ function TransformedPieceLayer({
   onCommit,
   onPlacementGeometryMeasurementsChange,
   showGeometryGuides = false,
+  streetAlignmentGuides = [],
+  showStreetGuides = false,
 }: {
   layer: HistoricalPieceMapLayer;
   isSelected: boolean;
@@ -1438,11 +1458,13 @@ function TransformedPieceLayer({
   onCommit?: (pieceId: string, patch: Partial<SanbornMapPieceGeoreference>) => void;
   onPlacementGeometryMeasurementsChange?: (measurements: PlacementGeometryMeasurements | null) => void;
   showGeometryGuides?: boolean;
+  streetAlignmentGuides?: StreetAlignmentGuide[];
+  showStreetGuides?: boolean;
 }) {
   const map = useMap();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides });
-  latestRef.current = { layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides };
+  const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides, streetAlignmentGuides, showStreetGuides });
+  latestRef.current = { layer, isSelected, mode, onSelect, onCommit, onPlacementGeometryMeasurementsChange, showGeometryGuides, streetAlignmentGuides, showStreetGuides };
   const updateFromMapRef = useRef<(() => void) | null>(null);
   const [maskedImage, setMaskedImage] = useState<{ url: string; width: number; height: number } | null>(null);
   const maskedImageRef = useRef<{ url: string; width: number; height: number } | null>(null);
@@ -1511,6 +1533,11 @@ function TransformedPieceLayer({
     geometryGuide.style.pointerEvents = "none";
     geometryGuide.style.zIndex = "2000";
     map.getContainer().appendChild(geometryGuide);
+    const streetGuide = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    streetGuide.classList.add("map-studio-street-guide");
+    streetGuide.setAttribute("aria-hidden", "true");
+    streetGuide.style.position = "absolute"; streetGuide.style.left = "0"; streetGuide.style.top = "0"; streetGuide.style.width = "100%"; streetGuide.style.height = "100%"; streetGuide.style.pointerEvents = "none"; streetGuide.style.zIndex = "1900";
+    map.getContainer().appendChild(streetGuide);
     const handles = [
       ["rotate", "rotate"],
       ["center", "drag"],
@@ -1619,6 +1646,7 @@ function TransformedPieceLayer({
         }
       });
       renderPlacementGeometryGuide(geometryGuide, map, piece, selected && editMode && latestRef.current.showGeometryGuides, selected && editMode ? latestRef.current.onPlacementGeometryMeasurementsChange : undefined, geometryError);
+      renderStreetAlignmentGuides(streetGuide, map, piece, selected && latestRef.current.showStreetGuides, latestRef.current.streetAlignmentGuides ?? []);
     }
 
     function updateFromMap() {
@@ -1817,6 +1845,7 @@ function TransformedPieceLayer({
       map.off("moveend zoomend viewreset resize", scheduleUpdateFromMap);
       element.remove();
       geometryGuide.remove();
+      streetGuide.remove();
       updateFromMapRef.current = null;
       if (latestRef.current.isSelected) latestRef.current.onPlacementGeometryMeasurementsChange?.(null);
       containerRef.current = null;
@@ -1825,7 +1854,7 @@ function TransformedPieceLayer({
 
   useEffect(() => {
     updateFromMapRef.current?.();
-  }, [layer.corners, layer.rotation, layer.opacity, layer.isVisible, layer.isLocked, isSelected, mode, showGeometryGuides]);
+  }, [layer.corners, layer.rotation, layer.opacity, layer.isVisible, layer.isLocked, isSelected, mode, showGeometryGuides, streetAlignmentGuides, showStreetGuides]);
 
   return null;
 }
@@ -1979,6 +2008,8 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
             onPlacementGeometryMeasurementsChange={props.onPlacementGeometryMeasurementsChange}
             onSelect={props.onSelectPiece}
             showGeometryGuides={props.showGeometryGuides}
+            streetAlignmentGuides={props.streetAlignmentGuides}
+            showStreetGuides={props.showStreetGuides}
           />
         ))}
 

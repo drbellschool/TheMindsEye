@@ -88,11 +88,11 @@ function updatePiecePolygon(piece: SanbornMapPieceRecord, polygon: SanbornNormal
   };
 }
 
-function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: SanbornNormalizedPoint[], geometryType: SanbornMapPieceGeometryType): SanbornMapPieceRecord {
+function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: SanbornNormalizedPoint[], geometryType: SanbornMapPieceGeometryType, featureCategory?: SanbornMapPieceFeatureCategory): SanbornMapPieceRecord {
   const geometry = normalizeSanbornMapPieceGeometry({ geometryType, points });
   const legacyPolygon = geometry.ok ? geometry.legacyPolygon : points;
   const sourceBBox = geometry.ok ? geometry.bbox : calculateSourceBoundingBox(legacyPolygon);
-  const category = geometryType === "point" ? "wells" : geometryType === "line" ? "water_routes_and_junctions" : "blocks_and_lots";
+  const category = featureCategory ?? (geometryType === "point" ? "wells" : geometryType === "line" ? "water_routes_and_junctions" : "blocks_and_lots");
   const suffix = `${sequence}-${Date.now()}`;
 
   return {
@@ -109,7 +109,7 @@ function createPiece(page: SanbornAtlasPageRecord, sequence: number, points: San
     sourceBBox,
     sourceGeometry: geometry.ok ? geometry.geometry : { geometryType: "polygon", points: legacyPolygon },
     featureCategory: category,
-    placementEligibility: "available",
+    placementEligibility: category === "streets_and_intersections" ? "reference_only" : "available",
     printedSymbolText: null,
     reviewCategories: {},
     creationMethod: "human",
@@ -150,6 +150,7 @@ export function SanbornPageWorkbench({
   const [selectedVertexIndex, setSelectedVertexIndex] = useState<number | null>(null);
   const [sourceZoom, setSourceZoom] = useState(1);
   const [spacePanActive, setSpacePanActive] = useState(false);
+  const [draftCategory, setDraftCategory] = useState<SanbornMapPieceFeatureCategory | null>(null);
   const [panDrag, setPanDrag] = useState<{
     pointerId: number;
     startClientX: number;
@@ -288,10 +289,11 @@ export function SanbornPageWorkbench({
     }
 
     const nextSequence = Math.max(0, ...sortedPieces.map((piece) => piece.pieceSequence)) + 1;
-    const nextPiece = createPiece(page, nextSequence, draftPoints, geometryType);
+    const nextPiece = createPiece(page, nextSequence, draftPoints, geometryType, draftCategory ?? undefined);
     onPiecesChange([...sortedPieces, nextPiece]);
     onSelectPiece(nextPiece.pieceId);
     setDraftPoints([]);
+    setDraftCategory(null);
     setEditorMode(editorMode);
   }
 
@@ -311,6 +313,7 @@ export function SanbornPageWorkbench({
 
   function clearDraft() {
     setDraftPoints([]);
+    setDraftCategory(null);
     setEditorMode("select");
   }
 
@@ -461,9 +464,12 @@ export function SanbornPageWorkbench({
             <button className={`sanborn-button${editorMode === "draw_line" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("draw_line")} title={disabledToolReason} type="button">
               Draw line
             </button>
+            <button className={`sanborn-button${editorMode === "draw_line" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("draw_line"); }} title={disabledToolReason} type="button">Draw street line</button>
             <button className={`sanborn-button${editorMode === "add_junction" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("add_junction")} title={disabledToolReason} type="button">
               Add junction
             </button>
+            <button className={`sanborn-button${editorMode === "add_junction" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("add_junction"); }} title={disabledToolReason} type="button">Add intersection</button>
+            <button className={`sanborn-button${editorMode === "draw" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("draw"); }} title={disabledToolReason} type="button">Draw street area</button>
             <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled || !selectedPiece} onClick={() => setEditorMode("add_vertex")} title={!selectedPiece ? "Select a map piece before adding a vertex." : disabledToolReason} type="button">
               Add vertex
             </button>
