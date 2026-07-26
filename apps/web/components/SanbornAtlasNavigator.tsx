@@ -14,6 +14,7 @@ import {
   calculateTownProgress,
   type ReconstructionProgressStatus,
 } from "@/lib/town-reconstruction";
+import { countCanonicalMapPiecePlacements, deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
 
 export type SanbornAtlasWorkflowStep =
   | "source"
@@ -69,12 +70,12 @@ export function SanbornAtlasNavigator({
 }: SanbornAtlasNavigatorProps) {
   const activeAtlas = inventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
   const activePages = useMemo(
-    () => inventory.pages.filter((page) => page.atlasId === selectedAtlasId).sort((left, right) => left.pageSequence - right.pageSequence),
+    () => inventory.pages.filter((page) => page.atlasId === selectedAtlasId && !page.archivedAt).sort((left, right) => left.pageSequence - right.pageSequence),
     [inventory.pages, selectedAtlasId],
   );
   const activePageIds = useMemo(() => new Set(activePages.map((page) => page.pageId)), [activePages]);
   const activePieces = useMemo(
-    () => inventory.pieces.filter((piece) => activePageIds.has(piece.atlasPageId)).sort((left, right) => left.pieceSequence - right.pieceSequence),
+    () => inventory.pieces.filter((piece) => activePageIds.has(piece.atlasPageId) && piece.isPersisted !== false).sort((left, right) => left.pieceSequence - right.pieceSequence),
     [activePageIds, inventory.pieces],
   );
   const pageByAssetId = useMemo(() => new Map(activePages.map((page) => [page.sanbornSheetAssetId, page])), [activePages]);
@@ -125,7 +126,8 @@ export function SanbornAtlasNavigator({
   );
   const sourceLinkedCount = sheetProgress.filter((sheet) => sheet.sourceLinked).length;
   const startedSheets = sheetProgress.filter((sheet) => sheet.status !== "not_started").length;
-  const placedPieces = pieceProgress.filter((piece) => piece.geographicPlacementSaved).length;
+  const placeablePieces = activePieces.filter((piece) => (piece.placementEligibility ?? "available") === "available");
+  const placementCounts = countCanonicalMapPiecePlacements(placeablePieces.map((piece) => deriveCanonicalMapPiecePlacementStatus({ placement: placementByPieceId.get(piece.pieceId) })));
   const definedPieces = pieceProgress.filter((piece) => piece.regionDefined).length;
   const stationSummaries: Record<SanbornAtlasWorkflowStep, { summary: string; status: StationStatus; warning?: string }> = {
     source: {
@@ -160,9 +162,9 @@ export function SanbornAtlasNavigator({
       warning: pieceProgress.length === 0 ? "No map pieces" : undefined,
     },
     gps_alignment: {
-      summary: `${placedPieces}/${Math.max(1, pieceProgress.length)} placed`,
-      status: placedPieces === pieceProgress.length && pieceProgress.length > 0 ? "placed" : placedPieces > 0 ? "started" : "not_started",
-      warning: placedPieces < pieceProgress.length ? "Unplaced pieces" : undefined,
+      summary: placementCounts.placementResolved === placementCounts.total ? `${placementCounts.geographicallyPlaced}/${placementCounts.total} resolved` : `${placementCounts.geographicallyPlaced}/${placementCounts.total} placed`,
+      status: placementCounts.placementResolved === placementCounts.total && placementCounts.total > 0 ? "reviewed" : placementCounts.geographicallyPlaced > 0 ? "started" : "not_started",
+      warning: placementCounts.needPlacement > 0 ? `${placementCounts.needPlacement} need placement` : placementCounts.draft > 0 ? `${placementCounts.draft} drafts need saving or reset` : placementCounts.placedAwaitingReview > 0 ? `${placementCounts.placedAwaitingReview} placements await review` : undefined,
     },
   };
 

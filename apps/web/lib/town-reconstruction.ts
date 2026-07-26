@@ -11,6 +11,7 @@ import {
   pageTypeSupportsMapPieces,
 } from "./sanborn-atlas.ts";
 import { hasOperationalMapPiecePlacement, type SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
+import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
 import {
   calculateTownIndexCompletion,
   calculateTownIndexRegionProgress,
@@ -386,9 +387,10 @@ export function calculateMapPieceProgress(input: {
   placement?: SanbornMapPieceGeoreference | null;
 }): MapPieceReconstructionProgress {
   const placement = input.placement ?? null;
-  const geographicPlacementSaved = Boolean(placement?.isPersisted && hasOperationalMapPiecePlacement(placement));
-  const visibleAndOperational = Boolean(placement?.isVisible && hasOperationalMapPiecePlacement(placement));
-  const reviewed = input.piece.reviewStatus === "verified_fact" || input.piece.inventoryStatus === "reviewed" || placement?.reviewStatus === "verified_fact" || placement?.placementStatus === "reviewed";
+  const canonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement });
+  const geographicPlacementSaved = canonicalStatus === "placed" || canonicalStatus === "reviewed";
+  const visibleAndOperational = Boolean(placement?.isVisible && geographicPlacementSaved);
+  const reviewed = canonicalStatus === "reviewed";
   const completedUnits = 1 + (geographicPlacementSaved ? 1 : 0) + (visibleAndOperational ? 1 : 0) + (reviewed ? 1 : 0);
   const status = geographicPlacementSaved ? (reviewed ? "reviewed" : "placed") : "not_started";
 
@@ -514,12 +516,11 @@ export function calculateEditionProgress(input: {
     })
     .filter((sheet): sheet is SheetReconstructionProgress => Boolean(sheet));
   const placedPieces = input.pieces.filter((piece) => {
-    const placement = placementsByPieceId.get(piece.pieceId);
-    return Boolean(placement?.isPersisted && hasOperationalMapPiecePlacement(placement));
+    const status = deriveCanonicalMapPiecePlacementStatus({ placement: placementsByPieceId.get(piece.pieceId) });
+    return status === "placed" || status === "reviewed";
   }).length;
   const reviewedPieces = input.pieces.filter((piece) => {
-    const placement = placementsByPieceId.get(piece.pieceId);
-    return completedStatuses.has(piece.reviewStatus) || piece.inventoryStatus === "reviewed" || placement?.placementStatus === "reviewed";
+    return deriveCanonicalMapPiecePlacementStatus({ placement: placementsByPieceId.get(piece.pieceId) }) === "reviewed";
   }).length;
 
   return {
@@ -686,7 +687,8 @@ export function buildTownIndexSummary(input: {
             const pieces = input.pieces.filter((piece) => piece.atlasPageId === page.pageId);
             const placed = pieces.filter((piece) => {
               const placement = input.placements.find((candidate) => candidate.pieceId === piece.pieceId);
-              return Boolean(placement?.isPersisted && hasOperationalMapPiecePlacement(placement));
+              const canonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement });
+              return canonicalStatus === "placed" || canonicalStatus === "reviewed";
             }).length;
             const status = statusFromCompletion({ total: pieces.length, done: placed });
 

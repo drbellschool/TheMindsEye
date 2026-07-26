@@ -44,7 +44,7 @@ export function findNextUnplacedPlacementItem(input: {
   items: readonly MapPiecePlacementQueueItem[];
   currentPieceId: string;
 }): MapPiecePlacementQueueItem | null {
-  const unresolved = input.items.filter((item) => item.status === "not_placed" || item.status === "draft");
+  const unresolved = input.items.filter((item) => item.status === "not_placed");
   if (unresolved.length === 0) return null;
 
   const currentIndex = unresolved.findIndex((item) => item.pieceId === input.currentPieceId);

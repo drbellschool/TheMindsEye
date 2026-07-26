@@ -3,6 +3,7 @@ import { isOperationalMapCenter, isValidLatitude, isValidLongitude, validateGeoC
 import { clampHistoricalOpacity, clampNumber, defaultHistoricalSheetOpacity, normalizeReviewClassification, normalizeRotation, type StudioSheetAsset } from "./historical-map-studio.ts";
 import { calculateSourceBoundingBox, type SanbornAtlasPageRecord, type SanbornMapPieceRecord, type SanbornNormalizedPoint, type SanbornSourceBBox } from "./sanborn-atlas.ts";
 import type { SanbornMapPieceGeometryType } from "./sanborn-map-piece-features.ts";
+import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
 
 export const mapPiecePlacementStatuses = ["unplaced", "draft", "placed", "aligned", "reviewed", "unable_to_place"] as const;
 export const mapPlacementTargetGeometries = ["polygon", "line", "point", "junction"] as const;
@@ -605,7 +606,8 @@ export function buildOperationalMapPieceLayers(input: {
   return input.placements
     .reduce<SanbornMapPieceMapLayer[]>((layers, placement) => {
       const piece = piecesById.get(placement.pieceId);
-      if (!piece || !hasOperationalMapPiecePlacement(placement)) {
+      const canonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement });
+      if (!piece || !placement.isVisible || (canonicalStatus !== "placed" && canonicalStatus !== "reviewed")) {
         return layers;
       }
 
@@ -641,7 +643,7 @@ export function buildOperationalMapPieceLayers(input: {
 
 export function getMapPieceLayerBounds(layers: SanbornMapPieceMapLayer[]): GeoBounds | null {
   const coordinates = layers
-    .filter((layer) => layer.isVisible && hasOperationalMapPiecePlacement(layer))
+    .filter((layer) => layer.isVisible && ["placed", "reviewed"].includes(deriveCanonicalMapPiecePlacementStatus({ placement: layer })))
     .flatMap((layer) => layer.geographicGeometry?.coordinates ?? [layer.corners.northwest, layer.corners.northeast, layer.corners.southeast, layer.corners.southwest])
     .filter((coordinate): coordinate is GeoCoordinate => Boolean(coordinate) && isOperationalMapCenter(coordinate));
 

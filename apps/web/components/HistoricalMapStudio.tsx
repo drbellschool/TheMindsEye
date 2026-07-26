@@ -179,6 +179,7 @@ import { focusStudioTarget, focusTargetForTask, focusTargetId, type StudioFocusT
 import { getTownIndexChecklistProgress, normalizeDisplayColor, normalizeDisplayOpacity, referenceResolutionStatuses, townIndexDisplayPalette, validateReferenceResolution } from "@/lib/town-index-review";
 import { deriveSheetInventoryQueue } from "@/lib/sheet-inventory-queue";
 import { deriveMapPiecePlacementQueue, type MapPiecePlacementQueueItem } from "@/lib/map-piece-placement-queue";
+import { deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -321,7 +322,8 @@ type InitialStudioSelection = {
 const minimumUsefulGpsZoom = 12;
 const defaultTownGpsZoom = 16;
 const minimumAutoGpsZoom = 15;
-const maximumAutoGpsZoom = 18;
+const maximumManualGpsZoom = 22;
+const maximumFitGpsZoom = 21;
 
 function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : "Unavailable";
@@ -346,27 +348,18 @@ function hasMapPieceGeographicFootprint(placement: SanbornMapPieceGeoreference |
 }
 
 function getMapPiecePlacementLabel(placement: SanbornMapPieceGeoreference | null | undefined): string {
-  if (!placement || placement.placementStatus === "unplaced" || !hasMapPieceGeographicFootprint(placement)) {
-    return "Not placed";
+  switch (deriveCanonicalMapPiecePlacementStatus({ placement })) {
+    case "reviewed": return "Reviewed placement";
+    case "placed": return "Saved placement";
+    case "draft": return "Draft placement";
+    case "unable_to_place": return "Unable to place";
+    default: return "Not placed";
   }
-
-  if (placement.placementStatus === "reviewed") {
-    return "Reviewed placement";
-  }
-
-  return placement.isPersisted ? "Saved placement" : "Draft placement";
 }
 
 function getMapPiecePlacementClass(placement: SanbornMapPieceGeoreference | null | undefined): string {
-  if (!placement || placement.placementStatus === "unplaced" || !hasMapPieceGeographicFootprint(placement)) {
-    return "is-unplaced";
-  }
-
-  if (placement.placementStatus === "reviewed") {
-    return "is-reviewed";
-  }
-
-  return placement.isPersisted ? "is-saved" : "is-draft";
+  const status = deriveCanonicalMapPiecePlacementStatus({ placement });
+  return status === "reviewed" ? "is-reviewed" : status === "placed" ? "is-saved" : status === "draft" ? "is-draft" : status === "unable_to_place" ? "is-unable" : "is-unplaced";
 }
 
 function normalizeAtlasWorkflowStep(value: string | null | undefined): SanbornAtlasWorkflowStep | null {
@@ -562,7 +555,7 @@ function getGpsTownZoomFromState(studioState: HistoricalMapStudioState): number 
   const townZoom = typeof studioState.activeTownPackage?.defaultZoom === "number" ? studioState.activeTownPackage.defaultZoom : defaultTownGpsZoom;
   const preferredZoom = Math.max(defaultTownGpsZoom, townZoom);
 
-  return Math.min(maximumAutoGpsZoom, Math.max(minimumAutoGpsZoom, preferredZoom));
+  return Math.min(maximumFitGpsZoom, Math.max(minimumAutoGpsZoom, preferredZoom));
 }
 
 function isMeaningfulGpsView(center: GeoCoordinate | null | undefined, zoom: number | null | undefined): boolean {
@@ -1283,7 +1276,7 @@ export function HistoricalMapStudio({
     setLastViewChangeSource(source);
     setLastCenterChangePath(path);
     setMapCenter(center);
-    setModernMapZoom(zoom);
+    setModernMapZoom(Math.min(maximumManualGpsZoom, Math.max(0, zoom)));
     setMapViewRefreshRequest((current) => current + 1);
     window.setTimeout(() => {
       isProgrammaticViewChangeRef.current = false;
@@ -2475,14 +2468,13 @@ export function HistoricalMapStudio({
       setSaveMessage("Click the modern map to place the selected map piece.");
     }
     requestFocusTarget({ targetId: focusTargetId("map-piece-inspector-card", item.pieceId), instruction: item.status === "not_placed" ? "Place this geographic object on the modern map." : "Review this object's saved geographic placement." });
-    if (item.placement && hasOperationalMapPiecePlacement(item.placement)) {
-      requestExternalMapView({ latitude: item.placement.centerLatitude, longitude: item.placement.centerLongitude }, Math.max(modernMapZoom, 17), "fit_sheet", "placementQueue");
-    }
+    // Selecting another object must not overwrite the worker's current map
+    // center or zoom. Fitting remains an explicit Alignment action.
   }
 
   function movePlacementQueue(direction: "previous_unplaced" | "next_unplaced" | "next_review") {
     const items = mapPiecePlacementQueue.items;
-    const matches = direction === "next_review" ? items.filter((item) => item.status === "draft" || item.status === "placed") : items.filter((item) => item.status === "not_placed" || item.status === "draft");
+    const matches = direction === "next_review" ? items.filter((item) => item.status === "placed") : items.filter((item) => item.status === "not_placed");
     if (matches.length === 0) return;
     const currentIndex = matches.findIndex((item) => item.pieceId === selectedMapPieceId);
     const nextIndex = direction === "previous_unplaced" ? (currentIndex > 0 ? currentIndex - 1 : matches.length - 1) : currentIndex >= 0 && currentIndex < matches.length - 1 ? currentIndex + 1 : 0;
@@ -2552,7 +2544,7 @@ export function HistoricalMapStudio({
   }
 
   function fitSelectedMapPiece() {
-    if (!selectedMapPieceGeoreference || !hasOperationalMapPiecePlacement(selectedMapPieceGeoreference)) {
+    if (!selectedMapPieceGeoreference || !selectedMapPiecePlaced) {
       return;
     }
 
@@ -2561,8 +2553,9 @@ export function HistoricalMapStudio({
       longitude: selectedMapPieceGeoreference.centerLongitude,
     };
     setMapPlacementFitTarget("selected_piece");
-    requestExternalMapView(nextCenter, Math.max(modernMapZoom, 17), "fit_sheet", "fitSelectedMapPiece");
-    commitGeographicMapSettings({ center: nextCenter, zoom: Math.max(modernMapZoom, 17), editMode: geoEditMode, globalHistoricalOpacity: 1 }, false);
+    const fitZoom = Math.min(maximumFitGpsZoom, Math.max(modernMapZoom, 17));
+    requestExternalMapView(nextCenter, fitZoom, "fit_sheet", "fitSelectedMapPiece");
+    commitGeographicMapSettings({ center: nextCenter, zoom: fitZoom, editMode: geoEditMode, globalHistoricalOpacity: 1 }, false);
   }
 
   function fitAllPlacedMapPieces() {
@@ -2583,7 +2576,8 @@ export function HistoricalMapStudio({
     const capturedPage = selectedAtlasPage;
     const capturedAtlas = activeAtlas;
     const capturedPieceId = capturedPiece?.pieceId ?? "";
-    const capturedHasGeographicFootprint = hasOperationalMapPiecePlacement(capturedPlacement);
+    const capturedCanonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement: capturedPlacement });
+    const capturedHasGeographicFootprint = capturedCanonicalStatus === "draft" || capturedCanonicalStatus === "placed" || capturedCanonicalStatus === "reviewed";
 
     if (!capturedPiece || !capturedPlacement || !capturedPage || !capturedAtlas) {
       setSaveStatus("error");
@@ -2667,9 +2661,15 @@ export function HistoricalMapStudio({
       return { ok: false, message: payload?.message ?? "Map piece placement save failed." };
     }
 
-    const savedPlacement = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: capturedPieceId, atlasPageId: capturedPiece.atlasPageId, isPersisted: true });
+    const normalizedSavedPlacement = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: capturedPieceId, atlasPageId: capturedPiece.atlasPageId, isPersisted: true });
+    const savedPlacement = deriveCanonicalMapPiecePlacementStatus({ placement: normalizedSavedPlacement }) === "placed"
+      ? normalizeSanbornMapPieceGeoreference({ ...normalizedSavedPlacement, placementStatus: "placed", isPersisted: true })
+      : normalizedSavedPlacement;
 
-    if (!piecePlacementMatchesForPersistence(placementForSave, savedPlacement)) {
+    const persistenceExpected = deriveCanonicalMapPiecePlacementStatus({ placement: placementForSave }) === "placed"
+      ? normalizeSanbornMapPieceGeoreference({ ...placementForSave, placementStatus: "placed" })
+      : placementForSave;
+    if (!piecePlacementMatchesForPersistence(persistenceExpected, savedPlacement)) {
       setSaveStatus("error");
       setSaveMessage("Save failed: database confirmation did not match the current map piece placement.");
       return { ok: false, message: "Save failed: database confirmation did not match the current map piece placement." };
@@ -4664,7 +4664,7 @@ export function HistoricalMapStudio({
         opacity: Math.min(layer.opacity, 0.28),
       }))
     : [];
-  const selectedMapPieceBounds = selectedMapPieceGeoreference && hasOperationalMapPiecePlacement(selectedMapPieceGeoreference)
+  const selectedMapPieceBounds = selectedMapPieceGeoreference && ["placed", "reviewed"].includes(deriveCanonicalMapPiecePlacementStatus({ placement: selectedMapPieceGeoreference }))
     ? boundsFromCorners(selectedMapPieceGeoreference.corners)
     : null;
   const mapPlacementFitBounds =
@@ -4717,8 +4717,9 @@ export function HistoricalMapStudio({
   const overlayImageUrl = georeferenceDraft.targetType === "workspace" ? workspaceComposite?.url ?? null : selectedOverlayAsset?.signedUrl ?? null;
   const selectedSheetPlaced = Boolean(selectedSheetGeoreference && hasOperationalSheetPlacement(selectedSheetGeoreference));
   const selectedOpacity = selectedSheetGeoreference?.opacity ?? 0.5;
-  const selectedMapPieceHasGeographicFootprint = hasMapPieceGeographicFootprint(selectedMapPieceGeoreference);
-  const selectedMapPiecePlaced = Boolean(selectedMapPieceGeoreference && hasOperationalMapPiecePlacement(selectedMapPieceGeoreference));
+  const selectedMapPieceCanonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement: selectedMapPieceGeoreference });
+  const selectedMapPieceHasGeographicFootprint = selectedMapPieceCanonicalStatus === "draft" || selectedMapPieceCanonicalStatus === "placed" || selectedMapPieceCanonicalStatus === "reviewed";
+  const selectedMapPiecePlaced = selectedMapPieceCanonicalStatus === "placed" || selectedMapPieceCanonicalStatus === "reviewed";
   const selectedPlacementSaveable = Boolean(selectedMapPieceGeoreference && (selectedMapPieceHasGeographicFootprint || (selectedMapPieceGeoreference.placementStatus === "unable_to_place" && Boolean((unableToPlaceReason || selectedMapPieceGeoreference.unableToPlaceReason)?.trim()))));
   const selectedMapPieceOpacity = selectedMapPieceGeoreference?.opacity ?? 0.72;
   const selectedMapPieceRotation = selectedMapPieceGeoreference?.rotation ?? 0;
@@ -5789,7 +5790,7 @@ export function HistoricalMapStudio({
             <dt>Related sheet</dt>
             <dd>{selectedAtlasPage?.displayLabel || (selectedAtlasPage?.sheetNumber ? `Sheet ${selectedAtlasPage.sheetNumber}` : "Unavailable")}</dd>
             <dt>Placement status</dt>
-            <dd>{selectedMapPieceGeoreference?.placementStatus.replaceAll("_", " ") ?? "not placed"}</dd>
+            <dd>{selectedMapPiecePlacementLabel}</dd>
             <dt>Review status</dt>
             <dd>{selectedMapPiece?.reviewStatus ?? "unknown"}</dd>
             <dt>Visibility</dt>
@@ -5830,11 +5831,11 @@ export function HistoricalMapStudio({
     return (
       <>
         <section className="sanborn-placement-queue" aria-label="Geographic object placement queue">
-          <header><div><p className="panel__eyebrow">Geographic object placement</p><strong>{mapPiecePlacementQueue.counts.remaining} remaining of {mapPiecePlacementQueue.counts.totalPlaceable} placeable</strong></div><span>{mapPiecePlacementQueue.counts.placed} placed · {mapPiecePlacementQueue.counts.reviewed} reviewed · {mapPiecePlacementQueue.counts.unableToPlace} unable</span></header>
+          <header><div><p className="panel__eyebrow">Geographic object placement</p><strong>{mapPiecePlacementQueue.counts.geographicallyPlaced} of {mapPiecePlacementQueue.counts.total} placed</strong></div><span>{mapPiecePlacementQueue.counts.needPlacement} need placement · {mapPiecePlacementQueue.counts.draft} drafts · {mapPiecePlacementQueue.counts.placedAwaitingReview} awaiting review · {mapPiecePlacementQueue.counts.reviewed} reviewed · {mapPiecePlacementQueue.counts.unableToPlace} unable</span></header>
           <div className="sanborn-station-actions">
-            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed" || item.status === "draft")} onClick={() => movePlacementQueue("previous_unplaced")} type="button">Previous unplaced</button>
-            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed" || item.status === "draft")} onClick={() => movePlacementQueue("next_unplaced")} type="button">Next unplaced</button>
-            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "draft" || item.status === "placed")} onClick={() => movePlacementQueue("next_review")} type="button">Next review-needed object</button>
+            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed")} onClick={() => movePlacementQueue("previous_unplaced")} type="button">Previous unplaced</button>
+            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed")} onClick={() => movePlacementQueue("next_unplaced")} type="button">Next unplaced</button>
+            <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "placed")} onClick={() => movePlacementQueue("next_review")} type="button">Next review-needed object</button>
           </div>
           <div className="sanborn-placement-queue__list">
             {mapPiecePlacementQueue.items.map((item) => <button className={`sanborn-placement-queue__item is-${item.status}${item.pieceId === selectedMapPieceId ? " is-selected" : ""}`} data-focus-target={`map-piece-inspector-card:${item.pieceId}`} key={item.pieceId} onClick={() => openPlacementQueueItem(item)} type="button"><strong>{item.label}</strong><span>{item.geometryType} · {item.category} · Sheet {item.printedReference ?? "unresolved"}</span><small>{item.statusLabel}{item.reason ? ` · ${item.reason}` : ""}</small></button>)}
@@ -7006,7 +7007,7 @@ export function HistoricalMapStudio({
                   onMapClick={handleModernMapClick}
                   onMapViewChange={(center, zoom) => {
                     setMapCenter({ latitude: center[0], longitude: center[1] });
-                    setModernMapZoom(zoom);
+                    setModernMapZoom(Math.min(maximumManualGpsZoom, Math.max(0, zoom)));
                     commitGeographicMapSettings({ center: { latitude: center[0], longitude: center[1] }, zoom }, false);
                   }}
                   onMarkerDrag={(controlPointId, latitude, longitude) => updateControlPoint(controlPointId, { latitude, longitude })}
@@ -7048,7 +7049,7 @@ export function HistoricalMapStudio({
                 onMapClick={handleModernMapClick}
                 onMapViewChange={(center, zoom) => {
                   setMapCenter({ latitude: center[0], longitude: center[1] });
-                  setModernMapZoom(zoom);
+                  setModernMapZoom(Math.min(maximumManualGpsZoom, Math.max(0, zoom)));
                   commitGeographicMapSettings({ center: { latitude: center[0], longitude: center[1] }, zoom }, false);
                 }}
                 onMarkerDrag={(controlPointId, latitude, longitude) => updateControlPoint(controlPointId, { latitude, longitude })}

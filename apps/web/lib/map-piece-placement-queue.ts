@@ -1,8 +1,9 @@
-import { hasOperationalMapPiecePlacement, type SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
+import { deriveCanonicalMapPiecePlacementStatus, countCanonicalMapPiecePlacements, canonicalStatusLabel, type CanonicalMapPiecePlacementStatus, type MapPiecePlacementCounts as CanonicalMapPiecePlacementCounts } from "./map-piece-placement-status.ts";
+import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 
 export const mapPiecePlacementQueueStatuses = ["not_placed", "draft", "placed", "reviewed", "unable_to_place"] as const;
-export type MapPiecePlacementQueueStatus = (typeof mapPiecePlacementQueueStatuses)[number];
+export type MapPiecePlacementQueueStatus = CanonicalMapPiecePlacementStatus;
 
 export type MapPiecePlacementQueueItem = {
   pieceId: string;
@@ -18,26 +19,14 @@ export type MapPiecePlacementQueueItem = {
   placement: SanbornMapPieceGeoreference | null;
 };
 
-export type MapPiecePlacementCounts = {
-  totalPlaceable: number;
-  notPlaced: number;
-  draft: number;
-  placed: number;
-  reviewed: number;
-  unableToPlace: number;
-  remaining: number;
-};
+export type MapPiecePlacementCounts = CanonicalMapPiecePlacementCounts & { totalPlaceable: number; notPlaced: number; placed: number; remaining: number };
 
 function labelFor(piece: SanbornMapPieceRecord): string {
   return piece.titleText || piece.blockNumberText || `Feature ${String(piece.pieceSequence).padStart(2, "0")}`;
 }
 
 function statusFor(placement: SanbornMapPieceGeoreference | null): MapPiecePlacementQueueStatus {
-  if (placement?.placementStatus === "unable_to_place") return "unable_to_place";
-  if (!placement || placement.placementStatus === "unplaced" || !hasOperationalMapPiecePlacement(placement)) return "not_placed";
-  if (placement.placementStatus === "reviewed") return "reviewed";
-  if (placement.placementStatus === "draft") return "draft";
-  return "placed";
+  return deriveCanonicalMapPiecePlacementStatus({ placement });
 }
 
 export function deriveMapPiecePlacementQueue(input: {
@@ -62,22 +51,20 @@ export function deriveMapPiecePlacementQueue(input: {
         geometryType: piece.sourceGeometry?.geometryType ?? "polygon",
         printedReference: page.printedReference ?? (page.sheetNumber ? String(page.sheetNumber) : null),
         status,
-        statusLabel: status === "not_placed" ? "Not placed" : status === "unable_to_place" ? "Unable to place" : status === "draft" ? "Draft placement" : status === "reviewed" ? "Reviewed" : "Placed",
+        statusLabel: canonicalStatusLabel(status),
         reason: placement?.unableToPlaceReason ?? null,
         sourceAssetId: page.sanbornSheetAssetId,
         placement,
       };
     })
     .sort((left, right) => (left.status === "reviewed" ? 1 : 0) - (right.status === "reviewed" ? 1 : 0) || left.printedReference?.localeCompare(right.printedReference ?? "") || left.label.localeCompare(right.label));
-  const counts = items.reduce<MapPiecePlacementCounts>((summary, item) => {
-    summary.totalPlaceable += 1;
-    if (item.status === "not_placed") summary.notPlaced += 1;
-    if (item.status === "draft") summary.draft += 1;
-    if (item.status === "placed") summary.placed += 1;
-    if (item.status === "reviewed") summary.reviewed += 1;
-    if (item.status === "unable_to_place") summary.unableToPlace += 1;
-    return summary;
-  }, { totalPlaceable: 0, notPlaced: 0, draft: 0, placed: 0, reviewed: 0, unableToPlace: 0, remaining: 0 });
-  counts.remaining = counts.notPlaced + counts.draft;
+  const canonicalCounts = countCanonicalMapPiecePlacements(items.map((item) => item.status));
+  const counts: MapPiecePlacementCounts = {
+    ...canonicalCounts,
+    totalPlaceable: canonicalCounts.total,
+    notPlaced: canonicalCounts.needPlacement,
+    placed: canonicalCounts.placedAwaitingReview,
+    remaining: canonicalCounts.placementWorkRemaining,
+  };
   return { items, counts };
 }
