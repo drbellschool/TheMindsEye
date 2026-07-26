@@ -7,7 +7,7 @@
     "build": "next build",
     "test:placement-continuity": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/map-placement-continuity.test.ts",
     "start": "next start",
-    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts ./lib/sanborn-atlas.test.ts ./lib/historical-map-studio.test.ts ./lib/historical-map-georeference.test.ts ./lib/historical-map-sheet-georeference.test.ts ./lib/town-reconstruction.test.ts ./lib/reconstruction-task-ledger.test.ts ./lib/sanborn-source-image.test.ts ./lib/sanborn-source-context.test.ts ./lib/map-placement-inspector.test.ts ./lib/map-placement-continuity.test.ts ./lib/map-piece-placement-status.test.ts ./lib/map-piece-label.test.ts"
+    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node ./lib/community-status.test.ts ./lib/community-review-events.test.ts ./lib/community-source-detail.test.ts ./lib/community-source-links.test.ts ./lib/sanborn-intake.test.ts ./lib/sanborn-atlas.test.ts ./lib/historical-map-studio.test.ts ./lib/historical-map-georeference.test.ts ./lib/historical-map-sheet-georeference.test.ts ./lib/town-reconstruction.test.ts ./lib/reconstruction-task-ledger.test.ts ./lib/sanborn-source-image.test.ts ./lib/sanborn-source-context.test.ts ./lib/map-placement-inspector.test.ts ./lib/map-placement-continuity.test.ts ./lib/map-piece-placement-status.test.ts ./lib/map-piece-label.test.ts ./lib/placement-geometry-measurements.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
