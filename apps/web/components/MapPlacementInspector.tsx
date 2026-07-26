@@ -4,6 +4,7 @@ import { deriveMapPlacementInspectorState, mapPlacementInspectorStatusLabel, map
 import type { MapPieceDisplayScope, SanbornMapPieceGeoreference } from "@/lib/sanborn-map-piece-georeference";
 import type { MapPiecePlacementCounts, MapPiecePlacementQueueItem } from "@/lib/map-piece-placement-queue";
 import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "@/lib/sanborn-atlas";
+import type { PlacementSaveResult } from "@/lib/map-placement-continuity";
 
 type Props = {
   selectedPiece: SanbornMapPieceRecord | null; selectedPage: SanbornAtlasPageRecord | null; placement: SanbornMapPieceGeoreference | null;
@@ -13,7 +14,7 @@ type Props = {
   saveStatus: "idle" | "saving" | "saved" | "error"; saveMessage: string; showReferenceSheetAlignment: boolean; selectedAssetId: string; selectedSheetPlaced: boolean; hasSelectedSheetGeoreference: boolean;
   geoEditMode: "pan_modern_map" | "edit_historical_sheets"; selectedMapPieceLocked: boolean; selectedMapPieceVisible: boolean; pieceDisplayScope: MapPieceDisplayScope; allMapPieceBounds: boolean;
   onHide: () => void; onSelectQueueItem: (item: MapPiecePlacementQueueItem) => void; onPreviousUnplaced: () => void; onNextUnplaced: () => void; onNextReview: () => void;
-  onStartPlacement: () => void; onCancelPlacement: () => void; onSavePlacement: () => Promise<boolean>; onSaveAndNext: () => Promise<void>; onEditPlacement: () => void; onMarkReviewed: () => void;
+  onStartPlacement: () => void; onCancelPlacement: () => void; onSavePlacement: () => Promise<PlacementSaveResult>; onSaveAndNext: () => Promise<void>; onEditPlacement: () => void; onMarkReviewed: () => void;
   onConfirmUnableToPlace: () => void; onSetUnableToPlaceReason: (value: string) => void; onReloadPlacement: () => void; onResetPiece: () => void; onFitSelected: () => void; onCenterTown: () => void; onFitAll: () => void;
   onSetGeoEditMode: (mode: "pan_modern_map" | "edit_historical_sheets") => void; onSetOpacity: (value: number) => void; onSetRotation: (value: number) => void; onToggleVisible: () => void; onToggleLocked: () => void;
   onSetDisplayScope: (value: MapPieceDisplayScope) => void; onSetShowReferenceSheetAlignment: (value: boolean) => void; onPlaceSheet: () => void; onSaveSheet: () => void; onReloadSheet: () => void; onResetSheet: () => void; onResetAllSheets: () => void; onFitSheet: () => void; onToggleOverlayMode: () => void; onTogglePlainMap: () => void;
