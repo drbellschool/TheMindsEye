@@ -1400,10 +1400,13 @@ test("Map placement opens at useful town zoom and exposes piece-first controls",
   assert.match(studioComponent, /const minimumUsefulGpsZoom = 12;/);
   assert.match(studioComponent, /const defaultTownGpsZoom = 16;/);
   assert.match(studioComponent, /const minimumAutoGpsZoom = 15;/);
-  assert.match(studioComponent, /const maximumAutoGpsZoom = 18;/);
+  assert.match(studioComponent, /const maximumManualGpsZoom = 22;/);
+  assert.match(studioComponent, /const maximumFitGpsZoom = 21;/);
   assert.match(studioComponent, /function isMeaningfulGpsView[\s\S]*zoom >= minimumUsefulGpsZoom/s);
   assert.match(studioComponent, /function getGpsTownCenterFromState[\s\S]*return getTownCenterFromState\(studioState\) \?\? getDefaultTownCenter\(studioState\);/);
-  assert.match(studioComponent, /function getGpsTownZoomFromState[\s\S]*Math\.min\(maximumAutoGpsZoom, Math\.max\(minimumAutoGpsZoom, preferredZoom\)\)/s);
+  assert.match(studioComponent, /function getGpsTownZoomFromState[\s\S]*Math\.min\(maximumFitGpsZoom, Math\.max\(minimumAutoGpsZoom, preferredZoom\)\)/s);
+  assert.match(leafletComponent, /maxZoom=\{basemap\.maxZoom\}[\s\S]*zoomDelta=\{0\.5\}[\s\S]*zoomSnap=\{0\.25\}/s);
+  assert.equal(configuredBasemaps.every((basemap) => basemap.maxZoom === 22 && basemap.maxNativeZoom >= 19), true);
   assert.match(studioComponent, /function centerGpsOnActiveTown[\s\S]*const center = getGpsTownCenterFromState\(initialData\);[\s\S]*const zoom = getGpsTownZoomFromState\(initialData\);[\s\S]*setGeoEditMode\("pan_modern_map"\);[\s\S]*requestExternalMapView\(center, zoom, "town_package"/s);
   assert.match(studioComponent, /function enterGpsAlignment[\s\S]*setSelectedMapPieceId\(selectedMapPiece\.pieceId\)[\s\S]*if \(!isMeaningfulGpsView\(mapCenter, modernMapZoom\)\) \{\s*centerGpsOnActiveTown\("enterGpsAlignment"\);/s);
   assert.match(studioComponent, /function backToLastNonGpsWorkflowStep\(\)[\s\S]*changeAtlasWorkflowStep\(lastNonGpsWorkflowStep\);/);

@@ -3,6 +3,8 @@ export type BasemapConfig = {
   label: string;
   url: string;
   attribution: string;
+  maxNativeZoom: number;
+  maxZoom: number;
 };
 
 export type TileDiagnosticStatus = "idle" | "loading" | "loaded" | "error";
@@ -23,6 +25,8 @@ export const basemaps: BasemapConfig[] = [
     label: "OpenStreetMap",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxNativeZoom: 19,
+    maxZoom: 22,
   },
   {
     key: "esri_world_street",
@@ -30,6 +34,8 @@ export const basemaps: BasemapConfig[] = [
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
     attribution:
       'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
+    maxNativeZoom: 19,
+    maxZoom: 22,
   },
 ];
 

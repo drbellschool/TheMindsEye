@@ -1,7 +1,8 @@
 import type { StudioSheetAsset, StudioSourceOption, StudioTownPackage } from "./historical-map-studio.ts";
 import type { SanbornAtlasPageRecord, SanbornAtlasRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
 import { getSanbornPageDisplayLabel, getSanbornPagePrintedReference, pageTypeSupportsMapPieces, isClassifiedSanbornPage } from "./sanborn-atlas.ts";
-import { hasOperationalMapPiecePlacement, type SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
+import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
+import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
 import { sanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses } from "./sanborn-map-piece-features.ts";
 import { sourceRegionSupportsMapPieces, type SanbornTownIndexRegionRecord } from "./sanborn-town-index.ts";
 import type { ReconstructionContextQuery, ReconstructionWorkflowStepId } from "./town-reconstruction.ts";
@@ -174,11 +175,12 @@ export function deriveReconstructionTaskLedger(input: {
     const label = piece.titleText || (piece.blockNumberText ? `Block ${piece.blockNumberText}` : `Feature ${String(piece.pieceSequence).padStart(2, "0")}`);
     if (!pieceReviewed(piece, placement)) tasks.push(task({ id: `object-review:${piece.pieceId}`, label: `Review ${label}`, detail: "Confirm the object label, category, geometry, and notes.", stage: "map_pieces_blocks", priority: "normal", state: "review", resolved: false, context, category: "Geographic objects", parentId: `sheet:${piece.atlasPageId}` }));
     if ((piece.placementEligibility ?? "available") !== "available") continue;
-    const unable = placement?.placementStatus === "unable_to_place";
-    const unableResolved = unable && Boolean(placement?.unableToPlaceReason?.trim());
-    const placed = Boolean(placement?.isPersisted && hasOperationalMapPiecePlacement(placement));
-    const placementReviewed = placement?.placementStatus === "reviewed" || placement?.reviewStatus === "verified_fact";
+    const canonicalStatus = deriveCanonicalMapPiecePlacementStatus({ placement });
+    const unableResolved = canonicalStatus === "unable_to_place";
+    const placed = canonicalStatus === "placed" || canonicalStatus === "reviewed";
+    const placementReviewed = canonicalStatus === "reviewed";
     if (unableResolved) tasks.push(task({ id: `placement:${piece.pieceId}`, label: `${label} unable to place`, detail: "Documented placement exception is resolved.", stage: "map_placement", priority: "low", state: "exception", resolved: true, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
+    else if (canonicalStatus === "draft") tasks.push(task({ id: `placement:${piece.pieceId}`, label: `Save or reset ${label}`, detail: "This object has an unsaved geographic draft. Save it or reset the draft before continuing.", stage: "map_placement", priority: "normal", state: "incomplete", resolved: false, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
     else if (!placed) tasks.push(task({ id: `placement:${piece.pieceId}`, label: `Place ${label}`, detail: "Save a geographic placement or document why it cannot be placed.", stage: "map_placement", priority: "normal", state: "incomplete", resolved: false, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
     else if (!placementReviewed) tasks.push(task({ id: `placement:${piece.pieceId}`, label: `Review placement for ${label}`, detail: "Confirm the saved geographic placement.", stage: "map_placement", priority: "normal", state: "review", resolved: false, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
     else tasks.push(task({ id: `placement:${piece.pieceId}`, label: `${label} placement reviewed`, detail: "Placement review is complete.", stage: "map_placement", priority: "low", state: "completed", resolved: true, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));

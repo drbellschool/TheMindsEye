@@ -564,7 +564,7 @@ export function PlainLeafletMapTest({
   }
 
   return (
-    <MapContainer center={center} className="map-studio-leaflet-map" scrollWheelZoom zoom={14}>
+    <MapContainer center={center} className="map-studio-leaflet-map" maxZoom={basemap.maxZoom} scrollWheelZoom zoom={14} zoomDelta={0.5} zoomSnap={0.25}>
       <TileLayer
         attribution={basemap.attribution}
         eventHandlers={{
@@ -574,6 +574,8 @@ export function PlainLeafletMapTest({
           tileload: () => recordTileEvent("tileload"),
         }}
         key={`plain-${basemap.key}-${tileRetry}`}
+        maxNativeZoom={basemap.maxNativeZoom}
+        maxZoom={basemap.maxZoom}
         opacity={1}
         url={basemap.url}
       />
@@ -1840,7 +1842,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
   }
 
   return (
-    <MapContainer center={props.center} className="map-studio-leaflet-map" scrollWheelZoom zoom={props.zoom}>
+    <MapContainer center={props.center} className="map-studio-leaflet-map" maxZoom={basemap.maxZoom} scrollWheelZoom zoom={props.zoom} zoomDelta={0.5} zoomSnap={0.25}>
       {props.plainTileOnly ? null : <ConfigureLeafletPanes request={props.fitBoundsRequest + tileRetry} />}
       <TileLayer
         attribution={basemap.attribution}
@@ -1851,6 +1853,8 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
           tileload: () => recordTileEvent("tileload"),
         }}
         key={`${basemap.key}-${tileRetry}`}
+        maxNativeZoom={basemap.maxNativeZoom}
+        maxZoom={basemap.maxZoom}
         opacity={getModernTileLayerOpacity()}
         url={basemap.url}
       />
