@@ -103,6 +103,7 @@ import {
   type MapPieceDisplayScope,
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
+import { findNextUnplacedPlacementItem, mergePlacementStateFromServer, type PlacementSaveResult } from "@/lib/map-placement-continuity";
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
@@ -876,6 +877,7 @@ export function HistoricalMapStudio({
   const placementSaveInFlightRef = useRef(false);
   const [stageSize, setStageSize] = useState({ width: 1100, height: 720 });
   const [sheets, setSheets] = useState<StudioSheetAsset[]>(initialData.sheets);
+  const operationalSheetAssetCacheRef = useRef(new Map<string, StudioSheetAsset>());
   const [history, setHistory] = useState<StudioHistoryState>(buildInitialHistory(createPresentFromState(initialData)));
   const [geoHistory, setGeoHistory] = useState<SheetGeographicHistoryState>(buildInitialSheetGeographicHistory(createSheetGeographicPresentFromState(initialData)));
   const initialSelectedAssetId = initialData.sheets[0]?.assetId ?? "";
@@ -915,6 +917,8 @@ export function HistoricalMapStudio({
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
   const [selectedAtlasPageId, setSelectedAtlasPageId] = useState(initialData.atlasInventory.activePageId ?? "");
   const [selectedMapPieceId, setSelectedMapPieceId] = useState("");
+  const selectedMapPieceIdRef = useRef("");
+  selectedMapPieceIdRef.current = selectedMapPieceId;
   const [selectedIndexRegionId, setSelectedIndexRegionId] = useState(initialSelection.indexRegionId ?? "");
   const [townIndexMapMode, setTownIndexMapMode] = useState<TownIndexMissionMapMode>("select");
   const [townIndexDraftPoints, setTownIndexDraftPoints] = useState<SanbornNormalizedPoint[]>([]);
@@ -1078,6 +1082,21 @@ export function HistoricalMapStudio({
   const selectedPageHasBlockingDependencies = hasBlockingSanbornPageDependencies(selectedPageDependencySummary);
   const pieceInventoryBlocked = atlasWorkflowStep === "piece_inventory" && Boolean(selectedAtlasPage && !selectedAtlasPage.isPersisted);
   const isGpsAlignmentStep = atlasWorkflowStep === "gps_alignment";
+  const operationalSheets = useMemo(() => {
+    const activeAssetIds = new Set(
+      atlasInventory.pages.filter((page) => page.atlasId === (activeAtlas?.atlasId ?? selectedAtlasId) && !page.archivedAt).map((page) => page.sanbornSheetAssetId),
+    );
+    for (const assetId of operationalSheetAssetCacheRef.current.keys()) {
+      if (!activeAssetIds.has(assetId)) operationalSheetAssetCacheRef.current.delete(assetId);
+    }
+    for (const asset of sheets) {
+      if (asset.signedUrl) operationalSheetAssetCacheRef.current.set(asset.assetId, asset);
+    }
+    return sheets.map((asset) => {
+      const cached = operationalSheetAssetCacheRef.current.get(asset.assetId);
+      return !asset.signedUrl && cached?.signedUrl ? { ...asset, signedUrl: cached.signedUrl, signedUrlExpiresAt: cached.signedUrlExpiresAt, signedUrlError: undefined } : asset;
+    });
+  }, [activeAtlas?.atlasId, atlasInventory.pages, selectedAtlasId, sheets]);
   const allOperationalMapPieceLayers = useMemo(
     () =>
       buildOperationalMapPieceLayers({
@@ -1085,13 +1104,13 @@ export function HistoricalMapStudio({
         pages: atlasInventory.pages,
         pieces: atlasInventory.pieces,
         placements: mapPieceGeoreferences,
-        assets: sheets,
+        assets: operationalSheets,
         displayScope: "all_placed_pieces",
         showHistoricalLayers,
         comparisonMode,
         getPieceLabel: getMapPieceDisplayLabel,
       }),
-    [activeAtlas?.atlasId, selectedAtlasId, atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, sheets, showHistoricalLayers, comparisonMode],
+    [activeAtlas?.atlasId, selectedAtlasId, atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, operationalSheets, showHistoricalLayers, comparisonMode],
   );
   const mapPieceLayers = useMemo(
     () =>
@@ -1528,7 +1547,9 @@ export function HistoricalMapStudio({
     setGlobalHistoricalOpacity(initialData.geographicMap.globalHistoricalOpacity);
     setSheetImageStates({});
     setAtlasInventory(initialData.atlasInventory);
-    setMapPieceGeoreferences(mergeSavedAndDefaultMapPieceGeoreferences(initialData.atlasInventory.pieces, initialData.mapPieceGeoreferences));
+    const serverPlacements = mergeSavedAndDefaultMapPieceGeoreferences(initialData.atlasInventory.pieces, initialData.mapPieceGeoreferences);
+    const currentEditionPieceIds = new Set(serverPlacements.map((placement) => placement.pieceId));
+    setMapPieceGeoreferences((current) => mergePlacementStateFromServer(current.filter((placement) => currentEditionPieceIds.has(placement.pieceId)), serverPlacements));
     setTownIndexRegions(initialData.townIndexRegions);
     setSelectedAtlasId(nextAtlasId);
     setSelectedAtlasPageId(nextPageId);
@@ -2406,6 +2427,9 @@ export function HistoricalMapStudio({
   }
 
   function selectMapPieceForPlacement(pieceId: string) {
+    if (placementSaveInFlightRef.current) {
+      return;
+    }
     const selection = resolveMapPiecePlacementSelection({
       atlasId: activeAtlas?.atlasId ?? selectedAtlasId,
       pieceId,
@@ -2430,6 +2454,9 @@ export function HistoricalMapStudio({
   }
 
   function openPlacementQueueItem(item: MapPiecePlacementQueueItem) {
+    if (placementSaveInFlightRef.current) {
+      return;
+    }
     const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === item.pieceId);
     if (!piece) return;
     if (saveStatus === "error") {
@@ -2550,33 +2577,40 @@ export function HistoricalMapStudio({
     setFitOverlayRequest((current) => current + 1);
   }
 
-  async function saveSelectedMapPiecePlacement(): Promise<boolean> {
-    if (!selectedMapPiece || !selectedMapPieceGeoreference || !selectedAtlasPage || !activeAtlas) {
+  async function saveSelectedMapPiecePlacement(): Promise<PlacementSaveResult> {
+    const capturedPiece = selectedMapPiece;
+    const capturedPlacement = selectedMapPieceGeoreference;
+    const capturedPage = selectedAtlasPage;
+    const capturedAtlas = activeAtlas;
+    const capturedPieceId = capturedPiece?.pieceId ?? "";
+    const capturedHasGeographicFootprint = hasOperationalMapPiecePlacement(capturedPlacement);
+
+    if (!capturedPiece || !capturedPlacement || !capturedPage || !capturedAtlas) {
       setSaveStatus("error");
       setSaveMessage("Select a saved map piece before saving placement.");
-      return false;
+      return { ok: false, message: "Select a saved map piece before saving placement." };
     }
 
     if (!selectedPageSupportsMapPlacement) {
       setSaveStatus("error");
       setSaveMessage(selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before saving placement.");
-      return false;
+      return { ok: false, message: selectedPageToolBlockMessage || "Classify this page as a Sanborn Sheet or Inset before saving placement." };
     }
 
-    if (!selectedMapPieceHasGeographicFootprint && selectedMapPieceGeoreference.placementStatus !== "unable_to_place") {
-      const validation = validateMapPieceGeographicCorners(selectedMapPieceGeoreference.corners);
+    if (!capturedHasGeographicFootprint && capturedPlacement.placementStatus !== "unable_to_place") {
+      const validation = validateMapPieceGeographicCorners(capturedPlacement.corners);
       setSaveStatus("error");
       setSaveMessage(validation.ok ? "Place the selected map piece before saving placement." : validation.error);
-      return false;
+      return { ok: false, message: validation.ok ? "Place the selected map piece before saving placement." : validation.error };
     }
 
-    const placementForSave = selectedMapPieceGeoreference.placementStatus === "unable_to_place"
-      ? normalizeSanbornMapPieceGeoreference({ ...selectedMapPieceGeoreference, unableToPlaceReason: unableToPlaceReason || selectedMapPieceGeoreference.unableToPlaceReason, isPersisted: false })
-      : selectedMapPieceGeoreference;
+    const placementForSave = capturedPlacement.placementStatus === "unable_to_place"
+      ? normalizeSanbornMapPieceGeoreference({ ...capturedPlacement, unableToPlaceReason: unableToPlaceReason || capturedPlacement.unableToPlaceReason, isPersisted: false })
+      : capturedPlacement;
     if (placementForSave.placementStatus === "unable_to_place" && !placementForSave.unableToPlaceReason?.trim()) {
       setSaveStatus("error");
       setSaveMessage("Unable to place requires a reason.");
-      return false;
+      return { ok: false, message: "Unable to place requires a reason." };
     }
 
     const activeTownPackage = initialData.activeTownPackage;
@@ -2584,7 +2618,7 @@ export function HistoricalMapStudio({
     if (!activeTownPackage || atlasReadOnly || saveInFlightRef.current || placementSaveInFlightRef.current) {
       setSaveStatus("error");
       setSaveMessage("Map piece placement save failed: write access is unavailable.");
-      return false;
+      return { ok: false, message: "Map piece placement save failed: write access is unavailable." };
     }
 
     saveInFlightRef.current = true;
@@ -2605,7 +2639,7 @@ export function HistoricalMapStudio({
             workspaceName: initialData.workspace?.name ?? `${activeTownPackage.name} ${initialData.activeMapYear ?? activeTownPackage.year} Historical Map Studio`,
             mapCenter: mapCenterForSave,
             mapZoom: modernMapZoom,
-            pieceId: selectedMapPiece.pieceId,
+            pieceId: capturedPieceId,
             placement: placementForSave,
           }),
         });
@@ -2622,7 +2656,7 @@ export function HistoricalMapStudio({
     if (!saveResult.ok) {
       setSaveStatus("error");
       setSaveMessage(`Save failed: ${saveResult.message}`);
-      return false;
+      return { ok: false, message: saveResult.message };
     }
 
     const { response, payload } = saveResult.value;
@@ -2630,32 +2664,26 @@ export function HistoricalMapStudio({
     if (!response.ok || !payload?.ok || !payload.placement) {
       setSaveStatus("error");
       setSaveMessage(`Save failed: ${payload?.message ?? "Map piece placement save failed."}`);
-      return false;
+      return { ok: false, message: payload?.message ?? "Map piece placement save failed." };
     }
 
-    const savedPlacement = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: selectedMapPiece.pieceId, atlasPageId: selectedMapPiece.atlasPageId, isPersisted: true });
+    const savedPlacement = normalizeSanbornMapPieceGeoreference({ ...payload.placement, pieceId: capturedPieceId, atlasPageId: capturedPiece.atlasPageId, isPersisted: true });
 
     if (!piecePlacementMatchesForPersistence(placementForSave, savedPlacement)) {
       setSaveStatus("error");
       setSaveMessage("Save failed: database confirmation did not match the current map piece placement.");
-      return false;
+      return { ok: false, message: "Save failed: database confirmation did not match the current map piece placement." };
     }
 
-    replaceMapPieceGeoreference(savedPlacement);
+    setMapPieceGeoreferences((current) => mergePlacementStateFromServer(current, [savedPlacement]));
     if (payload.workspaceId) setResolvedMapPlacementWorkspaceId(payload.workspaceId);
-    setSaveStatus("saved");
-    setSaveMessage("Map piece placement saved.");
-    setLastSavedAt(payload.savedAt ?? new Date().toISOString());
-    setIsDirty(false);
-    pendingStudioSelectionRef.current = {
-      atlasId: activeAtlas.atlasId,
-      pageId: selectedAtlasPage.pageId,
-      pieceId: selectedMapPiece.pieceId,
-      assetId: selectedAtlasPage.sanbornSheetAssetId,
-      workflowStep: atlasWorkflowStep,
-    };
-    router.refresh();
-    return true;
+    if (selectedMapPieceIdRef.current === capturedPieceId) {
+      setSaveStatus("saved");
+      setSaveMessage(`${capturedPiece.titleText || capturedPiece.blockNumberText || "Map piece"} saved.`);
+      setLastSavedAt(payload.savedAt ?? new Date().toISOString());
+      setIsDirty(false);
+    }
+    return { ok: true, placement: savedPlacement, workspaceId: payload.workspaceId ?? null, pieceId: capturedPieceId };
   }
 
   function startSelectedMapPiecePlacement() {
@@ -2682,10 +2710,15 @@ export function HistoricalMapStudio({
   }
 
   async function savePlacementAndNext() {
+    const currentPieceId = selectedMapPiece?.pieceId ?? "";
+    const next = findNextUnplacedPlacementItem({ items: mapPiecePlacementQueue.items, currentPieceId });
     const saved = await saveSelectedMapPiecePlacement();
-    if (!saved) return;
-    const next = mapPiecePlacementQueue.items.find((item) => item.pieceId !== selectedMapPiece?.pieceId && item.status === "not_placed");
-    if (next) openPlacementQueueItem(next);
+    if (!saved.ok) return;
+    if (!next) {
+      setSaveMessage("Placement saved. No unplaced objects remain.");
+      return;
+    }
+    openPlacementQueueItem(next);
   }
 
   async function reloadSelectedMapPiecePlacement() {
