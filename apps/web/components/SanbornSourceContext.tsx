@@ -6,6 +6,7 @@ import { SanbornSourceImageStatus, useSanbornSourceImageState } from "@/componen
 import { buildSanbornSourceContextViewport, normalizedPointToSourceContextPoint, panSanbornSourceContextViewport, type SanbornSourceContextViewport } from "@/lib/sanborn-source-context";
 import type { SanbornMapPieceRecord } from "@/lib/sanborn-atlas";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
+import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 
 type SanbornSourceContextProps = {
   piece: SanbornMapPieceRecord | null;
@@ -83,7 +84,7 @@ export function SanbornSourceContext({ piece, asset, sourceLabel }: SanbornSourc
   return (
     <aside className="sanborn-source-context" aria-label="Source context">
       <header className="sanborn-source-context__header">
-        <div><span>SOURCE CONTEXT</span><strong>{piece.titleText || piece.blockNumberText || sourceLabel}</strong><small>{sourceLabel}</small></div>
+        <div><span>SOURCE CONTEXT</span><strong>{formatMapPiecePlacementLabel(piece)}</strong><small>{sourceLabel}</small></div>
         <div className="sanborn-source-context__actions">
           <button aria-label="Reset source context view" className="sanborn-source-context__reset" onClick={resetView} type="button">Reset view</button>
           <button aria-label="Hide source context" className="sanborn-source-context__hide" onClick={() => toggleHidden(true)} type="button">Hide</button>
@@ -91,7 +92,7 @@ export function SanbornSourceContext({ piece, asset, sourceLabel }: SanbornSourc
       </header>
       <div className={`sanborn-source-context__viewport is-${sourceImage.state}`} onPointerCancel={handlePointerUp} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} style={{ aspectRatio: viewport.aspectRatio }}>
         {asset.signedUrl ? (
-          <svg aria-label={`Source context for ${piece.titleText || piece.blockNumberText || sourceLabel}`} className="sanborn-source-context__svg" preserveAspectRatio="none" role="img" viewBox={`0 0 ${viewport.width} ${viewport.height}`}>
+          <svg aria-label={`Source context for ${formatMapPiecePlacementLabel(piece)}`} className="sanborn-source-context__svg" preserveAspectRatio="none" role="img" viewBox={`0 0 ${viewport.width} ${viewport.height}`}>
             <image className="sanborn-source-context__image" href={asset.signedUrl} height={asset.height} key={sourceImage.imageKey} onError={sourceImage.onError} onLoad={sourceImage.onLoad} preserveAspectRatio="xMidYMid slice" width={asset.width} x={-viewport.x} y={-viewport.y} />
             {sourceImage.isLoaded && overlayPoints ? <polygon className="sanborn-source-context__highlight" points={overlayPoints} /> : null}
           </svg>

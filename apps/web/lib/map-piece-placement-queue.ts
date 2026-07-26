@@ -1,6 +1,7 @@
 import { deriveCanonicalMapPiecePlacementStatus, countCanonicalMapPiecePlacements, canonicalStatusLabel, type CanonicalMapPiecePlacementStatus, type MapPiecePlacementCounts as CanonicalMapPiecePlacementCounts } from "./map-piece-placement-status.ts";
 import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import type { SanbornAtlasPageRecord, SanbornMapPieceRecord } from "./sanborn-atlas.ts";
+import { formatMapPiecePlacementLabel } from "./map-piece-label.ts";
 
 export const mapPiecePlacementQueueStatuses = ["not_placed", "draft", "placed", "reviewed", "unable_to_place"] as const;
 export type MapPiecePlacementQueueStatus = CanonicalMapPiecePlacementStatus;
@@ -22,7 +23,7 @@ export type MapPiecePlacementQueueItem = {
 export type MapPiecePlacementCounts = CanonicalMapPiecePlacementCounts & { totalPlaceable: number; notPlaced: number; placed: number; remaining: number };
 
 function labelFor(piece: SanbornMapPieceRecord): string {
-  return piece.titleText || piece.blockNumberText || `Feature ${String(piece.pieceSequence).padStart(2, "0")}`;
+  return formatMapPiecePlacementLabel(piece);
 }
 
 function statusFor(placement: SanbornMapPieceGeoreference | null): MapPiecePlacementQueueStatus {

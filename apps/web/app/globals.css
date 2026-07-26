@@ -5278,6 +5278,12 @@ body:has(.minimal-sanborn-gps) {
   padding: 7px 10px;
 }
 
+.map-studio-runtime-debug__controls { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; }
+.map-studio-runtime-debug__controls button, .map-studio-runtime-debug__panel header button { border: 1px solid rgba(246, 231, 203, 0.28); border-radius: 5px; background: rgba(246, 231, 203, 0.08); color: #f6e7cb; cursor: pointer; font: inherit; padding: 4px 7px; }
+.map-studio-runtime-debug__controls button.is-selected { border-color: #e2be7e; color: #f6d37e; }
+.map-studio-runtime-debug__panel { border-top: 1px solid rgba(246, 231, 203, 0.16); }
+.map-studio-runtime-debug__panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; }
+
 .map-studio-runtime-debug dl {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);

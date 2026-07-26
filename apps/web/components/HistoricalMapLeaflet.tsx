@@ -70,6 +70,7 @@ type HistoricalMapLeafletProps = {
   onSheetImageStateChange?: (state: SheetImageLoadState) => void;
   onTileDiagnosticsChange?: (diagnostics: TileDiagnostics & { basemapKey: string; tileLayerMounted: boolean }) => void;
   onTileRuntimeDebugChange?: (debug: LeafletTileRuntimeDebug) => void;
+  onBasemapChange?: (basemapKey: string) => void;
   locationMarker?: GeoCoordinate | null;
   plainTileOnly?: boolean;
   viewRefreshRequest?: number;
@@ -452,15 +453,18 @@ function LeafletTileRuntimeDebugPanel({
   basicOnly = false,
   diagnostics,
   onChange,
+  onBasemapChange,
   selectedBasemap,
 }: {
   basicOnly?: boolean;
   diagnostics: TileDiagnostics;
   onChange?: (debug: LeafletTileRuntimeDebug) => void;
+  onBasemapChange?: (basemapKey: string) => void;
   selectedBasemap: string;
 }) {
   const map = useMap();
   const [debug, setDebug] = useState<LeafletTileRuntimeDebug>(() => createEmptyTileRuntimeDebug(selectedBasemap));
+  const [debugOpen, setDebugOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -493,8 +497,13 @@ function LeafletTileRuntimeDebugPanel({
   }
 
   return (
-    <details className="map-studio-runtime-debug" open>
-      <summary>Leaflet tile paint debug</summary>
+    <div className="map-studio-runtime-debug">
+      <div className="map-studio-runtime-debug__controls" role="group" aria-label="Modern basemap controls">
+        {onBasemapChange ? basemaps.map((basemap) => <button className={basemap.key === selectedBasemap ? "is-selected" : ""} key={basemap.key} onClick={() => onBasemapChange(basemap.key)} type="button">{basemap.label === "OpenStreetMap" ? "Street" : basemap.label}</button>) : null}
+        <button className="map-studio-runtime-debug__toggle" onClick={() => setDebugOpen((value) => !value)} type="button">Debug{diagnostics.status === "error" ? " · warning" : ""}</button>
+      </div>
+      {debugOpen ? <section className="map-studio-runtime-debug__panel" aria-label="Leaflet tile paint debug">
+        <header><strong>Leaflet tile paint debug</strong><button onClick={() => setDebugOpen(false)} type="button">Close</button></header>
       <dl>
         <dt>.leaflet-tile count</dt>
         <dd>{debug.tileCount}</dd>
@@ -525,7 +534,8 @@ function LeafletTileRuntimeDebugPanel({
         <dt>Center / zoom</dt>
         <dd>{debug.center.latitude.toFixed(6)}, {debug.center.longitude.toFixed(6)} / {debug.zoom}</dd>
       </dl>
-    </details>
+      </section> : null}
+    </div>
   );
 }
 
@@ -1359,13 +1369,12 @@ function TransformedPieceLayer({
   const latestRef = useRef({ layer, isSelected, mode, onSelect, onCommit });
   latestRef.current = { layer, isSelected, mode, onSelect, onCommit };
   const [maskedImage, setMaskedImage] = useState<{ url: string; width: number; height: number } | null>(null);
+  const maskedImageRef = useRef<{ url: string; width: number; height: number } | null>(null);
   const [maskError, setMaskError] = useState("");
   const [geometryError, setGeometryError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl: string | null = null;
-    setMaskedImage(null);
     setMaskError("");
     if (!layer.imageUrl) {
       setMaskError("Source image signed URL is unavailable.");
@@ -1375,8 +1384,10 @@ function TransformedPieceLayer({
     void createMaskedPieceImageUrl(layer)
       .then((image) => {
         if (!cancelled) {
-          objectUrl = image.url;
+          const previousUrl = maskedImageRef.current?.url ?? null;
+          maskedImageRef.current = image;
           setMaskedImage(image);
+          if (previousUrl && previousUrl !== image.url) URL.revokeObjectURL(previousUrl);
         } else {
           URL.revokeObjectURL(image.url);
         }
@@ -1389,11 +1400,12 @@ function TransformedPieceLayer({
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
   }, [layer.imageUrl, layer.pieceId, JSON.stringify(layer.sourcePolygon), layer.sourceImageWidth, layer.sourceImageHeight]);
+
+  useEffect(() => () => {
+    if (maskedImageRef.current?.url) URL.revokeObjectURL(maskedImageRef.current.url);
+  }, []);
 
   useEffect(() => {
     if (mode !== "edit_historical_sheets") {
@@ -1757,7 +1769,9 @@ function GeographicFeaturePlacement({
       centerLatitude: coordinates[0]?.[0] ?? layer.centerLatitude,
       centerLongitude: coordinates[0]?.[1] ?? layer.centerLongitude,
       placementStatus: "draft",
-      isPersisted: false,
+      // Editing a saved geographic object makes it dirty; it does not erase
+      // the fact that its database placement row already exists.
+      isPersisted: layer.isPersisted,
     });
   };
 
@@ -1984,6 +1998,7 @@ export function HistoricalMapLeaflet(props: HistoricalMapLeafletProps) {
 
       <LeafletTileRuntimeDebugPanel
         diagnostics={tileDiagnostics}
+        onBasemapChange={props.onBasemapChange}
         onChange={props.onTileRuntimeDebugChange}
         selectedBasemap={basemap.key}
       />
