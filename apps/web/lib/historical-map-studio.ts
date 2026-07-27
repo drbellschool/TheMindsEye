@@ -4,6 +4,7 @@ import type { GeographicMapSettings, SheetGeographicTransform } from "./historic
 import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import type { SanbornTownIndexRegionRecord } from "./sanborn-town-index.ts";
 import type { SanbornAtlasInventoryState } from "./sanborn-atlas.ts";
+import type { BirdsEyePerspectiveState } from "./birds-eye-calibration.ts";
 
 export const studioAutosaveDelayMs = 13_000;
 export const studioSignedUrlTtlSeconds = 300;
@@ -168,6 +169,7 @@ export type HistoricalMapStudioState = {
   geographicMap: GeographicMapSettings;
   georeferences: HistoricalMapGeoreference[];
   atlasInventory: SanbornAtlasInventoryState;
+  birdsEye: BirdsEyePerspectiveState;
   selectedBasemap: string;
   overlayOpacity: number;
   overlayVisible: boolean;

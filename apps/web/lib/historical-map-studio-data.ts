@@ -60,6 +60,7 @@ import { sanbornSheetBucket } from "./sanborn-intake.ts";
 import { createEmptySanbornAtlasInventoryState, getSavedSanbornEditionYears, getUnassignedSanbornUploads } from "./sanborn-atlas.ts";
 import { loadSanbornAtlasInventory } from "./sanborn-atlas-data.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
+import { birdsEyeCalibrationQuality, defaultBirdsEyeGlobalParameters, type BirdsEyeCalibration, type BirdsEyeControlPoint, type BirdsEyePerspectiveState, type BirdsEyeReferenceAsset } from "./birds-eye-calibration.ts";
 
 type TownPackageRow = {
   id: string;
@@ -337,6 +338,19 @@ export type LoadHistoricalMapStudioOptions = {
 
 type SupabaseAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
 
+type BirdsEyeAssetRow = {
+  id: string; asset_id: string; town_package_id: string; source_record_id: string | null; original_filename: string;
+  storage_bucket: string; storage_path: string; mime_type: string; byte_size: number; width: number; height: number;
+  sha256_checksum: string; evidence_classification: string; review_status: string; rights_note: string | null;
+  intake_notes: string | null; created_at: string | null; updated_at: string | null;
+};
+type BirdsEyeCalibrationRow = { id: string; town_package_id: string; atlas_id: string; reference_asset_id: string | null; title: string; calibration_status: string; unavailable_reason: string | null; global_parameters: unknown; warp_type: string; solver_version: string; warp_model: unknown; quality_summary: unknown; notes: string | null; updated_at: string | null };
+type BirdsEyeControlPointRow = { id: string; calibration_id: string; sequence_number: number; label: string | null; note: string | null; anchor_type: string; linked_map_piece_id: string | null; longitude: number | null; latitude: number | null; image_x: number | null; image_y: number | null; enabled: boolean; deleted_at: string | null };
+
+function objectValue(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function mapBirdsEyeAsset(row: BirdsEyeAssetRow, signedUrl: string | null): BirdsEyeReferenceAsset { return { id: row.id, assetId: row.asset_id, townPackageId: row.town_package_id, sourceRecordId: row.source_record_id, originalFilename: row.original_filename, storageBucket: row.storage_bucket, storagePath: row.storage_path, signedUrl, width: row.width, height: row.height, mimeType: row.mime_type, byteSize: row.byte_size, checksum: row.sha256_checksum, evidenceClassification: row.evidence_classification, reviewStatus: row.review_status, rightsNote: row.rights_note, intakeNotes: row.intake_notes, createdAt: row.created_at, updatedAt: row.updated_at }; }
+function mapBirdsEyePoint(row: BirdsEyeControlPointRow): BirdsEyeControlPoint { return { id: row.id, sequence: row.sequence_number, label: row.label ?? `Point ${row.sequence_number}`, note: row.note ?? "", anchorType: row.anchor_type as BirdsEyeControlPoint["anchorType"], linkedMapPieceId: row.linked_map_piece_id, longitude: row.longitude, latitude: row.latitude, imageX: row.image_x, imageY: row.image_y, enabled: row.enabled, deletedAt: row.deleted_at }; }
+
 function createEmptyState(input: {
   mode: StudioMode;
   warningMessage?: string;
@@ -366,6 +380,7 @@ function createEmptyState(input: {
     geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
     atlasInventory: createEmptySanbornAtlasInventoryState({ warningMessage: input.warningMessage }),
+    birdsEye: { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "unavailable", ready: true },
     selectedBasemap: "osm",
     overlayOpacity: 0.65,
     overlayVisible: true,
@@ -1300,11 +1315,52 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     resolvedMapView.recoveredFromInvalidWorkspaceCenter && resolvedMapView.center
       ? `Recovered map center from invalid saved coordinates using ${resolvedMapView.source.replaceAll("_", " ")}.`
       : undefined;
-  const warningMessage = [workspaceWarning, activeTownSelection.warningMessage, mapWarning, townIndexWarning].filter(Boolean).join(" ");
+  let birdsEye: BirdsEyePerspectiveState = { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "supabase", ready: true };
+  if (activeAtlasForYear) {
+    const [birdsEyeAssetsResult, designationResult, calibrationResult] = await Promise.all([
+      supabase.from("historical_map_birds_eye_reference_assets").select("id, asset_id, town_package_id, source_record_id, original_filename, storage_bucket, storage_path, mime_type, byte_size, width, height, sha256_checksum, evidence_classification, review_status, rights_note, intake_notes, created_at, updated_at").eq("town_package_id", activeTownPackage.id).order("created_at", { ascending: true }),
+      supabase.from("sanborn_atlases").select("birds_eye_reference_asset_id").eq("id", activeAtlasForYear.rowId).eq("town_package_id", activeTownPackage.id).maybeSingle(),
+      supabase.from("historical_map_birds_eye_calibrations").select("id, town_package_id, atlas_id, reference_asset_id, title, calibration_status, unavailable_reason, global_parameters, warp_type, solver_version, warp_model, quality_summary, notes, updated_at").eq("atlas_id", activeAtlasForYear.rowId).eq("town_package_id", activeTownPackage.id).maybeSingle(),
+    ]);
+    if (!birdsEyeAssetsResult.error && !designationResult.error && !calibrationResult.error) {
+      const assetRows = (birdsEyeAssetsResult.data ?? []) as BirdsEyeAssetRow[];
+      const assetsWithUrls = await Promise.all(assetRows.map(async (row) => {
+        const signed = await supabase.storage.from(row.storage_bucket).createSignedUrl(row.storage_path, studioSignedUrlTtlSeconds);
+        return mapBirdsEyeAsset(row, signed.error ? null : signed.data?.signedUrl ?? null);
+      }));
+      const calibrationRow = calibrationResult.data as BirdsEyeCalibrationRow | null;
+      const designatedAssetRowId = (designationResult.data as { birds_eye_reference_asset_id?: string | null } | null)?.birds_eye_reference_asset_id ?? null;
+      const designatedAsset = assetRows.find((row) => row.id === designatedAssetRowId) ?? null;
+      let controlPoints: BirdsEyeControlPoint[] = [];
+      if (calibrationRow) {
+        const pointsResult = await supabase.from("historical_map_birds_eye_control_points").select("id, calibration_id, sequence_number, label, note, anchor_type, linked_map_piece_id, longitude, latitude, image_x, image_y, enabled, deleted_at").eq("calibration_id", calibrationRow.id).is("deleted_at", null).order("sequence_number", { ascending: true });
+        if (!pointsResult.error) controlPoints = (pointsResult.data ?? []).map((row) => mapBirdsEyePoint(row as BirdsEyeControlPointRow));
+      }
+      birdsEye = {
+        assets: assetsWithUrls,
+        designatedAssetId: designatedAsset?.asset_id ?? null,
+        calibration: calibrationRow ? {
+          id: calibrationRow.id, townPackageId: calibrationRow.town_package_id, atlasId: activeAtlasForYear.atlasId, referenceAssetId: assetRows.find((row) => row.id === calibrationRow.reference_asset_id)?.asset_id ?? null, title: calibrationRow.title,
+          status: calibrationRow.calibration_status as BirdsEyeCalibration["status"], unavailableReason: calibrationRow.unavailable_reason,
+          globalParameters: { ...defaultBirdsEyeGlobalParameters, ...objectValue(calibrationRow.global_parameters) } as BirdsEyeCalibration["globalParameters"], warpType: "delaunay_piecewise_affine", solverVersion: calibrationRow.solver_version, warpModel: objectValue(calibrationRow.warp_model), quality: { ...birdsEyeCalibrationQuality(controlPoints), ...objectValue(calibrationRow.quality_summary) } as BirdsEyeCalibration["quality"], notes: calibrationRow.notes ?? "", updatedAt: calibrationRow.updated_at,
+        } : null,
+        controlPoints,
+        dataSource: "supabase",
+        ready: true,
+      };
+    } else {
+      // The additive Step 7 schema may be deploying independently. Keep the
+      // established six stations usable while showing the missing capability
+      // as unavailable instead of turning the whole studio read-only.
+      birdsEye = { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "unavailable", ready: true };
+    }
+  }
+
+  const finalWarningMessage = [workspaceWarning, activeTownSelection.warningMessage, mapWarning, townIndexWarning].filter(Boolean).join(" ");
 
   return {
     mode: workspaceWarning ? "read_only" : "public",
-    warningMessage: warningMessage || undefined,
+    warningMessage: finalWarningMessage || undefined,
     dataSource: "supabase",
     townPackages,
     activeTownPackage,
@@ -1324,6 +1380,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     geographicMap: mapGeographicSettings(workspaceRow, resolvedMapView),
     georeferences,
     atlasInventory,
+    birdsEye,
     selectedBasemap: workspaceRow?.selected_basemap ?? primaryGeoreference?.selectedBasemap ?? "osm",
     overlayOpacity: primaryGeoreference?.overlayOpacity ?? 0.65,
     overlayVisible: primaryGeoreference?.overlayVisible ?? true,

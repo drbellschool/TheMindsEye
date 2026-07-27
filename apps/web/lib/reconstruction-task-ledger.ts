@@ -7,6 +7,7 @@ import { getActiveSanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuse
 import { deriveSheetMapPieceAudit } from "./sheet-map-piece-audit.ts";
 import { sourceRegionSupportsMapPieces, type SanbornTownIndexRegionRecord } from "./sanborn-town-index.ts";
 import type { ReconstructionContextQuery, ReconstructionWorkflowStepId } from "./town-reconstruction.ts";
+import type { BirdsEyePerspectiveState } from "./birds-eye-calibration.ts";
 
 export const ledgerWorkflowOrder: ReconstructionWorkflowStepId[] = [
   "town_edition",
@@ -15,6 +16,7 @@ export const ledgerWorkflowOrder: ReconstructionWorkflowStepId[] = [
   "sheet_inventory",
   "map_pieces_blocks",
   "map_placement",
+  "birds_eye_perspective",
   "evidence_review",
 ];
 
@@ -115,6 +117,7 @@ export function deriveReconstructionTaskLedger(input: {
   sourceOptions: readonly StudioSourceOption[];
   currentStage?: ReconstructionWorkflowStepId;
   activePageId?: string | null;
+  birdsEye?: BirdsEyePerspectiveState;
 }): ReconstructionTaskLedger {
   const base = { townPackageId: input.town?.id, mapYear: input.atlas?.editionYear, atlasId: input.atlas?.atlasId };
   const activePages = input.atlas && !input.atlas.archivedAt ? input.pages.filter((page) => page.atlasId === input.atlas?.atlasId && !page.archivedAt) : [];
@@ -186,6 +189,15 @@ export function deriveReconstructionTaskLedger(input: {
     else if (!placed) tasks.push(task({ id: `placement:${piece.pieceId}`, label: `Place ${label}`, detail: "Save a geographic placement or document why it cannot be placed.", stage: "map_placement", priority: "normal", state: "incomplete", resolved: false, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
     else if (!placementReviewed) tasks.push(task({ id: `placement:${piece.pieceId}`, label: `Review placement for ${label}`, detail: "Confirm the saved geographic placement.", stage: "map_placement", priority: "normal", state: "review", resolved: false, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
     else tasks.push(task({ id: `placement:${piece.pieceId}`, label: `${label} placement reviewed`, detail: "Placement review is complete.", stage: "map_placement", priority: "low", state: "completed", resolved: true, context: { ...context, workflow: "gps_alignment" }, category: "Placement tasks", parentId: `object-review:${piece.pieceId}` }));
+  }
+
+  const birdsEye = input.birdsEye;
+  const birdsEyeActivated = Boolean(birdsEye && (birdsEye.designatedAssetId || birdsEye.calibration));
+  if (birdsEyeActivated) {
+    const reference = birdsEye?.designatedAssetId;
+    const calibration = birdsEye?.calibration;
+    const resolved = calibration?.status === "saved" || calibration?.status === "unavailable";
+    tasks.push(task({ id: `birds-eye:${input.atlas?.atlasId ?? "none"}`, label: resolved ? "Birds-Eye Perspective resolved" : reference ? "Calibrate Birds-Eye Perspective" : "Designate a Birds-Eye Reference", detail: calibration?.status === "unavailable" ? "Documented unavailable/not applicable exception is saved." : reference ? "Match authoritative placed geometry to the designated historical Birds-Eye reference." : "Select an edition-scoped historical Birds-Eye reference before calibration.", stage: "birds_eye_perspective", priority: resolved ? "low" : "normal", state: calibration?.status === "unavailable" ? "exception" : resolved ? "completed" : "incomplete", resolved, context: { ...base, workflow: "birds_eye_perspective" }, category: "Birds-Eye Perspective" }));
   }
 
   const preFinal = tasks.filter((candidate) => candidate.stage !== "evidence_review");

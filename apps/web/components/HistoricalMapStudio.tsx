@@ -24,6 +24,7 @@ import { SanbornEditionSheetNavigator } from "@/components/SanbornEditionSheetNa
 import { SanbornPageWorkbench } from "@/components/SanbornPageWorkbench";
 import { SanbornPieceList } from "@/components/SanbornPieceList";
 import { SanbornSourceContext } from "@/components/SanbornSourceContext";
+import { BirdsEyePerspectiveWorkspace } from "@/components/BirdsEyePerspectiveWorkspace";
 import { SheetInventoryTile } from "@/components/SheetInventoryTile";
 import { MapPlacementInspector } from "@/components/MapPlacementInspector";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
@@ -188,6 +189,7 @@ import { deriveSheetInventoryDashboardItem, sortSheetInventoryDashboardItems, ty
 import { deriveSheetMapPieceAudit } from "@/lib/sheet-map-piece-audit";
 import { deriveMapPiecePlacementQueue, type MapPiecePlacementQueueItem } from "@/lib/map-piece-placement-queue";
 import { deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
+import type { BirdsEyePerspectiveState } from "@/lib/birds-eye-calibration";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -867,6 +869,7 @@ export function HistoricalMapStudio({
   const transformerRef = useRef<any | null>(null);
   const sheetNodeRefs = useRef<Map<string, any>>(new Map());
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const birdsEyeInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadedAssetIdRef = useRef<string>("");
   const minimalMapRef = useRef<HTMLElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -916,6 +919,7 @@ export function HistoricalMapStudio({
   const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
   const [activeEditionHydrationState, setActiveEditionHydrationState] = useState<"loading" | "ready">("loading");
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
+  const [birdsEye, setBirdsEye] = useState<BirdsEyePerspectiveState>(initialData.birdsEye);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
   const [selectedAtlasPageId, setSelectedAtlasPageId] = useState(initialData.atlasInventory.activePageId ?? "");
@@ -1153,13 +1157,14 @@ export function HistoricalMapStudio({
           atlasInventory,
           mapPieceGeoreferences,
           townIndexRegions,
+          birdsEye,
         },
         selectedAtlasId,
         selectedPageId: selectedAtlasPageId,
         selectedPieceId: selectedMapPieceId,
-        currentStage: atlasWorkflowStep === "source" ? "source_record" : atlasWorkflowStep === "town_index" ? "town_index" : atlasWorkflowStep === "numbered_sheets" ? "sheet_inventory" : atlasWorkflowStep === "piece_inventory" ? "map_pieces_blocks" : atlasWorkflowStep === "gps_alignment" ? "map_placement" : "town_edition",
+        currentStage: atlasWorkflowStep === "source" ? "source_record" : atlasWorkflowStep === "town_index" ? "town_index" : atlasWorkflowStep === "numbered_sheets" ? "sheet_inventory" : atlasWorkflowStep === "piece_inventory" ? "map_pieces_blocks" : atlasWorkflowStep === "gps_alignment" ? "map_placement" : atlasWorkflowStep === "birds_eye_perspective" ? "birds_eye_perspective" : "town_edition",
       }),
-    [atlasInventory, atlasWorkflowStep, initialData, mapPieceGeoreferences, selectedAtlasId, selectedAtlasPageId, selectedMapPieceId, sheets, townIndexRegions],
+    [atlasInventory, atlasWorkflowStep, birdsEye, initialData, mapPieceGeoreferences, selectedAtlasId, selectedAtlasPageId, selectedMapPieceId, sheets, townIndexRegions],
   );
   const activeTownIndexRegions = useMemo(
     () =>
@@ -1570,6 +1575,7 @@ export function HistoricalMapStudio({
     setGlobalHistoricalOpacity(initialData.geographicMap.globalHistoricalOpacity);
     setSheetImageStates({});
     setAtlasInventory(initialData.atlasInventory);
+    setBirdsEye(initialData.birdsEye);
     const serverPlacements = mergeSavedAndDefaultMapPieceGeoreferences(initialData.atlasInventory.pieces, initialData.mapPieceGeoreferences);
     const hydratedPlacementState = hydrateHistoricalMapStudioState(
       { editionKey: selectedAtlasId || null, loadedAt: initialData.lastLoadedAt, mapPieceGeoreferences },
@@ -1608,7 +1614,7 @@ export function HistoricalMapStudio({
     isUserZoomingRef.current = false;
     isProgrammaticViewChangeRef.current = false;
     setActiveEditionHydrationState("ready");
-  }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.mapPieceGeoreferences, initialData.geographicMap, initialData.workspace, initialData.atlasInventory, initialData.townIndexRegions]);
+  }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.mapPieceGeoreferences, initialData.geographicMap, initialData.workspace, initialData.atlasInventory, initialData.townIndexRegions, initialData.birdsEye]);
 
   useEffect(() => {
     if (initialSelectionAppliedRef.current) {
@@ -4949,6 +4955,30 @@ export function HistoricalMapStudio({
     }
   }
 
+  async function uploadBirdsEyeReference(file: File) {
+    if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) return;
+    const form = new FormData();
+    form.set("file", file);
+    form.set("townPackageId", initialData.activeTownPackage.id);
+    if (selectedSourceRecord?.sourceRecordId) form.set("sourceRecordId", selectedSourceRecord.sourceRecordId);
+    const response = await fetch("/api/community/historical-map-studio/birds-eye-assets", { method: "POST", body: form });
+    const result = await response.json().catch(() => null) as { ok?: boolean; asset?: { id: string; asset_id: string; town_package_id: string; source_record_id: string | null; original_filename: string; storage_bucket: string; storage_path: string; mime_type: string; byte_size: number; width: number; height: number; sha256_checksum: string; evidence_classification: string; review_status: string; rights_note: string | null; intake_notes: string | null; created_at: string | null; updated_at: string | null; signed_url: string | null } } | null;
+    if (!response.ok || !result?.ok || !result.asset) { setSaveStatus("error"); setSaveMessage("Birds-Eye reference upload failed."); return; }
+    setSaveStatus("saved");
+    setSaveMessage("Birds-Eye reference uploaded. Designate it for this edition when ready.");
+    const uploaded = result.asset;
+    setBirdsEye((current) => ({ ...current, ready: true, assets: uploaded ? [...current.assets, { id: uploaded.id, assetId: uploaded.asset_id, townPackageId: uploaded.town_package_id, sourceRecordId: uploaded.source_record_id, originalFilename: uploaded.original_filename, storageBucket: uploaded.storage_bucket, storagePath: uploaded.storage_path, signedUrl: uploaded.signed_url, width: uploaded.width, height: uploaded.height, mimeType: uploaded.mime_type, byteSize: uploaded.byte_size, checksum: uploaded.sha256_checksum, evidenceClassification: uploaded.evidence_classification, reviewStatus: uploaded.review_status, rightsNote: uploaded.rights_note, intakeNotes: uploaded.intake_notes, createdAt: uploaded.created_at, updatedAt: uploaded.updated_at }, ...current.assets] : current.assets }));
+  }
+
+  async function designateBirdsEyeReference(assetId: string | null) {
+    if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) return;
+    const response = await fetch("/api/community/historical-map-studio/birds-eye-assets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ townPackageId: initialData.activeTownPackage.id, atlasId: activeAtlas.atlasId, assetId }) });
+    if (!response.ok) { setSaveStatus("error"); setSaveMessage("Birds-Eye reference designation could not be saved."); return; }
+    setBirdsEye((current) => ({ ...current, designatedAssetId: assetId, calibration: current.calibration && current.calibration.referenceAssetId !== assetId ? { ...current.calibration, status: "needs_review" } : current.calibration }));
+    setSaveStatus("saved");
+    setSaveMessage(assetId ? "Birds-Eye Reference designated." : "Birds-Eye Reference designation removed.");
+  }
+
   function renderTownOverviewWorkspace() {
     return (
       <section className="sanborn-station-overview" aria-label="Town Package dashboard">
@@ -5397,6 +5427,7 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "town_index") return renderTownIndexWorkspace();
     if (atlasWorkflowStep === "numbered_sheets") return renderSheetInventoryWorkspace();
     if (atlasWorkflowStep === "piece_inventory") return renderMapPiecesWorkspace();
+    if (atlasWorkflowStep === "birds_eye_perspective") return <BirdsEyePerspectiveWorkspace state={birdsEye} townPackageId={initialData.activeTownPackage?.id ?? ""} atlasId={selectedAtlasId} centerLatitude={initialData.activeTownPackage?.centerLatitude ?? 0} centerLongitude={initialData.activeTownPackage?.centerLongitude ?? 0} readOnly={atlasReadOnly} placedGeometries={mapPieceGeoreferences.filter((placement) => placement.placementStatus === "placed" || placement.placementStatus === "reviewed").map((placement) => ({ id: placement.pieceId, label: placement.pieceId, geometry: placement.geographicGeometry }))} onStateChange={setBirdsEye} />;
     return renderMapPlacementWorkspace();
   }
 
@@ -5558,6 +5589,14 @@ export function HistoricalMapStudio({
                 </button>
               </div>
             ) : null}
+          </section>
+          <section className="sanborn-station-subsection birds-eye-reference-manager" aria-label="Birds-Eye Reference">
+            <div className="sanborn-station-subsection__header"><strong>Birds-Eye Reference</strong><span>{birdsEye.designatedAssetId ? "Designated" : "No reference selected"}</span></div>
+            <p className="sanborn-atlas-empty">Upload or select a historical birds-eye map without adding it to Sanborn sheet processing.</p>
+            <input ref={birdsEyeInputRef} accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadBirdsEyeReference(file); event.currentTarget.value = ""; }} />
+            <div className="sanborn-station-actions"><button className="sanborn-button" disabled={atlasReadOnly} onClick={() => birdsEyeInputRef.current?.click()} type="button">Upload birds-eye image</button></div>
+            <div className="birds-eye-reference-list">{birdsEye.assets.length === 0 ? <p className="sanborn-atlas-empty">No Birds-Eye reference assets uploaded.</p> : birdsEye.assets.map((asset) => <article className="birds-eye-reference-list__item" key={asset.assetId}><div><strong>{asset.originalFilename}</strong><span>{asset.width} × {asset.height}px · {asset.sourceRecordId ? "Source linked" : "Source link needed"}</span></div><button className="sanborn-button" disabled={atlasReadOnly || birdsEye.designatedAssetId === asset.assetId} onClick={() => void designateBirdsEyeReference(asset.assetId)} type="button">{birdsEye.designatedAssetId === asset.assetId ? "Current Birds-Eye Reference" : "Set as Birds-Eye Reference"}</button></article>)}</div>
+            {birdsEye.designatedAssetId ? <button className="sanborn-button" disabled={atlasReadOnly} onClick={() => void designateBirdsEyeReference(null)} type="button">Remove designation</button> : null}
           </section>
           {activeAtlas ? (
             <>
@@ -6101,6 +6140,8 @@ export function HistoricalMapStudio({
         ? selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "No sheet selected"
         : atlasWorkflowStep === "piece_inventory" || atlasWorkflowStep === "gps_alignment"
           ? selectedMapPieceDisplayLabel
+          : atlasWorkflowStep === "birds_eye_perspective"
+            ? "Calibration workspace"
           : atlasWorkflowStep === "page_classification"
             ? selectedSourceRecord
               ? getSourceDisplayId(selectedSourceRecord)
@@ -6239,6 +6280,7 @@ export function HistoricalMapStudio({
             selectedAtlasId={selectedAtlasId}
             sourceOptions={initialData.sourceOptions}
             townIndexRegions={townIndexRegions}
+            birdsEye={birdsEye}
             workflowStep={atlasWorkflowStep}
             onWorkflowStepChange={changeAtlasWorkflowStep}
           />
