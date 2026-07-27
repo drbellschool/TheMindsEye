@@ -78,13 +78,6 @@ export function SanbornPieceList({
 
   return (
     <div className="sanborn-piece-list">
-      <fieldset className="sanborn-piece-review-categories">
-        <legend>Sheet review categories</legend>
-        {getActiveSanbornMapPieceFeatureCategories().map((category) => {
-          const status = reviewCategories[category] ?? "not_reviewed";
-          return <label key={category}>{sanbornMapPieceFeatureCategoryLabels[category]}<select disabled={readOnly} value={status} onChange={(event) => onSetReviewCategory(category, event.target.value as SanbornMapPieceReviewStatus)}>{sanbornMapPieceReviewStatuses.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select></label>;
-        })}
-      </fieldset>
       {sortedPieces.length === 0 ? <p className="sanborn-atlas-empty">No map pieces have been inventoried for this page. Use Mark point, Draw line, Draw area, or Add junction to record every geographically meaningful feature.</p> : null}
       {sortedPieces.map((piece, index) => (
         <article className={`sanborn-piece-list__item${piece.pieceId === selectedPieceId ? " is-selected" : ""}`} data-focus-target={`map-piece-inspector-card:${piece.pieceId}`} key={piece.pieceId} tabIndex={-1}>

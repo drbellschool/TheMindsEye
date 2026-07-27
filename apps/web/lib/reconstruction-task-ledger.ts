@@ -4,6 +4,7 @@ import { getSanbornPageDisplayLabel, getSanbornPagePrintedReference, pageTypeSup
 import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
 import { getActiveSanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses } from "./sanborn-map-piece-features.ts";
+import { deriveSheetMapPieceAudit } from "./sheet-map-piece-audit.ts";
 import { sourceRegionSupportsMapPieces, type SanbornTownIndexRegionRecord } from "./sanborn-town-index.ts";
 import type { ReconstructionContextQuery, ReconstructionWorkflowStepId } from "./town-reconstruction.ts";
 
@@ -163,8 +164,9 @@ export function deriveReconstructionTaskLedger(input: {
     const pagePieces = activePieces.filter((piece) => piece.atlasPageId === page.pageId);
     if (!pageTypeSupportsMapPieces(page.pageType) && pagePieces.length === 0) continue;
     const asset = assets.get(page.sanbornSheetAssetId);
+    const sheetAudit = deriveSheetMapPieceAudit({ pieces: pagePieces, reviewCategories: page.reviewCategories });
     for (const category of reviewableCategories) {
-      const status = page.reviewCategories?.[category] ?? pagePieces.find((piece) => piece.reviewCategories?.[category])?.reviewCategories?.[category];
+      const status = sheetAudit.categories.find((auditCategory) => auditCategory.category === category)?.reviewStatus;
       if (!completedReviewStatuses.has(status ?? "")) tasks.push(task({ id: `sheet-category:${page.pageId}:${category}`, label: `Review ${category.replaceAll("_", " ")} on ${getSanbornPageDisplayLabel(page)}`, detail: "Mark Reviewed — items found or Reviewed — none found; an empty list is not complete.", stage: "sheet_inventory", priority: "normal", state: "review", resolved: false, context: { ...base, atlasPageId: page.pageId, sheetAssetId: asset?.assetId, workflow: "piece_inventory" }, category: "Sheet review categories", parentId: `sheet:${page.pageId}` }));
     }
   }

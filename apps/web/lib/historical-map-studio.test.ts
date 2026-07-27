@@ -647,7 +647,8 @@ test("Map Pieces workbench keeps editing tools sticky and treats zoom pan as vie
   assert.match(workbenchComponent, /panActive \|\| event\.button !== 0/);
   assert.match(studioComponent, /setSaveStatus\("idle"\);\s*setSaveMessage\("Map pieces have unsaved changes\."\);/s);
   assert.match(css, /\.sanborn-page-workbench__header\s*\{[\s\S]*position: sticky;[\s\S]*z-index: 20;/);
-  assert.match(css, /\.sanborn-page-workbench__source\s*\{[\s\S]*grid-template-rows: auto auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/);
+  assert.match(css, /\.sanborn-page-workbench__source\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/);
+  assert.match(css, /\.sanborn-page-workbench__command-bar\s*\{[\s\S]*background: #141a19;/);
   assert.match(css, /\.sanborn-page-workbench__viewport\s*\{[\s\S]*overflow: auto;[\s\S]*overscroll-behavior: contain;/);
   assert.match(css, /\.sanborn-page-workbench__viewport\.is-panning\s*\{[\s\S]*cursor: grabbing;/);
   assert.match(css, /\.sanborn-page-workbench__image-frame\s*\{[\s\S]*max-width: none;/);
