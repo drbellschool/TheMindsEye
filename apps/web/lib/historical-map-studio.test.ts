@@ -1960,7 +1960,8 @@ test("Sheet Inventory queue filters archived pages, derives status precedence, a
 
 test("Sheet Inventory cards route active sheets into Map Pieces and the focused inspector", () => {
   const studio = readFileSync(new URL("../components/HistoricalMapStudio.tsx", import.meta.url), "utf8");
-  assert.match(studio, /selectAtlasPage\(item\.pageId, "piece_inventory"\)/);
+  assert.match(studio, /sheet-inventory-dashboard__grid/);
+  assert.match(studio, /selectAtlasPage\(item\.queueItem\.pageId, "piece_inventory"\)/);
   assert.match(studio, /workflow-status:piece-inventory/);
 });
 
