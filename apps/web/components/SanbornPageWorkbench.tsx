@@ -26,6 +26,7 @@ import {
 import { getActiveSanbornMapPieceFeatureCategories, normalizeSanbornMapPieceGeometry, sanbornMapPieceReviewStatuses, suggestSanbornFeatureLabel, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
 import { calculateSourceQuadrilateralMeasurements } from "@/lib/sanborn-source-geometry";
 import { formatGeometryMeasurement } from "@/lib/placement-geometry-measurements";
+import { deriveSheetMapPieceAudit, type SheetMapPieceAudit } from "@/lib/sheet-map-piece-audit";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
 import {
   clampSanbornSourceImageZoom,
@@ -157,6 +158,7 @@ export function SanbornPageWorkbench({
   const [sourceZoom, setSourceZoom] = useState(1);
   const [spacePanActive, setSpacePanActive] = useState(false);
   const [draftCategory, setDraftCategory] = useState<SanbornMapPieceFeatureCategory | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [panDrag, setPanDrag] = useState<{
     pointerId: number;
     startClientX: number;
@@ -166,6 +168,7 @@ export function SanbornPageWorkbench({
   } | null>(null);
   const sourceImage = useSanbornSourceImageState({ asset });
   const sortedPieces = useMemo(() => [...pieces].sort((left, right) => left.pieceSequence - right.pieceSequence), [pieces]);
+  const sheetAudit: SheetMapPieceAudit = useMemo(() => deriveSheetMapPieceAudit({ pieces: sortedPieces, reviewCategories }), [sortedPieces, reviewCategories]);
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
   const selectedPiecePointCount = selectedPiece?.sourceGeometry?.points.length ?? selectedPiece?.sourcePolygon.length ?? 0;
   const selectedPieceMinimumPoints = selectedPiece?.sourceGeometry?.geometryType === "point" || selectedPiece?.sourceGeometry?.geometryType === "junction" ? 1 : selectedPiece?.sourceGeometry?.geometryType === "line" ? 2 : 3;
@@ -227,9 +230,31 @@ export function SanbornPageWorkbench({
   }
 
   function patchPolygon(pieceId: string, polygon: SanbornNormalizedPoint[]) {
-    onPiecesChange(
-      sortedPieces.map((piece) => (piece.pieceId === pieceId ? updatePiecePolygon(piece, polygon) : piece)),
-    );
+    recordPiecesChange(sortedPieces.map((piece) => (piece.pieceId === pieceId ? updatePiecePolygon(piece, polygon) : piece)));
+  }
+
+  function recordPiecesChange(nextPieces: SanbornMapPieceRecord[]) {
+    const nextCategories = { ...reviewCategories };
+    const previousAudit = deriveSheetMapPieceAudit({ pieces: sortedPieces, reviewCategories });
+    const nextAudit = deriveSheetMapPieceAudit({ pieces: nextPieces, reviewCategories });
+    for (const category of nextAudit.categories) {
+      const previous = previousAudit.categories.find((candidate) => candidate.category === category.category);
+      const previousEvidence = sortedPieces.filter((piece) => (piece.featureCategory ?? "blocks_and_lots") === category.category).map((piece) => ({ pieceId: piece.pieceId, sourceGeometry: piece.sourceGeometry, sourcePolygon: piece.sourcePolygon, titleText: piece.titleText, blockNumberText: piece.blockNumberText }));
+      const nextEvidence = nextPieces.filter((piece) => (piece.featureCategory ?? "blocks_and_lots") === category.category).map((piece) => ({ pieceId: piece.pieceId, sourceGeometry: piece.sourceGeometry, sourcePolygon: piece.sourcePolygon, titleText: piece.titleText, blockNumberText: piece.blockNumberText }));
+      const evidenceChanged = JSON.stringify(previousEvidence) !== JSON.stringify(nextEvidence);
+      if (evidenceChanged && (nextCategories[category.category] === "reviewed_found" || nextCategories[category.category] === "reviewed_none_found")) {
+        nextCategories[category.category] = "in_progress";
+      } else if (category.total > 0 && (!previous || category.total !== previous.total || category.draftObjectCount !== previous.draftObjectCount) && (!nextCategories[category.category] || nextCategories[category.category] === "not_reviewed")) {
+        nextCategories[category.category] = "in_progress";
+      }
+    }
+    const decorated = nextPieces.map((piece) => ({ ...piece, reviewCategories: nextCategories }));
+    onReviewCategoriesChange?.(nextCategories);
+    onPiecesChange(decorated);
+  }
+
+  function patchPiece(pieceId: string, patch: Partial<SanbornMapPieceRecord>) {
+    recordPiecesChange(sortedPieces.map((piece) => piece.pieceId === pieceId ? { ...piece, ...patch } : piece));
   }
 
   function handleSvgPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
@@ -257,7 +282,7 @@ export function SanbornPageWorkbench({
       const currentPoints = selectedPiece.sourceGeometry?.points ?? selectedPiece.sourcePolygon;
       if (selectedPiece.sourceGeometry?.geometryType && selectedPiece.sourceGeometry.geometryType !== "polygon") {
         const geometry = normalizeSanbornMapPieceGeometry({ geometryType: selectedPiece.sourceGeometry.geometryType, points: [...currentPoints, point] });
-        if (geometry.ok) onPatchPiece(selectedPiece.pieceId, { sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry });
+        if (geometry.ok) recordPiecesChange(sortedPieces.map((piece) => piece.pieceId === selectedPiece.pieceId ? { ...piece, sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry } : piece));
       } else patchPolygon(selectedPiece.pieceId, [...currentPoints, point]);
       setSelectedVertexIndex(currentPoints.length);
     }
@@ -284,7 +309,7 @@ export function SanbornPageWorkbench({
     const nextPoints = currentPoints.map((candidate, index) => (index === draggingVertex.vertexIndex ? point : candidate));
     if (piece.sourceGeometry?.geometryType && piece.sourceGeometry.geometryType !== "polygon") {
       const geometry = normalizeSanbornMapPieceGeometry({ geometryType: piece.sourceGeometry.geometryType, points: nextPoints });
-      if (geometry.ok) onPatchPiece(piece.pieceId, { sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry });
+      if (geometry.ok) recordPiecesChange(sortedPieces.map((candidate) => candidate.pieceId === piece.pieceId ? { ...candidate, sourcePolygon: geometry.legacyPolygon, sourceBBox: geometry.bbox, sourceGeometry: geometry.geometry } : candidate));
     } else patchPolygon(piece.pieceId, nextPoints);
   }
 
@@ -297,7 +322,7 @@ export function SanbornPageWorkbench({
 
     const nextSequence = Math.max(0, ...sortedPieces.map((piece) => piece.pieceSequence)) + 1;
     const nextPiece = createPiece(page, nextSequence, draftPoints, geometryType, draftCategory ?? undefined);
-    onPiecesChange([...sortedPieces, nextPiece]);
+    recordPiecesChange([...sortedPieces, nextPiece]);
     onSelectPiece(nextPiece.pieceId);
     setDraftPoints([]);
     setDraftCategory(null);
@@ -451,7 +476,8 @@ export function SanbornPageWorkbench({
   return (
     <section className={`sanborn-page-workbench${showPieceList ? "" : " sanborn-page-workbench--center-only"}`}>
       <div className="sanborn-page-workbench__source">
-        <header className="sanborn-page-workbench__header">
+        <div className="sanborn-page-workbench__command-bar">
+          <header className="sanborn-page-workbench__header">
           <div>
             <strong>{page.displayLabel || `Page ${page.pageSequence}`}</strong>
             <span>{getSanbornPageTypeLabel(page.pageType)}</span>
@@ -498,21 +524,36 @@ export function SanbornPageWorkbench({
             <button className="sanborn-button" disabled={!selectedPiece} onClick={fitSelectedPiece} type="button">Fit selected piece</button>
             <span className="sanborn-page-workbench__zoom" aria-live="polite">{Math.round(sourceZoom * 100)}%</span>
           </div>
-        </header>
-        {pieceInventoryBlocked ? (
+          </header>
+          {pieceInventoryBlocked ? (
           <div className="sanborn-page-workbench__blocker">
             <strong>Save the atlas page assignments before drawing map pieces.</strong>
             <button className="sanborn-button sanborn-button--primary" disabled={savePagesAndContinueDisabled || !onSavePagesAndContinue} onClick={onSavePagesAndContinue} type="button">
               Save pages and continue
             </button>
           </div>
-        ) : null}
-        {classificationBlocked ? (
+          ) : null}
+          {classificationBlocked ? (
           <div className="sanborn-page-workbench__blocker">
             <strong>{classificationBlockedMessage}</strong>
             {repairClassificationAction}
           </div>
-        ) : null}
+          ) : null}
+          <div className="sanborn-page-workbench__audit-strip" aria-label="Sheet map piece audit">
+            <strong>Sheet audit: {sheetAudit.reviewedCategoryCount} of {sheetAudit.activeCategoryCount} reviewed · {sheetAudit.totalObjects} objects</strong>
+            <button className="sanborn-button" onClick={() => setAuditOpen((open) => !open)} type="button">{auditOpen ? "Hide audit" : "View audit"}</button>
+          </div>
+          {auditOpen ? (
+            <div className="sanborn-page-workbench__audit-panel">
+              {sheetAudit.categories.map((category) => (
+                <div className="sanborn-page-workbench__audit-row" key={category.category}>
+                  <div><strong>{category.label}</strong><span>{category.persistedObjectCount} saved{category.draftObjectCount ? ` · ${category.draftObjectCount} unsaved drafts` : ""} · {category.reviewStatus.replaceAll("_", " ")}{category.changedSinceReview ? " · Changed since review" : ""}</span></div>
+                  {category.reviewComplete ? <span className="sanborn-page-workbench__audit-complete">Reviewed {category.total} found</span> : category.total > 0 ? <button className="sanborn-button" disabled={editorReadOnly || category.draftObjectCount > 0} onClick={() => setReviewCategory(category.category, "reviewed_found")} type="button">Finish review</button> : <button className="sanborn-button" disabled={editorReadOnly} onClick={() => setReviewCategory(category.category, "reviewed_none_found")} type="button">Reviewed none found</button>}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <div
           className={`sanborn-page-workbench__viewport${panActive || panDrag ? " is-panning" : ""}`}
           onPointerCancel={endViewportPan}
@@ -652,7 +693,7 @@ export function SanbornPageWorkbench({
             selectedPieceId={selectedPieceId}
             readOnly={editorReadOnly}
             onDeletePiece={onDeletePiece}
-            onPatchPiece={onPatchPiece}
+            onPatchPiece={patchPiece}
             onReorderPiece={onReorderPiece}
             onSelectPiece={onSelectPiece}
             onSetReviewCategory={setReviewCategory}
