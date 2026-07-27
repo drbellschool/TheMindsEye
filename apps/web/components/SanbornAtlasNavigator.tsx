@@ -6,6 +6,7 @@ import type { StudioSheetAsset, StudioSourceOption, StudioTownPackage } from "@/
 import type { SanbornAtlasInventoryState } from "@/lib/sanborn-atlas";
 import type { SanbornMapPieceGeoreference } from "@/lib/sanborn-map-piece-georeference";
 import type { SanbornTownIndexRegionRecord } from "@/lib/sanborn-town-index";
+import type { BirdsEyePerspectiveState } from "@/lib/birds-eye-calibration";
 import {
   buildTownIndexSummary,
   calculatePageClassificationSummary,
@@ -22,7 +23,8 @@ export type SanbornAtlasWorkflowStep =
   | "town_index"
   | "numbered_sheets"
   | "piece_inventory"
-  | "gps_alignment";
+  | "gps_alignment"
+  | "birds_eye_perspective";
 
 export const sanbornAtlasWorkflowSteps: Array<{ id: SanbornAtlasWorkflowStep; label: string }> = [
   { id: "source", label: "Town & Edition" },
@@ -31,6 +33,7 @@ export const sanbornAtlasWorkflowSteps: Array<{ id: SanbornAtlasWorkflowStep; la
   { id: "numbered_sheets", label: "Sheet Inventory" },
   { id: "piece_inventory", label: "Map Pieces" },
   { id: "gps_alignment", label: "Map Placement" },
+  { id: "birds_eye_perspective", label: "Birds-Eye Perspective" },
 ];
 
 type StationStatus = ReconstructionProgressStatus | "started";
@@ -46,6 +49,7 @@ type SanbornAtlasNavigatorProps = {
   selectedAtlasId: string;
   workflowStep: SanbornAtlasWorkflowStep;
   onWorkflowStepChange: (step: SanbornAtlasWorkflowStep) => void;
+  birdsEye: BirdsEyePerspectiveState;
 };
 
 function statusLabel(status: StationStatus): string {
@@ -67,6 +71,7 @@ export function SanbornAtlasNavigator({
   selectedAtlasId,
   workflowStep,
   onWorkflowStepChange,
+  birdsEye,
 }: SanbornAtlasNavigatorProps) {
   const activeAtlas = inventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
   const activePages = useMemo(
@@ -128,6 +133,11 @@ export function SanbornAtlasNavigator({
   const startedSheets = sheetProgress.filter((sheet) => sheet.status !== "not_started").length;
   const placeablePieces = activePieces.filter((piece) => (piece.placementEligibility ?? "available") === "available");
   const placementCounts = countCanonicalMapPiecePlacements(placeablePieces.map((piece) => deriveCanonicalMapPiecePlacementStatus({ placement: placementByPieceId.get(piece.pieceId) })));
+  const birdsEyeReference = birdsEye.assets.find((asset) => asset.assetId === birdsEye.designatedAssetId) ?? null;
+  const birdsEyePlacedAnchors = placeablePieces.filter((piece) => {
+    const status = deriveCanonicalMapPiecePlacementStatus({ placement: placementByPieceId.get(piece.pieceId) });
+    return status === "placed" || status === "reviewed";
+  }).length;
   const definedPieces = pieceProgress.filter((piece) => piece.regionDefined).length;
   const stationSummaries: Record<SanbornAtlasWorkflowStep, { summary: string; status: StationStatus; warning?: string }> = {
     source: {
@@ -166,6 +176,19 @@ export function SanbornAtlasNavigator({
       status: placementCounts.placementResolved === placementCounts.total && placementCounts.total > 0 ? "reviewed" : placementCounts.geographicallyPlaced > 0 ? "started" : "not_started",
       warning: placementCounts.needPlacement > 0 ? `${placementCounts.needPlacement} need placement` : placementCounts.draft > 0 ? `${placementCounts.draft} drafts need saving or reset` : placementCounts.placedAwaitingReview > 0 ? `${placementCounts.placedAwaitingReview} placements await review` : undefined,
     },
+    birds_eye_perspective: !birdsEyeReference && !birdsEye.calibration
+      ? { summary: "reference needed", status: "not_started", warning: "Optional until a reference is designated" }
+      : birdsEye.calibration?.status === "unavailable"
+        ? { summary: "unavailable", status: "reviewed" }
+        : !birdsEyeReference
+          ? { summary: "reference needed", status: "missing" }
+          : birdsEyePlacedAnchors < 4
+            ? { summary: "needs placement", status: "started", warning: "Place at least four geographic anchors" }
+            : birdsEye.calibration?.status === "saved"
+              ? { summary: "calibrated", status: "reviewed" }
+              : birdsEye.calibration?.status === "needs_review"
+                ? { summary: "needs review", status: "conflict" }
+                : { summary: "ready to calibrate", status: "started" },
   };
 
   return (

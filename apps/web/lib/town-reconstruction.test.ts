@@ -237,13 +237,14 @@ test("reconstruction workflow exposes the ordered town-edition-sheet-block stage
       "Sheet Inventory",
       "Map Pieces",
       "Map Placement",
+      "Birds-Eye Perspective",
       "Building Reconstruction",
       "People & Activity",
       "Evidence Review",
     ],
   );
-  assert.equal(reconstructionWorkflowSteps.slice(0, 6).every((step) => step.isOperational), true);
-  assert.equal(reconstructionWorkflowSteps.slice(6).every((step) => !step.isOperational), true);
+  assert.equal(reconstructionWorkflowSteps.slice(0, 7).every((step) => step.isOperational), true);
+  assert.equal(reconstructionWorkflowSteps.slice(7).every((step) => !step.isOperational), true);
 });
 
 test("source identity uses a stable internal display ID and LOC citation fields", () => {
@@ -911,6 +912,7 @@ test("Historical Map Studio navigator uses reconstruction workflow labels", () =
     "Sheet Inventory",
     "Map Pieces",
     "Map Placement",
+    "Birds-Eye Perspective",
   ]) {
     assert.match(navigator, new RegExp(label.replace(/[&/]/g, (match) => `\\${match}`)));
   }

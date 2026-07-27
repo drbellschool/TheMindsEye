@@ -33,6 +33,7 @@ export type ReconstructionWorkflowStepId =
   | "sheet_inventory"
   | "map_pieces_blocks"
   | "map_placement"
+  | "birds_eye_perspective"
   | "building_reconstruction"
   | "people_activity"
   | "evidence_review";
@@ -219,6 +220,7 @@ export const reconstructionWorkflowSteps: ReconstructionWorkflowStep[] = [
   { id: "sheet_inventory", label: "Sheet Inventory", isOperational: true },
   { id: "map_pieces_blocks", label: "Map Pieces", isOperational: true },
   { id: "map_placement", label: "Map Placement", isOperational: true },
+  { id: "birds_eye_perspective", label: "Birds-Eye Perspective", isOperational: true },
   { id: "building_reconstruction", label: "Building Reconstruction", route: "buildings", isOperational: false },
   { id: "people_activity", label: "People & Activity", route: "people", isOperational: false },
   { id: "evidence_review", label: "Evidence Review", route: "sources", isOperational: false },
@@ -1056,6 +1058,7 @@ export function buildReconstructionModelFromStudioState(input: {
     sourceOptions: input.state.sourceOptions,
     currentStage: input.currentStage,
     activePageId: input.selectedPageId,
+    birdsEye: input.state.birdsEye,
   });
 
   return {
