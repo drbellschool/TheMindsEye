@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateSourceQuadrilateralMeasurements, isSourceQuadrilateralAlreadySquare, normalizedSourcePointsToPixels, squareSanbornQuadrilateral } from "./sanborn-source-geometry.ts";
+import { calculateSourceQuadrilateralMeasurements, getSquareCornersEligibility, isSourceQuadrilateralAlreadySquare, normalizedSourcePointsToPixels, squareSanbornQuadrilateral } from "./sanborn-source-geometry.ts";
 
 const rectangle = [{ x: .2, y: .3 }, { x: .8, y: .3 }, { x: .8, y: .7 }, { x: .2, y: .7 }];
 
@@ -35,4 +35,25 @@ test("square corners fits a boundary-crossing rectangle without clamping individ
 test("already square tolerance and ineligible polygons are explicit", () => {
   assert.equal(isSourceQuadrilateralAlreadySquare(rectangle, 1000, 1000), true);
   assert.equal(squareSanbornQuadrilateral(rectangle.slice(0, 3), 1000, 1000).ok, false);
+});
+
+test("square corners eligibility canonicalizes a different starting corner and winding", () => {
+  const reversed = [rectangle[2], rectangle[1], rectangle[0], rectangle[3]];
+  const result = getSquareCornersEligibility({ geometryType: "polygon", points: reversed, width: 2000, height: 1000 });
+  assert.equal(result.alreadySquare, true);
+  assert.equal(result.disabledReason, "This piece is already squared.");
+  assert.equal(result.normalizedPoints.length, 4);
+});
+
+test("square corners eligibility falls back to legacy sourcePolygon", () => {
+  const result = getSquareCornersEligibility({ geometryType: "polygon", sourcePolygon: rectangle, width: 2000, height: 1000 });
+  assert.equal(result.alreadySquare, true);
+  assert.equal(result.disabledReason, "This piece is already squared.");
+  const staleGeometry = getSquareCornersEligibility({ geometryType: "polygon", points: [], sourcePolygon: rectangle, width: 2000, height: 1000 });
+  assert.equal(staleGeometry.alreadySquare, true);
+});
+
+test("square corners eligibility explains delayed dimensions and duplicate points", () => {
+  assert.equal(getSquareCornersEligibility({ geometryType: "polygon", points: rectangle }).disabledReason, "Source image dimensions are still loading.");
+  assert.equal(getSquareCornersEligibility({ geometryType: "polygon", points: [rectangle[0], rectangle[0], rectangle[2], rectangle[3]], width: 2000, height: 1000 }).disabledReason, "Polygon contains duplicate points.");
 });

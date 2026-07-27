@@ -23,7 +23,7 @@ import {
   type SanbornMapPieceRecord,
   type SanbornNormalizedPoint,
 } from "@/lib/sanborn-atlas";
-import { normalizeSanbornMapPieceGeometry, sanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses, suggestSanbornFeatureLabel, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
+import { getActiveSanbornMapPieceFeatureCategories, normalizeSanbornMapPieceGeometry, sanbornMapPieceReviewStatuses, suggestSanbornFeatureLabel, type SanbornMapPieceFeatureCategory, type SanbornMapPieceGeometryType, type SanbornMapPieceReviewCategories, type SanbornMapPieceReviewStatus } from "@/lib/sanborn-map-piece-features";
 import { calculateSourceQuadrilateralMeasurements } from "@/lib/sanborn-source-geometry";
 import { formatGeometryMeasurement } from "@/lib/placement-geometry-measurements";
 import type { StudioSheetAsset } from "@/lib/historical-map-studio";
@@ -169,7 +169,7 @@ export function SanbornPageWorkbench({
   const selectedPiece = sortedPieces.find((piece) => piece.pieceId === selectedPieceId) ?? null;
   const selectedPiecePointCount = selectedPiece?.sourceGeometry?.points.length ?? selectedPiece?.sourcePolygon.length ?? 0;
   const selectedPieceMinimumPoints = selectedPiece?.sourceGeometry?.geometryType === "point" || selectedPiece?.sourceGeometry?.geometryType === "junction" ? 1 : selectedPiece?.sourceGeometry?.geometryType === "line" ? 2 : 3;
-  const sourceMeasurements = selectedPiece && asset ? calculateSourceQuadrilateralMeasurements(selectedPiece.sourceGeometry?.points ?? selectedPiece.sourcePolygon, asset.width, asset.height) : null;
+  const sourceMeasurements = selectedPiece && asset ? calculateSourceQuadrilateralMeasurements(selectedPiece.sourceGeometry?.points?.length ? selectedPiece.sourceGeometry.points : selectedPiece.sourcePolygon, asset.width, asset.height) : null;
   const pieceInventoryBlocked = Boolean(page && !page.isPersisted);
   const classificationBlocked = Boolean(classificationBlockedMessage);
   const editorReadOnly = readOnly || pieceInventoryBlocked || classificationBlocked;
@@ -325,6 +325,7 @@ export function SanbornPageWorkbench({
   }
 
   function setReviewCategory(category: SanbornMapPieceFeatureCategory, status: SanbornMapPieceReviewStatus) {
+    if (!getActiveSanbornMapPieceFeatureCategories().includes(category)) return;
     const next = { ...reviewCategories, [category]: status };
     onReviewCategoriesChange?.(next);
     onPiecesChange(sortedPieces.map((piece) => ({ ...piece, reviewCategories: next })));
@@ -471,12 +472,9 @@ export function SanbornPageWorkbench({
             <button className={`sanborn-button${editorMode === "draw_line" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("draw_line")} title={disabledToolReason} type="button">
               Draw line
             </button>
-            <button className={`sanborn-button${editorMode === "draw_line" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("draw_line"); }} title={disabledToolReason} type="button">Draw street line</button>
             <button className={`sanborn-button${editorMode === "add_junction" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => setEditorMode("add_junction")} title={disabledToolReason} type="button">
               Add junction
             </button>
-            <button className={`sanborn-button${editorMode === "add_junction" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("add_junction"); }} title={disabledToolReason} type="button">Add intersection</button>
-            <button className={`sanborn-button${editorMode === "draw" && draftCategory === "streets_and_intersections" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled} onClick={() => { setDraftCategory("streets_and_intersections"); setEditorMode("draw"); }} title={disabledToolReason} type="button">Draw street area</button>
             <button className={`sanborn-button${editorMode === "add_vertex" ? " sanborn-button--primary" : ""}`} disabled={drawingDisabled || !selectedPiece} onClick={() => setEditorMode("add_vertex")} title={!selectedPiece ? "Select a map piece before adding a vertex." : disabledToolReason} type="button">
               Add vertex
             </button>

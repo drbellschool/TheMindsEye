@@ -4,6 +4,15 @@ export const sanbornMapPieceGeometryTypes = ["point", "line", "polygon", "juncti
 export const sanbornMapPieceFeatureCategories = ["blocks_and_lots", "wells", "hydrants", "water_routes_and_junctions", "rail_and_transportation", "streets_and_intersections", "detached_or_unusual", "printed_notes_and_miscellaneous"] as const;
 export const sanbornMapPieceReviewStatuses = ["not_reviewed", "in_progress", "reviewed_found", "reviewed_none_found"] as const;
 export const sanbornMapPiecePlacementEligibilities = ["available", "reference_only", "unresolved"] as const;
+export const streetAlignmentFeatureEnabled = false;
+
+export function isStreetAlignmentFeatureEnabled(): boolean {
+  return streetAlignmentFeatureEnabled;
+}
+
+export function getActiveSanbornMapPieceFeatureCategories(current?: SanbornMapPieceFeatureCategory | null): SanbornMapPieceFeatureCategory[] {
+  return sanbornMapPieceFeatureCategories.filter((category) => category !== "streets_and_intersections" || streetAlignmentFeatureEnabled || current === category);
+}
 export const sanbornMapPieceFeatureCategoryLabels: Record<(typeof sanbornMapPieceFeatureCategories)[number], string> = {
   blocks_and_lots: "Blocks and lots",
   wells: "Wells",
