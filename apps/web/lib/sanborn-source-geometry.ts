@@ -23,8 +23,10 @@ export function calculateSourceQuadrilateralMeasurements(
   height: number,
 ): PlacementGeometryMeasurements | null {
   if (points.length !== 4 || width <= 0 || height <= 0) return null;
+  const ordered = orderSourceQuadrilateralPoints(points, width, height);
+  if (!ordered) return null;
   return calculatePlacementGeometryMeasurements(
-    normalizedSourcePointsToPixels(points, width, height) as [
+    ordered as [
       ScreenPoint,
       ScreenPoint,
       ScreenPoint,
@@ -46,7 +48,7 @@ function distance(a: ScreenPoint, b: ScreenPoint): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
-function orderedPixelPoints(
+export function orderSourceQuadrilateralPoints(
   points: SanbornNormalizedPoint[],
   width: number,
   height: number,
@@ -94,7 +96,7 @@ export function squareSanbornQuadrilateral(
       ok: false,
       error: "Square corners requires a four-corner polygon.",
     };
-  const ordered = orderedPixelPoints(points, width, height);
+  const ordered = orderSourceQuadrilateralPoints(points, width, height);
   if (!ordered || !validateNormalizedPolygon(points).ok)
     return { ok: false, error: "This polygon is invalid or self-crossing." };
   const center = ordered.reduce(
@@ -197,4 +199,43 @@ export function isSourceQuadrilateralAlreadySquare(
     measurements.oppositeEdgeDrift.topBottom <= tolerance &&
     measurements.oppositeEdgeDrift.leftRight <= tolerance,
   );
+}
+
+export type SquareCornersEligibility = {
+  eligible: boolean;
+  alreadySquare: boolean;
+  normalizedPoints: SanbornNormalizedPoint[];
+  disabledReason: string | null;
+  measurements: PlacementGeometryMeasurements | null;
+};
+
+export function getSquareCornersEligibility(input: {
+  geometryType?: "point" | "line" | "polygon" | "junction" | null;
+  points?: SanbornNormalizedPoint[] | null;
+  sourcePolygon?: SanbornNormalizedPoint[] | null;
+  width?: number | null;
+  height?: number | null;
+  readOnly?: boolean;
+}): SquareCornersEligibility {
+  const normalizedPoints = input.points?.length ? input.points : input.sourcePolygon ?? [];
+  const base = { eligible: false, alreadySquare: false, normalizedPoints, disabledReason: null as string | null, measurements: null as PlacementGeometryMeasurements | null };
+  if (input.readOnly) return { ...base, disabledReason: "Map Pieces is currently read-only." };
+  if ((input.geometryType ?? "polygon") !== "polygon") return { ...base, disabledReason: "Square corners applies only to polygon features." };
+  if (normalizedPoints.length !== 4) return { ...base, disabledReason: "Requires exactly four corners." };
+  if (!input.width || !input.height || input.width <= 0 || input.height <= 0) return { ...base, disabledReason: "Source image dimensions are still loading." };
+  if (!normalizedPoints.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))) return { ...base, disabledReason: "Polygon contains invalid coordinates." };
+  if (new Set(normalizedPoints.map((point) => `${point.x}:${point.y}`)).size !== 4) return { ...base, disabledReason: "Polygon contains duplicate points." };
+  if (!validateNormalizedPolygon(normalizedPoints).ok) return { ...base, disabledReason: "Polygon is degenerate or self-crossing." };
+  const ordered = orderSourceQuadrilateralPoints(normalizedPoints, input.width, input.height);
+  if (!ordered) return { ...base, disabledReason: "Polygon cannot be safely ordered." };
+  const measurements = calculatePlacementGeometryMeasurements(ordered as [ScreenPoint, ScreenPoint, ScreenPoint, ScreenPoint]);
+  if (!measurements.valid) return { ...base, normalizedPoints: ordered.map((point) => ({ x: point.x / input.width!, y: point.y / input.height! })), disabledReason: measurements.message ?? "Polygon cannot be measured safely." };
+  const alreadySquare = measurements.maximumCornerDeviation <= 0.25 && measurements.oppositeEdgeDrift.topBottom <= 0.25 && measurements.oppositeEdgeDrift.leftRight <= 0.25;
+  return {
+    eligible: !alreadySquare,
+    alreadySquare,
+    normalizedPoints: ordered.map((point) => ({ x: point.x / input.width!, y: point.y / input.height! })),
+    disabledReason: alreadySquare ? "This piece is already squared." : null,
+    measurements,
+  };
 }

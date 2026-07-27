@@ -3808,7 +3808,7 @@ body:has(.minimal-sanborn-gps) {
 
 .sanborn-page-workbench__header {
   position: sticky;
-  top: 0;
+  top: var(--map-studio-toolbar-top, 0px);
   z-index: 20;
   display: flex;
   align-items: center;
@@ -3816,7 +3816,8 @@ body:has(.minimal-sanborn-gps) {
   gap: 10px;
   min-width: 0;
   border-bottom: 1px solid rgba(226, 190, 126, 0.16);
-  background: rgba(12, 12, 11, 0.8);
+  background: rgba(20, 26, 25, 0.98);
+  box-shadow: 0 2px 0 rgba(12, 12, 11, 0.35);
   padding: 6px 8px;
 }
 

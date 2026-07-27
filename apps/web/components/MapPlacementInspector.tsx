@@ -87,9 +87,6 @@ type Props = {
   onToggleVisible: () => void;
   onToggleLocked: () => void;
   onSetGeometryGuides: (value: boolean) => void;
-  showStreetGuides: boolean;
-  hasStreetGuides: boolean;
-  onSetStreetGuides: (value: boolean) => void;
   onSetDisplayScope: (value: MapPieceDisplayScope) => void;
   onSetShowReferenceSheetAlignment: (value: boolean) => void;
   onPlaceSheet: () => void;
@@ -648,11 +645,6 @@ export function MapPlacementInspector(props: Props) {
                     type="checkbox"
                   />{" "}
                   Geometry guides
-                  </label>
-                ) : null}
-                {props.hasStreetGuides ? (
-                  <label className="map-placement-inspector__geometry-toggle">
-                    <input checked={props.showStreetGuides} onChange={(event) => props.onSetStreetGuides(event.target.checked)} type="checkbox" /> Show street guides
                   </label>
                 ) : null}
               <label>

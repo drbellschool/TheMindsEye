@@ -104,9 +104,11 @@ import {
   type SanbornMapPieceGeoreference,
 } from "@/lib/sanborn-map-piece-georeference";
 import { findNextUnplacedPlacementItem, mergePlacementStateFromServer, type PlacementSaveResult } from "@/lib/map-placement-continuity";
+import { hydrateHistoricalMapStudioState } from "@/lib/historical-map-studio-hydration";
 import { formatMapPiecePlacementLabel } from "@/lib/map-piece-label";
 import type { PlacementGeometryMeasurements } from "@/lib/placement-geometry-measurements";
 import { findNearbyStreetAlignmentGuides } from "@/lib/street-alignment-guides";
+import { streetAlignmentFeatureEnabled } from "@/lib/sanborn-map-piece-features";
 import { reviewStatuses } from "@/lib/community-status";
 import {
   buildDefaultSanbornPageId,
@@ -908,8 +910,8 @@ export function HistoricalMapStudio({
   const [dirtyMapPieceIds, setDirtyMapPieceIds] = useState<Set<string>>(new Set());
   const [showGeometryGuides, setShowGeometryGuides] = useState(true);
   const [showSourceAngleGuides, setShowSourceAngleGuides] = useState(true);
-  const [showStreetGuides, setShowStreetGuides] = useState(true);
   const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
+  const [activeEditionHydrationState, setActiveEditionHydrationState] = useState<"loading" | "ready">("loading");
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
@@ -1015,6 +1017,7 @@ export function HistoricalMapStudio({
     warningMessage: initialData.warningMessage,
   });
   const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
+  const activeEditionDataReady = activeEditionHydrationState === "ready";
   const activeAtlasPages = getActiveEditionPages(atlasInventory.pages, selectedAtlasId).sort(compareSanbornAtlasPagesForWorkflow);
   const selectedAtlasPage = activeAtlasPages.find((page) => page.pageId === selectedAtlasPageId) ?? activeAtlasPages[0] ?? null;
   const selectedAtlasPageAsset = selectedAtlasPage ? sheets.find((sheet) => sheet.assetId === selectedAtlasPage.sanbornSheetAssetId) ?? null : null;
@@ -1040,7 +1043,7 @@ export function HistoricalMapStudio({
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
   const streetAlignmentGuides = useMemo(
-    () => findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }),
+    () => streetAlignmentFeatureEnabled ? findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }) : [],
     [selectedAtlasPagePieces, selectedMapPiece],
   );
   const atlasSaveActionsDisabled = saveStatus === "saving";
@@ -1193,6 +1196,7 @@ export function HistoricalMapStudio({
   );
 
   useEffect(() => {
+    setActiveEditionHydrationState("loading");
     setStudioLayoutPreference(readStudioLayoutPreference());
     setStudioLayoutPreferenceLoaded(true);
   }, []);
@@ -1550,8 +1554,11 @@ export function HistoricalMapStudio({
     setSheetImageStates({});
     setAtlasInventory(initialData.atlasInventory);
     const serverPlacements = mergeSavedAndDefaultMapPieceGeoreferences(initialData.atlasInventory.pieces, initialData.mapPieceGeoreferences);
-    const currentEditionPieceIds = new Set(serverPlacements.map((placement) => placement.pieceId));
-    setMapPieceGeoreferences((current) => mergePlacementStateFromServer(current.filter((placement) => currentEditionPieceIds.has(placement.pieceId)), serverPlacements));
+    const hydratedPlacementState = hydrateHistoricalMapStudioState(
+      { editionKey: selectedAtlasId || null, loadedAt: initialData.lastLoadedAt, mapPieceGeoreferences },
+      { editionKey: nextAtlasId || null, loadedAt: initialData.lastLoadedAt, mapPieceGeoreferences: serverPlacements },
+    );
+    setMapPieceGeoreferences([...hydratedPlacementState.mapPieceGeoreferences]);
     setTownIndexRegions(initialData.townIndexRegions);
     setSelectedAtlasId(nextAtlasId);
     setSelectedAtlasPageId(nextPageId);
@@ -1583,6 +1590,7 @@ export function HistoricalMapStudio({
     isUserPanningRef.current = false;
     isUserZoomingRef.current = false;
     isProgrammaticViewChangeRef.current = false;
+    setActiveEditionHydrationState("ready");
   }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.mapPieceGeoreferences, initialData.geographicMap, initialData.workspace, initialData.atlasInventory, initialData.townIndexRegions]);
 
   useEffect(() => {
@@ -4929,15 +4937,17 @@ export function HistoricalMapStudio({
           <p>{initialData.activeTownPackage?.region ?? "Select a town package to begin reconstruction."}</p>
         </div>
         <div className="sanborn-station-metrics" aria-label="Reconstruction progress metrics">
-          <span title={reconstructionModel.ledger.town.explanation}><strong>{reconstructionModel.ledger.town.percent}%</strong> overall ({reconstructionModel.ledger.town.resolved}/{reconstructionModel.ledger.town.required})</span>
-          <span><strong>{reconstructionModel.ledger.currentStage.percent}%</strong> current stage</span>
-          <span><strong>{reconstructionModel.ledger.activeSheet.percent}%</strong> active sheet</span>
-          <span><strong>{reconstructionModel.edition.sheetCount}</strong> sheets</span>
-          <span><strong>{reconstructionModel.classification.classifiedPages}/{reconstructionModel.classification.totalPages}</strong> pages classified</span>
-          <span><strong>{reconstructionModel.edition.placedMapPieceCount}</strong> pieces placed</span>
-          <span><strong>{reconstructionModel.index.completion.totalRegions}</strong> index regions</span>
-          <span><strong>{reconstructionModel.town.sourceRecordsLinked}</strong> sources linked</span>
-          <span><strong>{reconstructionModel.ledger.tasks.filter((task) => !task.resolved).length}</strong> unresolved tasks</span>
+          {!activeEditionDataReady ? <span aria-live="polite">Loading saved reconstruction work</span> : <>
+            <span title={reconstructionModel.ledger.town.explanation}><strong>{reconstructionModel.ledger.town.percent}%</strong> overall ({reconstructionModel.ledger.town.resolved}/{reconstructionModel.ledger.town.required})</span>
+            <span><strong>{reconstructionModel.ledger.currentStage.percent}%</strong> current stage</span>
+            <span><strong>{reconstructionModel.ledger.activeSheet.percent}%</strong> active sheet</span>
+            <span><strong>{reconstructionModel.edition.sheetCount}</strong> sheets</span>
+            <span><strong>{reconstructionModel.classification.classifiedPages}/{reconstructionModel.classification.totalPages}</strong> pages classified</span>
+            <span><strong>{reconstructionModel.edition.placedMapPieceCount}</strong> pieces placed</span>
+            <span><strong>{reconstructionModel.index.completion.totalRegions}</strong> index regions</span>
+            <span><strong>{reconstructionModel.town.sourceRecordsLinked}</strong> sources linked</span>
+            <span><strong>{reconstructionModel.ledger.tasks.filter((task) => !task.resolved).length}</strong> unresolved tasks</span>
+          </>}
         </div>
         <p className="sanborn-progress-explanation">{reconstructionModel.ledger.overall.explanation} New discovered objects add required placement tasks to the denominator.</p>
         <section className="sanborn-station-panel">
@@ -5309,8 +5319,8 @@ export function HistoricalMapStudio({
             sheetLayers={mapSheetLayers}
             showControlPoints={false}
             showGeometryGuides={showGeometryGuides}
-            streetAlignmentGuides={streetAlignmentGuides}
-            showStreetGuides={showStreetGuides}
+            streetAlignmentGuides={[]}
+            showStreetGuides={false}
             showSheetBoundaries={showReferenceSheetAlignment}
             showSheetLabels={showReferenceSheetAlignment}
             viewRefreshRequest={mapViewRefreshRequest}
@@ -5321,7 +5331,7 @@ export function HistoricalMapStudio({
           asset={selectedAtlasPageAsset}
           piece={selectedMapPiece}
           sourceLabel={selectedAtlasPage ? getSanbornPageDisplayLabel(selectedAtlasPage) : "Selected source sheet"}
-          streetGuides={streetAlignmentGuides}
+          streetGuides={[]}
         />
       </section>
     );
@@ -5375,8 +5385,6 @@ export function HistoricalMapStudio({
           onSetDisplayScope={setPieceDisplayScope}
           onSetGeoEditMode={(mode) => { setGeoEditMode(mode); setPiecePlacementAnchorId(""); commitGeographicMapSettings({ editMode: mode, globalHistoricalOpacity: 1 }, false); }}
           onSetGeometryGuides={setShowGeometryGuides}
-          hasStreetGuides={streetAlignmentGuides.length > 0}
-          onSetStreetGuides={setShowStreetGuides}
           onSetOpacity={(value) => selectedMapPiece && commitMapPieceGeoreference(selectedMapPiece.pieceId, { opacity: value })}
           onSetRotation={(value) => selectedMapPiece && selectedMapPieceGeoreference && replaceMapPieceGeoreference(rotateMapPieceGeoreference(selectedMapPieceGeoreference, value))}
           onSetShowReferenceSheetAlignment={setShowReferenceSheetAlignment}
@@ -5412,7 +5420,6 @@ export function HistoricalMapStudio({
           selectedSheetPlaced={selectedSheetPlaced}
           geometryMeasurements={placementGeometryMeasurements}
           showGeometryGuides={showGeometryGuides}
-          showStreetGuides={showStreetGuides}
           showReferenceSheetAlignment={showReferenceSheetAlignment}
           unableToPlaceReason={unableToPlaceReason}
         />
@@ -5925,7 +5932,7 @@ export function HistoricalMapStudio({
     return (
       <>
         <section className="sanborn-placement-queue" aria-label="Geographic object placement queue">
-          <header><div><p className="panel__eyebrow">Geographic object placement</p><strong>{mapPiecePlacementQueue.counts.geographicallyPlaced} of {mapPiecePlacementQueue.counts.total} placed</strong></div><span>{mapPiecePlacementQueue.counts.needPlacement} need placement · {mapPiecePlacementQueue.counts.draft} drafts · {mapPiecePlacementQueue.counts.placedAwaitingReview} awaiting review · {mapPiecePlacementQueue.counts.reviewed} reviewed · {mapPiecePlacementQueue.counts.unableToPlace} unable</span></header>
+          <header><div><p className="panel__eyebrow">Geographic object placement</p><strong>{activeEditionDataReady ? `${mapPiecePlacementQueue.counts.geographicallyPlaced} of ${mapPiecePlacementQueue.counts.total} placed` : "Loading saved reconstruction work"}</strong></div><span>{activeEditionDataReady ? `${mapPiecePlacementQueue.counts.needPlacement} need placement · ${mapPiecePlacementQueue.counts.draft} drafts · ${mapPiecePlacementQueue.counts.placedAwaitingReview} awaiting review · ${mapPiecePlacementQueue.counts.reviewed} reviewed · ${mapPiecePlacementQueue.counts.unableToPlace} unable` : "Edition-wide placement counts are loading."}</span></header>
           <div className="sanborn-station-actions">
             <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed")} onClick={() => movePlacementQueue("previous_unplaced")} type="button">Previous unplaced</button>
             <button className="sanborn-button" disabled={!mapPiecePlacementQueue.items.some((item) => item.status === "not_placed")} onClick={() => movePlacementQueue("next_unplaced")} type="button">Next unplaced</button>
@@ -6803,6 +6810,7 @@ export function HistoricalMapStudio({
         </div>
       </header>
 
+      {!activeEditionDataReady ? <p aria-live="polite" className="map-studio-toast">Loading saved reconstruction work</p> : null}
       {initialData.warningMessage ? <p className="map-studio-toast">{initialData.warningMessage}</p> : null}
       {saveMessage && atlasWorkflowStep !== "gps_alignment" ? <p className={saveStatus === "error" ? "map-studio-toast is-error" : "map-studio-toast"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
 

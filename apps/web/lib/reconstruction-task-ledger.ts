@@ -3,7 +3,7 @@ import type { SanbornAtlasPageRecord, SanbornAtlasRecord, SanbornMapPieceRecord 
 import { getSanbornPageDisplayLabel, getSanbornPagePrintedReference, pageTypeSupportsMapPieces, isClassifiedSanbornPage } from "./sanborn-atlas.ts";
 import type { SanbornMapPieceGeoreference } from "./sanborn-map-piece-georeference.ts";
 import { deriveCanonicalMapPiecePlacementStatus } from "./map-piece-placement-status.ts";
-import { sanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses } from "./sanborn-map-piece-features.ts";
+import { getActiveSanbornMapPieceFeatureCategories, sanbornMapPieceReviewStatuses } from "./sanborn-map-piece-features.ts";
 import { sourceRegionSupportsMapPieces, type SanbornTownIndexRegionRecord } from "./sanborn-town-index.ts";
 import type { ReconstructionContextQuery, ReconstructionWorkflowStepId } from "./town-reconstruction.ts";
 
@@ -50,7 +50,7 @@ export type ReconstructionTaskLedger = {
   nextIncompleteTask: ReconstructionLedgerTask | null;
 };
 
-const reviewableCategories = [...sanbornMapPieceFeatureCategories];
+const reviewableCategories = getActiveSanbornMapPieceFeatureCategories();
 const completedReviewStatuses = new Set(["reviewed_found", "reviewed_none_found"]);
 
 function percent(resolved: number, required: number): number {
