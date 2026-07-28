@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { buildSanbornReplacementStoragePath, buildSanbornStoragePath, sanbornDefaultMaxUploadBytes, sanbornSheetBucket } from "@/lib/sanborn-intake";
 import { createHistoricalImageFinalizationToken, historicalImageUploadKinds, validateDeclaredUpload, type HistoricalImageUploadKind } from "@/lib/historical-image-upload";
+import { buildSupabaseResumableUploadEndpoint, inspectCompactSignedUploadToken } from "@/lib/historical-image-upload-endpoint";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
 export const runtime = "nodejs";
@@ -15,9 +16,17 @@ function optionalText(value: unknown, max = 2000): string | null {
 }
 
 function configuredProjectId(): string | null {
+  const explicit = process.env.SUPABASE_PROJECT_REF?.trim();
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) return null;
-  try { return new URL(url).hostname.split(".")[0] || null; } catch { return null; }
+  let urlProjectId: string | null = null;
+  if (url) {
+    try {
+      const hostname = new URL(url).hostname;
+      urlProjectId = hostname.endsWith(".supabase.co") ? hostname.split(".")[0] || null : null;
+    } catch { return null; }
+  }
+  if (explicit && urlProjectId && explicit !== urlProjectId) return null;
+  return explicit || urlProjectId;
 }
 
 export async function POST(request: NextRequest) {
@@ -63,9 +72,19 @@ export async function POST(request: NextRequest) {
       : buildSanbornStoragePath({ townPackageId: town.package_id, assetId, originalFilename: validation.filename });
   const signed = await access.supabase.storage.from(bucket).createSignedUploadUrl(storagePath, { upsert: false });
   if (signed.error || !signed.data?.token) return jsonError(503, "Secure upload preparation failed.", { code: "signed_upload_token" });
+  const tokenShape = inspectCompactSignedUploadToken(signed.data.token);
+  if (!tokenShape.valid) {
+    console.warn("[historical-image-upload] Supabase returned an invalid signed upload token", {
+      segmentCount: tokenShape.segmentCount,
+      tokenLength: tokenShape.tokenLength,
+      projectId: configuredProjectId(),
+      uploadMode: "signed_tus",
+    });
+    return jsonError(503, "Supabase returned an invalid signed upload token.", { code: "signed_upload_token" });
+  }
   const claims = { version: 1 as const, kind, assetId, townPackageId: town.id, atlasId: atlas?.atlasId ?? null, bucket, objectPath: storagePath, originalFilename: validation.filename, declaredSize: validation.byteSize, declaredMimeType: validation.mimeType, sourceRecordId, sheetNumber: Number.isInteger(Number(body?.sheetNumber)) ? Number(body?.sheetNumber) : null, sourceUrl: optionalText(body?.sourceUrl), archiveName: optionalText(body?.archiveName), rightsNote: optionalText(body?.rightsNote), intakeNotes: optionalText(body?.intakeNotes), replacementAssetId, expiresAt: Math.floor(Date.now() / 1000) + tokenLifetimeSeconds };
   const finalizationToken = createHistoricalImageFinalizationToken(claims);
   const projectId = configuredProjectId();
   if (!projectId) return jsonError(503, "Secure upload preparation failed because Supabase storage is not configured.");
-  return NextResponse.json({ ok: true, upload: { projectId, endpoint: `https://${projectId}.storage.supabase.co/storage/v1/upload/resumable`, bucket, objectPath: storagePath, uploadToken: signed.data.token, finalizationToken, expiresAt: claims.expiresAt, assetId, kind, maxBytes: kind === "birds_eye_reference" ? birdsEyeMaxUploadBytes : Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10) || sanbornDefaultMaxUploadBytes } });
+  return NextResponse.json({ ok: true, upload: { projectId, endpoint: buildSupabaseResumableUploadEndpoint({ projectId, authenticationMode: "signed_tus" }), authenticationMode: "signed_tus" as const, bucket, objectPath: storagePath, uploadToken: signed.data.token, finalizationToken, expiresAt: claims.expiresAt, assetId, kind, maxBytes: kind === "birds_eye_reference" ? birdsEyeMaxUploadBytes : Number.parseInt(process.env.SANBORN_MAX_UPLOAD_BYTES ?? "", 10) || sanbornDefaultMaxUploadBytes } });
 }
