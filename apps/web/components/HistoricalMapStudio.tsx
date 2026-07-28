@@ -26,6 +26,7 @@ import { SanbornPieceList } from "@/components/SanbornPieceList";
 import { SanbornSourceContext } from "@/components/SanbornSourceContext";
 import { BirdsEyePerspectiveWorkspace } from "@/components/BirdsEyePerspectiveWorkspace";
 import { SheetInventoryTile } from "@/components/SheetInventoryTile";
+import { HistoricalImageUploadQueue, type HistoricalImageUploadQueueHandle, type HistoricalImageUploadTask } from "@/components/HistoricalImageUploadQueue";
 import { MapPlacementInspector } from "@/components/MapPlacementInspector";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
@@ -870,6 +871,7 @@ export function HistoricalMapStudio({
   const sheetNodeRefs = useRef<Map<string, any>>(new Map());
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const birdsEyeInputRef = useRef<HTMLInputElement | null>(null);
+  const historicalUploadQueueRef = useRef<HistoricalImageUploadQueueHandle | null>(null);
   const pendingUploadedAssetIdRef = useRef<string>("");
   const minimalMapRef = useRef<HTMLElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -3351,6 +3353,36 @@ export function HistoricalMapStudio({
     );
   }
 
+  function handleHistoricalUploadCompleted(task: HistoricalImageUploadTask, value: unknown) {
+    const result = value as { asset?: Record<string, unknown>; atlasId?: string | null; pageId?: string | null };
+    const asset = result.asset;
+    if (!asset) return;
+    if (task.kind === "birds_eye_reference") {
+      const uploaded = asset;
+      setBirdsEye((current) => ({ ...current, ready: true, assets: [{ id: String(uploaded.id ?? uploaded.asset_id), assetId: String(uploaded.asset_id), townPackageId: String(uploaded.town_package_id), sourceRecordId: uploaded.source_record_id ? String(uploaded.source_record_id) : null, originalFilename: String(uploaded.original_filename), storageBucket: String(uploaded.storage_bucket), storagePath: String(uploaded.storage_path), signedUrl: uploaded.signed_url ? String(uploaded.signed_url) : null, width: Number(uploaded.width), height: Number(uploaded.height), mimeType: String(uploaded.mime_type), byteSize: Number(uploaded.byte_size), checksum: String(uploaded.sha256_checksum), evidenceClassification: String(uploaded.evidence_classification), reviewStatus: String(uploaded.review_status), rightsNote: uploaded.rights_note ? String(uploaded.rights_note) : null, intakeNotes: uploaded.intake_notes ? String(uploaded.intake_notes) : null, createdAt: uploaded.created_at ? String(uploaded.created_at) : null, updatedAt: uploaded.updated_at ? String(uploaded.updated_at) : null }, ...current.assets] }));
+      setSaveStatus("saved");
+      setSaveMessage(`${task.file.name} uploaded. Designate it as the Birds-Eye Reference when ready.`);
+      return;
+    }
+    const uploaded = asset;
+    const newAsset: StudioSheetAsset = { assetId: String(uploaded.assetId), rowId: String(uploaded.rowId ?? ""), townPackageId: initialData.activeTownPackage?.id ?? "", sourceRecordId: task.sourceRecordId ?? null, sourceId: null, sourceTitle: null, mapLayerId: null, sheetNumber: Number(uploaded.sheetNumber), originalFilename: String(uploaded.originalFilename), storageBucket: String(uploaded.storageBucket), storagePath: String(uploaded.storagePath), signedUrl: uploaded.signedUrl ? String(uploaded.signedUrl) : null, signedUrlExpiresAt: null, mimeType: String(uploaded.mimeType), byteSize: Number(uploaded.byteSize), width: Number(uploaded.width), height: Number(uploaded.height), checksum: String(uploaded.checksum), sourceUrl: task.sourceUrl ?? null, archiveName: task.archiveName ?? null, rightsNote: task.rightsNote ?? null, evidenceClassification: "unknown", reviewStatus: "unknown", intakeNotes: task.intakeNotes ?? null, uploadedAt: uploaded.uploadedAt ? String(uploaded.uploadedAt) : new Date().toISOString(), updatedAt: new Date().toISOString() };
+    if (task.replacementAssetId) {
+      setSheets((current) => current.map((candidate) => candidate.assetId === task.replacementAssetId ? { ...candidate, originalFilename: newAsset.originalFilename, storagePath: newAsset.storagePath, signedUrl: newAsset.signedUrl, mimeType: newAsset.mimeType, byteSize: newAsset.byteSize, width: newAsset.width, height: newAsset.height, checksum: newAsset.checksum, updatedAt: newAsset.updatedAt } : candidate));
+      setSaveStatus("saved");
+      setSaveMessage(`${newAsset.originalFilename} replaced and registered.`);
+      return;
+    }
+    setSheets((current) => current.some((candidate) => candidate.assetId === newAsset.assetId) ? current : [...current, newAsset]);
+    pendingUploadedAssetIdRef.current = newAsset.assetId;
+    setSelectedAssetId(newAsset.assetId);
+    if (result.pageId && activeAtlas && result.atlasId === activeAtlas.atlasId) {
+      const page: SanbornAtlasPageRecord = { rowId: newAsset.rowId, pageId: String(result.pageId), atlasRowId: activeAtlas.rowId, atlasId: activeAtlas.atlasId, sanbornSheetAssetId: newAsset.assetId, sanbornSheetAssetRowId: newAsset.rowId, pageSequence: activeAtlasPages.length + 1, pageType: "unknown", sheetNumber: newAsset.sheetNumber, printedReference: newAsset.sheetNumber === null ? null : String(newAsset.sheetNumber), volumeLabel: activeAtlas.volumeLabel, displayLabel: newAsset.originalFilename, isPrimaryTownIndex: false, classificationNotes: null, archivedAt: null, archiveReason: null, reviewStatus: "unknown", evidenceClassification: "unknown", reviewCategories: {}, updatedAt: newAsset.updatedAt, isPersisted: true };
+      setAtlasInventory((current) => ({ ...current, pages: current.pages.some((candidate) => candidate.pageId === page.pageId) ? current.pages : [...current.pages, page] }));
+      setSelectedAtlasPageId(page.pageId);
+    }
+    setUploadStatuses((current) => [...current, { filename: task.file.name, status: "saved", message: "Upload complete and asset registered." }]);
+  }
+
   async function uploadSheets(files: FileList | null) {
     if (!files || !initialData.activeTownPackage) {
       return;
@@ -3364,42 +3396,15 @@ export function HistoricalMapStudio({
     }
 
     const startingMissing = missingSheetNumbers[0] ?? sheets.length + 1;
-    let offset = 0;
-    const statuses: UploadStatus[] = [];
-    let newestUploadedAssetId = "";
-
-    for (const file of Array.from(files)) {
-      statuses.push({ filename: file.name, status: "uploading", message: "Uploading..." });
-      setUploadStatuses([...statuses]);
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("sheetNumber", String(startingMissing + offset));
-      formData.append("townPackageId", initialData.activeTownPackage.id);
-      formData.append("atlasId", activeAtlas.atlasId);
-      formData.append("intakeNotes", "Uploaded from Historical Map Studio.");
-      offset += 1;
-
-      const response = await fetch("/api/community/sanborn-sheets", { method: "POST", body: formData });
-      const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; editionYear?: number | null; asset?: { assetId?: string; originalFilename?: string } } | null;
-      if (response.ok && payload?.ok && payload.asset?.assetId) {
-        newestUploadedAssetId = payload.asset.assetId;
-      }
-
-      statuses[statuses.length - 1] = {
-        filename: file.name,
-        status: response.ok && payload?.ok ? "saved" : "failed",
-        message: response.ok && payload?.ok ? `Uploaded to ${initialData.activeTownPackage.name} ${payload.editionYear ?? activeAtlas.editionYear}. Refreshing Sheet Inventory...` : payload?.message ?? "Upload failed.",
-      };
-      setUploadStatuses([...statuses]);
-    }
-
-    if (newestUploadedAssetId) {
-      pendingUploadedAssetIdRef.current = newestUploadedAssetId;
-      setSelectedAssetId(newestUploadedAssetId);
-    }
-
-    router.refresh();
+    const tasks: HistoricalImageUploadTask[] = Array.from(files).map((file, index) => ({
+      file,
+      kind: "sanborn_sheet",
+      townPackageId: initialData.activeTownPackage!.id,
+      atlasId: activeAtlas.atlasId,
+      sheetNumber: startingMissing + index,
+      intakeNotes: "Uploaded from Historical Map Studio.",
+    }));
+    historicalUploadQueueRef.current?.enqueue(tasks);
   }
 
   async function updateMetadata() {
@@ -3449,19 +3454,7 @@ export function HistoricalMapStudio({
       return;
     }
 
-    const formData = new FormData();
-    formData.append("assetId", targetAsset.assetId);
-    formData.append("file", file);
-
-    const response = await fetch("/api/community/historical-map-studio/replace", { method: "POST", body: formData });
-    const payload = (await response.json().catch(() => null)) as { ok?: boolean; message?: string; warningMessage?: string } | null;
-
-    setSaveStatus(response.ok && payload?.ok ? "saved" : "error");
-    setSaveMessage(response.ok && payload?.ok ? payload.warningMessage ?? "Image replaced." : payload?.message ?? "Replacement failed.");
-
-    if (response.ok && payload?.ok) {
-      router.refresh();
-    }
+    historicalUploadQueueRef.current?.enqueue([{ file, kind: "sanborn_sheet", townPackageId: initialData.activeTownPackage?.id ?? "", atlasId: activeAtlas?.atlasId ?? null, replacementAssetId: targetAsset.assetId, intakeNotes: "Replacement uploaded from Historical Map Studio." }]);
   }
 
   async function deleteSelectedSheet() {
@@ -4957,17 +4950,7 @@ export function HistoricalMapStudio({
 
   async function uploadBirdsEyeReference(file: File) {
     if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) return;
-    const form = new FormData();
-    form.set("file", file);
-    form.set("townPackageId", initialData.activeTownPackage.id);
-    if (selectedSourceRecord?.sourceRecordId) form.set("sourceRecordId", selectedSourceRecord.sourceRecordId);
-    const response = await fetch("/api/community/historical-map-studio/birds-eye-assets", { method: "POST", body: form });
-    const result = await response.json().catch(() => null) as { ok?: boolean; asset?: { id: string; asset_id: string; town_package_id: string; source_record_id: string | null; original_filename: string; storage_bucket: string; storage_path: string; mime_type: string; byte_size: number; width: number; height: number; sha256_checksum: string; evidence_classification: string; review_status: string; rights_note: string | null; intake_notes: string | null; created_at: string | null; updated_at: string | null; signed_url: string | null } } | null;
-    if (!response.ok || !result?.ok || !result.asset) { setSaveStatus("error"); setSaveMessage("Birds-Eye reference upload failed."); return; }
-    setSaveStatus("saved");
-    setSaveMessage("Birds-Eye reference uploaded. Designate it for this edition when ready.");
-    const uploaded = result.asset;
-    setBirdsEye((current) => ({ ...current, ready: true, assets: uploaded ? [...current.assets, { id: uploaded.id, assetId: uploaded.asset_id, townPackageId: uploaded.town_package_id, sourceRecordId: uploaded.source_record_id, originalFilename: uploaded.original_filename, storageBucket: uploaded.storage_bucket, storagePath: uploaded.storage_path, signedUrl: uploaded.signed_url, width: uploaded.width, height: uploaded.height, mimeType: uploaded.mime_type, byteSize: uploaded.byte_size, checksum: uploaded.sha256_checksum, evidenceClassification: uploaded.evidence_classification, reviewStatus: uploaded.review_status, rightsNote: uploaded.rights_note, intakeNotes: uploaded.intake_notes, createdAt: uploaded.created_at, updatedAt: uploaded.updated_at }, ...current.assets] : current.assets }));
+    historicalUploadQueueRef.current?.enqueue([{ file, kind: "birds_eye_reference", townPackageId: initialData.activeTownPackage.id, atlasId: activeAtlas.atlasId, sourceRecordId: selectedSourceRecord?.sourceRecordId ?? null, intakeNotes: "Uploaded as a historical Birds-Eye reference; requires human calibration review." }]);
   }
 
   async function designateBirdsEyeReference(assetId: string | null) {
@@ -6910,6 +6893,8 @@ export function HistoricalMapStudio({
           ) : null}
         </div>
       </header>
+
+      <HistoricalImageUploadQueue ref={historicalUploadQueueRef} onCompleted={handleHistoricalUploadCompleted} />
 
       {!activeEditionDataReady ? <p aria-live="polite" className="map-studio-toast">Loading saved reconstruction work</p> : null}
       {initialData.warningMessage ? <p className="map-studio-toast">{initialData.warningMessage}</p> : null}
