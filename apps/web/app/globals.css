@@ -1745,6 +1745,7 @@ textarea {
   color: #f6e7cb;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
 }
+.historical-image-upload-queue--collapsed { width: auto; cursor: pointer; text-align: left; }
 .historical-image-upload-queue > header,
 .historical-image-upload-queue__line,
 .historical-image-upload-queue__detail {

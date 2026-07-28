@@ -27,6 +27,7 @@ import { SanbornSourceContext } from "@/components/SanbornSourceContext";
 import { BirdsEyePerspectiveWorkspace } from "@/components/BirdsEyePerspectiveWorkspace";
 import { SheetInventoryTile } from "@/components/SheetInventoryTile";
 import { HistoricalImageUploadQueue, type HistoricalImageUploadQueueHandle, type HistoricalImageUploadTask } from "@/components/HistoricalImageUploadQueue";
+import type { HistoricalUploadProgress } from "@/lib/historical-image-upload-client";
 import { MapPlacementInspector } from "@/components/MapPlacementInspector";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
 import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
@@ -872,6 +873,7 @@ export function HistoricalMapStudio({
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const birdsEyeInputRef = useRef<HTMLInputElement | null>(null);
   const historicalUploadQueueRef = useRef<HistoricalImageUploadQueueHandle | null>(null);
+  const [activeHistoricalUpload, setActiveHistoricalUpload] = useState<{ filename: string; kind: HistoricalImageUploadTask["kind"]; progress: HistoricalUploadProgress } | null>(null);
   const pendingUploadedAssetIdRef = useRef<string>("");
   const minimalMapRef = useRef<HTMLElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -919,7 +921,11 @@ export function HistoricalMapStudio({
   const [showGeometryGuides, setShowGeometryGuides] = useState(true);
   const [showSourceAngleGuides, setShowSourceAngleGuides] = useState(true);
   const [placementGeometryMeasurements, setPlacementGeometryMeasurements] = useState<PlacementGeometryMeasurements | null>(null);
-  const [activeEditionHydrationState, setActiveEditionHydrationState] = useState<"loading" | "ready">("loading");
+  const [activeEditionHydrationState, setActiveEditionHydrationState] = useState<"loading" | "ready" | "error">("loading");
+  const [bootstrapError, setBootstrapError] = useState("");
+  const [bootstrapRetryNonce, setBootstrapRetryNonce] = useState(0);
+  const bootstrapEditionRef = useRef("");
+  const bootstrapAbortRef = useRef<AbortController | null>(null);
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [birdsEye, setBirdsEye] = useState<BirdsEyePerspectiveState>(initialData.birdsEye);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
@@ -1615,8 +1621,55 @@ export function HistoricalMapStudio({
     isUserPanningRef.current = false;
     isUserZoomingRef.current = false;
     isProgrammaticViewChangeRef.current = false;
-    setActiveEditionHydrationState("ready");
   }, [initialData.lastLoadedAt, initialData.sheets, initialData.placements, initialData.sheetGeoreferences, initialData.mapPieceGeoreferences, initialData.geographicMap, initialData.workspace, initialData.atlasInventory, initialData.townIndexRegions, initialData.birdsEye]);
+
+  useEffect(() => {
+    const townPackageId = initialData.activeTownPackage?.id;
+    const mapYear = initialData.activeMapYear;
+    if (!townPackageId || mapYear == null) {
+      setActiveEditionHydrationState("ready");
+      return;
+    }
+    const editionKey = `${townPackageId}:${mapYear}:${initialData.atlasInventory.activeAtlasId ?? ""}`;
+    if (bootstrapEditionRef.current === editionKey && bootstrapRetryNonce === 0) return;
+    bootstrapEditionRef.current = editionKey;
+    bootstrapAbortRef.current?.abort();
+    const controller = new AbortController();
+    bootstrapAbortRef.current = controller;
+    setActiveEditionHydrationState("loading");
+    setBootstrapError("");
+    const params = new URLSearchParams({ townPackageId, mapYear: String(mapYear) });
+    if (initialData.atlasInventory.activeAtlasId) params.set("atlasId", initialData.atlasInventory.activeAtlasId);
+    fetch(`/api/community/historical-map-studio/bootstrap?${params.toString()}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null) as { ok?: boolean; message?: string; state?: HistoricalMapStudioState } | null;
+        if (!response.ok || !payload?.ok || !payload.state) throw new Error(payload?.message ?? "Saved reconstruction work could not be loaded.");
+        return payload.state;
+      })
+      .then((state) => {
+        if (controller.signal.aborted || state.activeTownPackage?.id !== townPackageId || state.activeMapYear !== mapYear) return;
+        const nextSelectedAssetId = state.sheets.some((sheet) => sheet.assetId === selectedAssetId) ? selectedAssetId : state.sheets[0]?.assetId ?? "";
+        setSheets(state.sheets);
+        setAtlasInventory(state.atlasInventory);
+        setTownIndexRegions(state.townIndexRegions);
+        setBirdsEye(state.birdsEye);
+        setGeoHistory(buildInitialSheetGeographicHistory(createSheetGeographicPresentFromState(state)));
+        setHistory(buildInitialHistory(createPresentFromState(state)));
+        setGeoreferenceDraft(createGeoreferenceDraft(state, nextSelectedAssetId || null));
+        setSelectedAssetId(nextSelectedAssetId);
+        setMapPieceGeoreferences(mergeSavedAndDefaultMapPieceGeoreferences(state.atlasInventory.pieces, state.mapPieceGeoreferences));
+        setLastSavedAt(state.workspace?.updatedAt ?? "");
+        setResolvedMapPlacementWorkspaceId(state.workspace?.workspaceId ?? "");
+        setBootstrapError("");
+        setActiveEditionHydrationState("ready");
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setBootstrapError(error instanceof Error ? error.message : "Saved reconstruction work could not be loaded.");
+        setActiveEditionHydrationState("error");
+      });
+    return () => controller.abort();
+  }, [bootstrapRetryNonce, initialData.activeMapYear, initialData.activeTownPackage?.id, initialData.atlasInventory.activeAtlasId]);
 
   useEffect(() => {
     if (initialSelectionAppliedRef.current) {
@@ -3383,6 +3436,21 @@ export function HistoricalMapStudio({
     setUploadStatuses((current) => [...current, { filename: task.file.name, status: "saved", message: "Upload complete and asset registered." }]);
   }
 
+  function enqueueHistoricalImageUploads(tasks: HistoricalImageUploadTask[]): boolean {
+    const manager = historicalUploadQueueRef.current;
+    if (!manager) {
+      setSaveStatus("error");
+      setSaveMessage("The upload manager is not ready. Try again.");
+      return false;
+    }
+    const accepted = manager.enqueue(tasks);
+    if (!accepted) {
+      setSaveStatus("error");
+      setSaveMessage("No valid image upload was selected.");
+    }
+    return accepted;
+  }
+
   async function uploadSheets(files: FileList | null) {
     if (!files || !initialData.activeTownPackage) {
       return;
@@ -3404,7 +3472,7 @@ export function HistoricalMapStudio({
       sheetNumber: startingMissing + index,
       intakeNotes: "Uploaded from Historical Map Studio.",
     }));
-    historicalUploadQueueRef.current?.enqueue(tasks);
+    enqueueHistoricalImageUploads(tasks);
   }
 
   async function updateMetadata() {
@@ -3454,7 +3522,7 @@ export function HistoricalMapStudio({
       return;
     }
 
-    historicalUploadQueueRef.current?.enqueue([{ file, kind: "sanborn_sheet", townPackageId: initialData.activeTownPackage?.id ?? "", atlasId: activeAtlas?.atlasId ?? null, replacementAssetId: targetAsset.assetId, intakeNotes: "Replacement uploaded from Historical Map Studio." }]);
+    enqueueHistoricalImageUploads([{ file, kind: "sanborn_sheet", townPackageId: initialData.activeTownPackage?.id ?? "", atlasId: activeAtlas?.atlasId ?? null, replacementAssetId: targetAsset.assetId, intakeNotes: "Replacement uploaded from Historical Map Studio." }]);
   }
 
   async function deleteSelectedSheet() {
@@ -4949,8 +5017,12 @@ export function HistoricalMapStudio({
   }
 
   async function uploadBirdsEyeReference(file: File) {
-    if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) return;
-    historicalUploadQueueRef.current?.enqueue([{ file, kind: "birds_eye_reference", townPackageId: initialData.activeTownPackage.id, atlasId: activeAtlas.atlasId, sourceRecordId: selectedSourceRecord?.sourceRecordId ?? null, intakeNotes: "Uploaded as a historical Birds-Eye reference; requires human calibration review." }]);
+    if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) {
+      setSaveStatus("error");
+      setSaveMessage(atlasReadOnly ? "Birds-Eye uploads are unavailable while this edition is read-only." : "Select an editable edition before uploading a Birds-Eye reference.");
+      return;
+    }
+    enqueueHistoricalImageUploads([{ file, kind: "birds_eye_reference", townPackageId: initialData.activeTownPackage.id, atlasId: activeAtlas.atlasId, sourceRecordId: selectedSourceRecord?.sourceRecordId ?? null, intakeNotes: "Uploaded as a historical Birds-Eye reference; requires human calibration review." }]);
   }
 
   async function designateBirdsEyeReference(assetId: string | null) {
@@ -5575,6 +5647,7 @@ export function HistoricalMapStudio({
           </section>
           <section className="sanborn-station-subsection birds-eye-reference-manager" aria-label="Birds-Eye Reference">
             <div className="sanborn-station-subsection__header"><strong>Birds-Eye Reference</strong><span>{birdsEye.designatedAssetId ? "Designated" : "No reference selected"}</span></div>
+            {activeHistoricalUpload?.kind === "birds_eye_reference" && activeHistoricalUpload.progress.phase !== "complete" ? <p className="birds-eye-reference-upload-status" aria-live="polite">Uploading {activeHistoricalUpload.filename} · {Math.round((activeHistoricalUpload.progress.bytesUploaded / Math.max(activeHistoricalUpload.progress.bytesTotal, 1)) * 100)}%</p> : null}
             <p className="sanborn-atlas-empty">Upload or select a historical birds-eye map without adding it to Sanborn sheet processing.</p>
             <input ref={birdsEyeInputRef} accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadBirdsEyeReference(file); event.currentTarget.value = ""; }} />
             <div className="sanborn-station-actions"><button className="sanborn-button" disabled={atlasReadOnly} onClick={() => birdsEyeInputRef.current?.click()} type="button">Upload birds-eye image</button></div>
@@ -6894,9 +6967,10 @@ export function HistoricalMapStudio({
         </div>
       </header>
 
-      <HistoricalImageUploadQueue ref={historicalUploadQueueRef} onCompleted={handleHistoricalUploadCompleted} />
+      <HistoricalImageUploadQueue ref={historicalUploadQueueRef} onCompleted={handleHistoricalUploadCompleted} onActiveChange={(progress, filename, kind) => setActiveHistoricalUpload(progress && filename && kind ? { progress, filename, kind } : null)} />
 
-      {!activeEditionDataReady ? <p aria-live="polite" className="map-studio-toast">Loading saved reconstruction work</p> : null}
+      {!activeEditionDataReady && activeEditionHydrationState === "loading" ? <p aria-live="polite" className="map-studio-toast">Loading saved reconstruction work</p> : null}
+      {activeEditionHydrationState === "error" ? <p aria-live="assertive" className="map-studio-toast is-error">Saved reconstruction work could not be loaded. {bootstrapError} <button className="sanborn-button" onClick={() => setBootstrapRetryNonce((value) => value + 1)} type="button">Retry</button></p> : null}
       {initialData.warningMessage ? <p className="map-studio-toast">{initialData.warningMessage}</p> : null}
       {saveMessage && atlasWorkflowStep !== "gps_alignment" ? <p className={saveStatus === "error" ? "map-studio-toast is-error" : "map-studio-toast"}>{saveMessage} Last saved: {lastSavedAt ? formatDate(lastSavedAt) : "Not saved yet"}.</p> : null}
 

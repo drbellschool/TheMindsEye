@@ -334,6 +334,7 @@ type TownIndexRegionRow = {
 export type LoadHistoricalMapStudioOptions = {
   townPackageId?: string | null;
   mapYear?: string | number | null;
+  atlasId?: string | null;
 };
 
 type SupabaseAdminClient = NonNullable<ReturnType<typeof createAdminClient>>;
@@ -1000,7 +1001,7 @@ function getExpectedSheetCount(rows: MapLayerRow[]): number {
   return Math.max(rows.length, ...rows.map((row) => row.sheet_number ?? 0));
 }
 
-export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalMapStudioOptions): Promise<HistoricalMapStudioState> => {
+export async function loadHistoricalMapStudioDataUncached(options: LoadHistoricalMapStudioOptions): Promise<HistoricalMapStudioState> {
   if (!hasSupabaseAdminEnv()) {
     return createEmptyState({
       mode: "read_only",
@@ -1139,6 +1140,7 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     town: activeTownPackage,
     assets: allAssets,
     mapYear: activeMapYear,
+    atlasId: options.atlasId,
   });
   const activeAssetIds = [...new Set(atlasInventory.pages.map((page) => page.sanbornSheetAssetId))];
   let activeAssetRows: SanbornAssetRow[] = [];
@@ -1387,4 +1389,6 @@ export const loadHistoricalMapStudioData = cache(async (options: LoadHistoricalM
     locationSource: resolvedMapView.source,
     lastLoadedAt: new Date().toISOString(),
   };
-});
+}
+
+export const loadHistoricalMapStudioData = cache(loadHistoricalMapStudioDataUncached);
