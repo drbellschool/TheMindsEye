@@ -1,42 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { detectSanbornMimeType, readSanbornImageDimensions, sanitizeSanbornFilename } from "@/lib/sanborn-intake";
 import { getRequestedTownPackage, jsonError, requireMapStudioWriteAccess } from "@/lib/historical-map-studio-server";
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
-  const access = await requireMapStudioWriteAccess();
-  if (!access.ok) return access.response;
-  const form = await request.formData();
-  const file = form.get("file");
-  if (!(file instanceof File)) return jsonError(400, "Attach one Birds-Eye reference image.");
-  const town = await getRequestedTownPackage(access.supabase, typeof form.get("townPackageId") === "string" ? String(form.get("townPackageId")) : null);
-  if (town.error || !town.data) return jsonError(400, "The town package could not be loaded.");
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const mime = detectSanbornMimeType(bytes);
-  if (!mime) return jsonError(400, "The Birds-Eye reference must be a PNG, JPEG, or WebP image.");
-  const dimensions = readSanbornImageDimensions(bytes, mime);
-  if (!dimensions) return jsonError(400, "The Birds-Eye image dimensions could not be read safely.");
-  if (bytes.byteLength <= 0 || bytes.byteLength > 52_428_800) return jsonError(400, "The Birds-Eye image is empty or exceeds the 50 MB limit.");
-  const sourceRecordId = typeof form.get("sourceRecordId") === "string" ? String(form.get("sourceRecordId")).trim() : "";
-  if (sourceRecordId) {
-    const source = await access.supabase.from("source_records").select("id").eq("id", sourceRecordId).eq("town_package_id", town.data.id).maybeSingle();
-    if (source.error) return jsonError(503, "The source record could not be verified.");
-    if (!source.data) return jsonError(400, "The source record must belong to the selected town.");
-  }
-  const assetId = randomUUID();
-  const storagePath = `${town.data.package_id}/birds-eye/${assetId}/${sanitizeSanbornFilename(file.name)}`;
-  const checksum = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
-  const upload = await access.supabase.storage.from("birds-eye-references").upload(storagePath, Buffer.from(bytes), { contentType: mime, upsert: false });
-  if (upload.error) return jsonError(502, "The Birds-Eye reference could not be uploaded.");
-  const insert = await access.supabase.from("historical_map_birds_eye_reference_assets").insert({ asset_id: assetId, town_package_id: town.data.id, source_record_id: sourceRecordId || null, original_filename: file.name, storage_bucket: "birds-eye-references", storage_path: storagePath, mime_type: mime, byte_size: bytes.byteLength, width: dimensions.width, height: dimensions.height, sha256_checksum: checksum, evidence_classification: "unknown", review_status: "unknown", intake_notes: "Uploaded as a historical Birds-Eye reference; requires human calibration review." }).select("id, asset_id, town_package_id, source_record_id, original_filename, storage_bucket, storage_path, mime_type, byte_size, width, height, sha256_checksum, evidence_classification, review_status, rights_note, intake_notes, created_at, updated_at").single();
-  if (insert.error) {
-    await access.supabase.storage.from("birds-eye-references").remove([storagePath]);
-    return jsonError(502, "The Birds-Eye image uploaded, but its metadata could not be saved.");
-  }
-  const signed = await access.supabase.storage.from("birds-eye-references").createSignedUrl(storagePath, 3600);
-  return NextResponse.json({ ok: true, asset: { ...insert.data, signed_url: signed.error ? null : signed.data?.signedUrl ?? null } });
+export async function POST(_request: NextRequest) {
+  return jsonError(410, "Birds-Eye uploads now use direct resumable upload. Prepare an upload through the shared image-upload endpoint.", { code: "direct_upload_required" });
 }
 
 export async function PATCH(request: NextRequest) {

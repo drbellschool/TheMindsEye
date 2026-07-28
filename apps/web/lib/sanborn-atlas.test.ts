@@ -45,6 +45,8 @@ const piecePlacementRoutePath = "app/api/community/historical-map-studio/map-pie
 const uploadRoutePath = "app/api/community/sanborn-sheets/route.ts";
 const deleteRoutePath = "app/api/community/historical-map-studio/delete/route.ts";
 const replaceRoutePath = "app/api/community/historical-map-studio/replace/route.ts";
+const directUploadPrepareRoutePath = "app/api/community/historical-map-studio/image-uploads/prepare/route.ts";
+const directUploadFinalizeRoutePath = "app/api/community/historical-map-studio/image-uploads/finalize/route.ts";
 const featureSaveMigrationPath = "../../supabase/migrations/0023_map_piece_feature_save_rpc.sql";
 
 test("normalizes and validates point, line, polygon, and junction feature geometry", () => {
@@ -470,19 +472,27 @@ test("edition and page management routes preserve scope and linked source safety
   assert.match(atlasRoute, /Developed editions must be archived instead of deleted/);
   assert.match(pageRoute, /\.rpc\("move_sanborn_atlas_page_to_atlas"/);
   assert.match(pageRoute, /\.rpc\("archive_sanborn_atlas_page"/);
-  assert.match(uploadRoute, /readFormString\(formData, "atlasId"\)/);
-  assert.match(uploadRoute, /Create or select a Sanborn edition before uploading pages/);
-  assert.match(uploadRoute, /\.from\("sanborn_atlas_pages"\)/);
-  assert.match(uploadRoute, /buildDefaultSanbornPageId/);
-  assert.match(uploadRoute, /editionYear: atlasScope\?\.edition_year/);
+  assert.match(uploadRoute, /direct resumable upload/);
+  assert.doesNotMatch(uploadRoute, /arrayBuffer\(\)/);
+  assert.match(replaceRoute, /direct resumable upload/);
+  assert.doesNotMatch(replaceRoute, /arrayBuffer\(\)/);
+  const prepareRoute = readRoute(directUploadPrepareRoutePath);
+  const finalizeRoute = readRoute(directUploadFinalizeRoutePath);
+  assert.match(prepareRoute, /createSignedUploadUrl/);
+  assert.match(prepareRoute, /createHistoricalImageFinalizationToken/);
+  assert.match(prepareRoute, /sanborn_sheet/);
+  assert.match(prepareRoute, /birds_eye_reference/);
+  assert.match(finalizeRoute, /verifyHistoricalImageFinalizationToken/);
+  assert.match(finalizeRoute, /validateCompletedHistoricalImage/);
+  assert.match(finalizeRoute, /historical_map_birds_eye_reference_assets/);
+  assert.match(finalizeRoute, /sanborn_sheet_assets/);
   assert.match(deleteRoute, /Delete blocked because this page has linked reconstruction work/);
   assert.match(deleteRoute, /sourceLinks/);
   assert.match(deleteRoute, /sanborn_source_regions/);
   assert.match(deleteRoute, /sanborn_map_pieces/);
   assert.match(deleteRoute, /sanborn_map_piece_georeferences/);
-  assert.match(replaceRoute, /Dimensions and aspect ratio changed/);
-  assert.match(replaceRoute, /dimensionWarning/);
-  assert.match(replaceRoute, /source-region polygons and map pieces/);
+  assert.match(replaceRoute, /direct resumable upload/);
+  assert.doesNotMatch(replaceRoute, /arrayBuffer\(\)/);
 });
 
 test("page saves resolve existing page IDs under the selected atlas before writing", () => {

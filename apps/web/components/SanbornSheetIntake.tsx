@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Panel } from "@/components/Panel";
+import { uploadHistoricalImage } from "@/lib/historical-image-upload-client";
 import {
   findDuplicateChecksums,
   findDuplicateSheetNumbers,
@@ -40,6 +41,7 @@ type LocalSanbornSheet = {
   intakeNotes: string;
   validationError?: string;
   serverMessage?: string;
+  uploadedBytes?: number;
 };
 
 type UploadResponse =
@@ -174,33 +176,14 @@ export function SanbornSheetIntake({ intake }: { intake: SanbornIntakeState }) {
     const item = localItems.find((candidate) => candidate.localId === localId);
     if (!item || !canUpload(item)) return;
 
-    updateItem(localId, { status: "uploading", serverMessage: undefined });
-    const formData = new FormData();
-    formData.append("file", item.file);
-    formData.append("sheetNumber", item.sheetNumber);
-    formData.append("sourceRecordId", item.sourceRecordId);
-    formData.append("sourceUrl", item.sourceUrl);
-    formData.append("archiveName", item.archiveName);
-    formData.append("rightsNote", item.rightsNote);
-    formData.append("intakeNotes", item.intakeNotes);
-
+    if (!intake.townPackage.id) { updateItem(localId, { status: "failed", serverMessage: "No active town package is available for secure upload." }); return; }
+    updateItem(localId, { status: "uploading", serverMessage: undefined, uploadedBytes: 0 });
+    const controller = uploadHistoricalImage({ file: item.file, kind: "sanborn_sheet", townPackageId: intake.townPackage.id, sheetNumber: normalizeSanbornSheetNumber(item.sheetNumber), sourceRecordId: item.sourceRecordId || null, sourceUrl: item.sourceUrl || null, archiveName: item.archiveName || null, rightsNote: item.rightsNote || null, intakeNotes: item.intakeNotes || null, onProgress: (progress) => updateItem(localId, { uploadedBytes: progress.bytesUploaded, serverMessage: progress.message ?? `${progress.phase} · ${Math.round(progress.bytesTotal ? progress.bytesUploaded / progress.bytesTotal * 100 : 0)}%` }) });
     try {
-      const response = await fetch("/api/community/sanborn-sheets", { method: "POST", body: formData });
-      const payload = (await response.json()) as UploadResponse;
-      if (!response.ok || !payload.ok) {
-        updateItem(localId, { status: "failed", serverMessage: payload.ok ? "Sanborn upload failed." : payload.message });
-        return;
-      }
-      updateItem(localId, {
-        status: "saved",
-        checksum: payload.asset.checksum,
-        width: payload.asset.width,
-        height: payload.asset.height,
-        serverMessage: `Stored at ${new Date(payload.asset.uploadedAt).toLocaleString()}.`,
-      });
-    } catch {
-      updateItem(localId, { status: "failed", serverMessage: "Sanborn upload failed before the server returned a response." });
-    }
+      const result = await controller.promise as UploadResponse & { asset?: { checksum: string; width: number; height: number; uploadedAt?: string } };
+      if (!result.ok) { updateItem(localId, { status: "failed", serverMessage: "Asset registration failed; retry registration." }); return; }
+      updateItem(localId, { status: "saved", checksum: result.asset?.checksum ?? item.checksum, width: result.asset?.width ?? item.width, height: result.asset?.height ?? item.height, uploadedBytes: item.byteSize, serverMessage: `Complete${result.asset?.uploadedAt ? ` at ${new Date(result.asset.uploadedAt).toLocaleString()}` : ""}.` });
+    } catch (error) { updateItem(localId, { status: "failed", serverMessage: error instanceof Error ? error.message : "Sanborn upload failed." }); }
   }
 
   async function uploadReadyItems() {
