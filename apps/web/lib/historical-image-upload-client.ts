@@ -23,6 +23,7 @@ export type HistoricalUploadInput = {
   intakeNotes?: string | null;
   replacementAssetId?: string | null;
   onProgress?: (progress: HistoricalUploadProgress) => void;
+  onError?: (error: Error) => void;
 };
 
 export type HistoricalUploadController = { promise: Promise<unknown>; pause: () => void; resume: () => void; cancel: () => void; retry: () => void };
@@ -51,8 +52,7 @@ export function uploadHistoricalImage(input: HistoricalUploadInput): HistoricalU
   let lastBytesUploaded = 0;
   let finalizeUpload: (() => Promise<void>) | null = null;
   let resolvePromise: (value: unknown) => void = () => undefined;
-  let rejectPromise: (reason?: unknown) => void = () => undefined;
-  const promise = new Promise<unknown>((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject; });
+  const promise = new Promise<unknown>((resolve) => { resolvePromise = resolve; });
   const start = async () => {
     try {
       const immediateError = validateHistoricalImageFileBeforeUpload(input.file, input.kind);
@@ -76,7 +76,7 @@ export function uploadHistoricalImage(input: HistoricalUploadInput): HistoricalU
         removeFingerprintOnSuccess: true,
         headers: { "x-signature": prepared.uploadToken, "x-upsert": "false" },
         metadata: { bucketName: prepared.bucket, objectName: prepared.objectPath, contentType: input.file.type, cacheControl: "3600" },
-        onError: (error) => { phase(input, { phase: "failed", bytesUploaded: 0, bytesTotal: input.file.size, message: error.message || "The upload connection failed." }); rejectPromise(error); },
+        onError: (error) => { const normalized = error instanceof Error ? error : new Error("The upload connection failed."); phase(input, { phase: "failed", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size, message: normalized.message || "The upload connection failed." }); input.onError?.(normalized); },
         onProgress: (bytesUploaded, bytesTotal) => { lastBytesUploaded = bytesUploaded; phase(input, { phase: "uploading", bytesUploaded, bytesTotal }); },
         onSuccess: async () => {
           phase(input, { phase: "verifying", bytesUploaded: input.file.size, bytesTotal: input.file.size });
@@ -84,7 +84,7 @@ export function uploadHistoricalImage(input: HistoricalUploadInput): HistoricalU
             await finalizeUpload?.();
           } catch (error) {
             phase(input, { phase: "failed", bytesUploaded: input.file.size, bytesTotal: input.file.size, message: error instanceof Error ? error.message : "Asset registration failed; retry registration." });
-            rejectPromise(error);
+            input.onError?.(error instanceof Error ? error : new Error("Asset registration failed; retry registration."));
           }
         },
       });
@@ -94,9 +94,9 @@ export function uploadHistoricalImage(input: HistoricalUploadInput): HistoricalU
       activeUpload.start();
     } catch (error) {
       phase(input, { phase: "failed", bytesUploaded: 0, bytesTotal: input.file.size, message: error instanceof Error ? error.message : "Secure upload preparation failed." });
-      rejectPromise(error);
+      input.onError?.(error instanceof Error ? error : new Error("Secure upload preparation failed."));
     }
   };
   void start();
-  return { promise, pause: () => { activeUpload?.abort(); phase(input, { phase: "paused", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); }, resume: () => { phase(input, { phase: "uploading", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); activeUpload?.start(); }, cancel: () => { activeUpload?.abort(); phase(input, { phase: "canceled", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); }, retry: () => { if (prepared && lastBytesUploaded >= input.file.size && finalizeUpload) { phase(input, { phase: "retrying", bytesUploaded: input.file.size, bytesTotal: input.file.size }); void finalizeUpload().catch((error) => { phase(input, { phase: "failed", bytesUploaded: input.file.size, bytesTotal: input.file.size, message: error instanceof Error ? error.message : "Asset registration failed; retry registration." }); rejectPromise(error); }); } else if (activeUpload) { phase(input, { phase: "retrying", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); activeUpload.start(); } else void start(); } };
+  return { promise, pause: () => { activeUpload?.abort(); phase(input, { phase: "paused", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); }, resume: () => { phase(input, { phase: "uploading", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); activeUpload?.start(); }, cancel: () => { activeUpload?.abort(); phase(input, { phase: "canceled", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); }, retry: () => { if (prepared && lastBytesUploaded >= input.file.size && finalizeUpload) { phase(input, { phase: "retrying", bytesUploaded: input.file.size, bytesTotal: input.file.size }); void finalizeUpload().catch((error) => { phase(input, { phase: "failed", bytesUploaded: input.file.size, bytesTotal: input.file.size, message: error instanceof Error ? error.message : "Asset registration failed; retry registration." }); input.onError?.(error instanceof Error ? error : new Error("Asset registration failed; retry registration.")); }); } else if (activeUpload) { phase(input, { phase: "retrying", bytesUploaded: lastBytesUploaded, bytesTotal: input.file.size }); activeUpload.start(); } else void start(); } };
 }

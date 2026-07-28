@@ -32,6 +32,7 @@ export default async function HistoricalMapStudioPage({ searchParams }: Historic
   const studioState = await loadHistoricalMapStudioData({
     townPackageId: params.townPackageId ?? params.town,
     mapYear: params.mapYear ?? params.year,
+    atlasId: params.atlasId ?? params.atlas,
   });
 
   return (

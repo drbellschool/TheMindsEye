@@ -213,8 +213,9 @@ export async function loadSanbornAtlasInventory(input: {
   town: StudioTownPackage;
   assets: StudioSheetAsset[];
   mapYear: number;
+  atlasId?: string | null;
 }): Promise<SanbornAtlasInventoryState> {
-  const { supabase, town, assets, mapYear } = input;
+  const { supabase, town, assets, mapYear, atlasId } = input;
   const atlasSelectWithArchive = "id, atlas_id, town_package_id, source_record_id, title, edition_year, edition_date, volume_label, expected_page_count, notes, archived_at, archive_reason, review_status, evidence_classification, updated_at";
   const atlasSelectBase = "id, atlas_id, town_package_id, source_record_id, title, edition_year, edition_date, volume_label, expected_page_count, review_status, evidence_classification, updated_at";
   let atlasResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
@@ -252,7 +253,7 @@ export async function loadSanbornAtlasInventory(input: {
     .order("volume_label", { ascending: true });
   const archivedAtlases = archivedAtlasResult.error ? [] : ((archivedAtlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
   const atlasByRowId = new Map(atlases.map((atlas) => [atlas.rowId, atlas]));
-  const activeAtlas = atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
+  const activeAtlas = (atlasId ? atlases.find((atlas) => atlas.atlasId === atlasId) : null) ?? atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
   let allPages: SanbornAtlasPageRecord[] = [];
   let pages: SanbornAtlasPageRecord[] = [];
   let pieces: SanbornMapPieceRecord[] = [];
