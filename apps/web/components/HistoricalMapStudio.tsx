@@ -4892,9 +4892,9 @@ export function HistoricalMapStudio({
               ? `Saved at ${new Date(lastSavedAt).toLocaleTimeString()}`
               : "Unsaved";
   const latestUploadStatus = uploadStatuses.length > 0 ? uploadStatuses[uploadStatuses.length - 1] : null;
-  const uploadStatusText = latestUploadStatus
-    ? `${latestUploadStatus.status === "uploading" ? "Uploading" : latestUploadStatus.status === "saved" ? "Uploaded" : "Upload failed"}: ${latestUploadStatus.filename}`
-    : "";
+  // Upload lifecycle details belong to the mounted upload dock; the station
+  // header only exposes the compact Uploads control below.
+  const uploadStatusText = "";
   const selectedBasemap = basemaps.find((basemap) => basemap.key === georeferenceDraft.selectedBasemap) ?? basemaps[0];
   const visibleLoadedTileCount = tileRuntimeDebug?.visibleLoadedTileCount ?? 0;
   const modernMapStatusText =
@@ -5632,7 +5632,7 @@ export function HistoricalMapStudio({
           </section>
           <section className="sanborn-station-subsection birds-eye-reference-manager" aria-label="Birds-Eye Reference">
             <div className="sanborn-station-subsection__header"><strong>Birds-Eye Reference</strong><span>{birdsEye.designatedAssetId ? "Designated" : "No reference selected"}</span></div>
-            {historicalUploads.activeBirdsEyeUpload ? <p className="birds-eye-reference-upload-status" aria-live="polite">{historicalUploads.activeBirdsEyeUpload.progress.phase === "failed" ? "Upload failed · open Uploads for details" : `Uploading ${historicalUploads.activeBirdsEyeUpload.filename} · ${Math.round((historicalUploads.activeBirdsEyeUpload.progress.bytesUploaded / Math.max(historicalUploads.activeBirdsEyeUpload.progress.bytesTotal, 1)) * 100)}%`}</p> : null}
+            {historicalUploads.activeBirdsEyeUpload ? <p className="birds-eye-reference-upload-status" aria-live="polite">{historicalUploads.activeBirdsEyeUpload.progress.phase === "failed" ? <>Upload failed <button className="sanborn-button" onClick={historicalUploads.expand} type="button">Open Uploads</button></> : `Uploading ${historicalUploads.activeBirdsEyeUpload.filename} · ${Math.round((historicalUploads.activeBirdsEyeUpload.progress.bytesUploaded / Math.max(historicalUploads.activeBirdsEyeUpload.progress.bytesTotal, 1)) * 100)}%`}</p> : null}
             <p className="sanborn-atlas-empty">Upload or select a historical birds-eye map without adding it to Sanborn sheet processing.</p>
             <input ref={birdsEyeInputRef} accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadBirdsEyeReference(file); event.currentTarget.value = ""; }} />
             <div className="sanborn-station-actions"><button className="sanborn-button" disabled={atlasReadOnly} onClick={() => birdsEyeInputRef.current?.click()} type="button">Upload birds-eye image</button></div>
@@ -6292,12 +6292,14 @@ export function HistoricalMapStudio({
             {initialData.warningMessage ? <span className="minimal-sanborn-gps__message">{initialData.warningMessage}</span> : null}
             {locationMessage ? <span className={`minimal-sanborn-gps__message ${locationStatus === "error" ? "is-error" : ""}`}>{locationMessage}</span> : null}
             {autoFallbackNotice ? <span className="minimal-sanborn-gps__message is-warning">{autoFallbackNotice}</span> : null}
-            {uploadStatusText ? <span className={`minimal-sanborn-gps__message ${latestUploadStatus?.status === "failed" ? "is-error" : ""}`}>{uploadStatusText}</span> : null}
+            {historicalUploads.entries.length > 0 ? <button className="sanborn-button minimal-sanborn-gps__uploads-control" onClick={historicalUploads.expand} type="button">Uploads{historicalUploads.aggregate.failed > 0 ? ` ${historicalUploads.aggregate.failed} failed` : historicalUploads.aggregate.active > 0 ? ` ${historicalUploads.aggregate.active} active · ${historicalUploads.aggregate.percent}%` : " Complete"}</button> : null}
             {toolbarSaveMessage && !isGpsAlignmentStep ? <span className={`minimal-sanborn-gps__message ${saveStatus === "error" ? "is-error" : ""}`}>{toolbarSaveMessage}</span> : null}
             {focusInstruction ? <span className="minimal-sanborn-gps__message sanborn-focus-instruction" aria-live="polite">{focusInstruction}</span> : null}
           </div>
         </div>
       </header>
+
+      <HistoricalImageUploadQueue manager={historicalUploads} />
 
       <div className={`sanborn-atlas-workflow sanborn-atlas-workflow--stations${atlasWorkflowStep === "page_classification" ? " is-source-record" : ""}${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
         <button
@@ -6951,8 +6953,6 @@ export function HistoricalMapStudio({
           ) : null}
         </div>
       </header>
-
-      <HistoricalImageUploadQueue manager={historicalUploads} />
 
       {!activeEditionDataReady && activeEditionHydrationState === "loading" ? <p aria-live="polite" className="map-studio-toast">Loading saved reconstruction work</p> : null}
       {activeEditionHydrationState === "error" ? <p aria-live="assertive" className="map-studio-toast is-error">Saved reconstruction work could not be loaded. {bootstrapError} <button className="sanborn-button" onClick={() => setBootstrapRetryNonce((value) => value + 1)} type="button">Retry</button></p> : null}

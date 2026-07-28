@@ -25,3 +25,21 @@ test("Historical Map Studio owns the manager and the dock is presentational", ()
   assert.doesNotMatch(studio, /historicalUploadQueueRef|HistoricalImageUploadQueueHandle|enqueueHistoricalImageUploads/);
   assert.doesNotMatch(queue, /forwardRef|useImperativeHandle/);
 });
+
+test("the upload dock is mounted in the active studio return exactly once", () => {
+  const studio = readFileSync("components/HistoricalMapStudio.tsx", "utf8");
+  const queueRenders = studio.match(/<HistoricalImageUploadQueue\s+manager=\{historicalUploads\}\s*\/>/g) ?? [];
+  assert.equal(queueRenders.length, 1);
+  const activeReturnEnd = studio.indexOf("Legacy pre-station Historical Map Studio shell");
+  const queueIndex = studio.indexOf("<HistoricalImageUploadQueue manager={historicalUploads} />");
+  assert.ok(activeReturnEnd > 0);
+  assert.ok(queueIndex > 0 && queueIndex < activeReturnEnd);
+  assert.match(studio, /historicalUploads\.expand/);
+});
+
+test("the dock is portal-backed for station overflow safety", () => {
+  const queue = readFileSync("components/HistoricalImageUploadQueue.tsx", "utf8");
+  assert.match(queue, /createPortal/);
+  assert.match(queue, /document\.body/);
+  assert.match(queue, /useEffect/);
+});

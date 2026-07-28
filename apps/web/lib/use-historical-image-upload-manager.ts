@@ -20,6 +20,7 @@ export type HistoricalImageUploadManagerAggregate = {
   percent: number;
   completed: number;
   active: number;
+  failed: number;
 };
 
 export type HistoricalImageUploadManager = {
@@ -151,7 +152,14 @@ export function useHistoricalImageUploadManager(options: ManagerOptions = {}): H
   const aggregate = useMemo<HistoricalImageUploadManagerAggregate>(() => {
     const totalBytes = entries.reduce((sum, entry) => sum + entry.task.file.size, 0);
     const uploadedBytes = entries.reduce((sum, entry) => sum + Math.min(entry.progress.bytesUploaded, entry.task.file.size), 0);
-    return { totalBytes, uploadedBytes, percent: totalBytes ? Math.round(uploadedBytes / totalBytes * 100) : 0, completed: entries.filter((entry) => entry.progress.phase === "complete").length, active: entries.filter((entry) => isActivePhase(entry.progress.phase)).length };
+    return {
+      totalBytes,
+      uploadedBytes,
+      percent: totalBytes ? Math.round(uploadedBytes / totalBytes * 100) : 0,
+      completed: entries.filter((entry) => entry.progress.phase === "complete").length,
+      active: entries.filter((entry) => isActivePhase(entry.progress.phase)).length,
+      failed: entries.filter((entry) => entry.progress.phase === "failed").length,
+    };
   }, [entries]);
 
   const activeBirdsEyeUpload = useMemo(() => {
