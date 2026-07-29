@@ -197,6 +197,14 @@ Map Pieces uses normalized source-image polygons as the stored geometry. Zoom an
 
 The Map Pieces toolbar remains sticky above the source image and includes Select, Draw, Pan, vertex controls, Save pieces, zoom in/out, Fit image, 100%, Reset view, and Fit selected piece. When a page type or unsaved page assignment blocks editing, the toolbar remains visible but disables invalid actions with explanatory text.
 
+## Birds-Eye Calibration and Scene Evidence
+
+Birds-Eye Perspective is the downstream Step 7 visual-evidence workspace. Its Historical Illustration, Flat Geographic Map, and Warped Geographic Preview are separate surfaces. The Leaflet map always displays normal geographic coordinates and remains the authoritative source; the preview transforms derived vectors only.
+
+Calibration points pair original-image coordinates with latitude/longitude. Scene-region and Map Piece presentation polygons use normalized image coordinates and remain tied to their exact edition and Birds-Eye reference asset. Presentation adjustments are stored separately from projected geometry and never write back to Map Placement.
+
+The full persistence, solver-stage, stale-projection, evidence-package, and future-renderer contracts are documented in `docs/BIRDS_EYE_SCENE_WORKSPACE.md`. Migration `0026_birds_eye_scene_regions.sql` is required for scene and presentation writes.
+
 ## Durable Source Identity
 
 `source_records` remains the canonical source table.

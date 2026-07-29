@@ -193,6 +193,7 @@ import { deriveSheetMapPieceAudit } from "@/lib/sheet-map-piece-audit";
 import { deriveMapPiecePlacementQueue, type MapPiecePlacementQueueItem } from "@/lib/map-piece-placement-queue";
 import { deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
 import type { BirdsEyePerspectiveState } from "@/lib/birds-eye-calibration";
+import type { BirdsEyePlacedGeometry } from "@/lib/birds-eye-scene";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -928,6 +929,7 @@ export function HistoricalMapStudio({
   const bootstrapAbortRef = useRef<AbortController | null>(null);
   const [townIndexRegions, setTownIndexRegions] = useState<SanbornTownIndexRegionRecord[]>(initialData.townIndexRegions);
   const [birdsEye, setBirdsEye] = useState<BirdsEyePerspectiveState>(initialData.birdsEye);
+  const [birdsEyeDirty, setBirdsEyeDirty] = useState(false);
   const [atlasWorkflowStep, setAtlasWorkflowStep] = useState<SanbornAtlasWorkflowStep>("source");
   const [selectedAtlasId, setSelectedAtlasId] = useState(initialData.atlasInventory.activeAtlasId ?? "");
   const [selectedAtlasPageId, setSelectedAtlasPageId] = useState(initialData.atlasInventory.activePageId ?? "");
@@ -1033,7 +1035,7 @@ export function HistoricalMapStudio({
     saveStatus,
     warningMessage: initialData.warningMessage,
   });
-  const activeAtlas = atlasInventory.atlases.find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
+  const activeAtlas = [...atlasInventory.atlases, ...(atlasInventory.archivedAtlases ?? [])].find((atlas) => atlas.atlasId === selectedAtlasId) ?? null;
   const activeEditionDataReady = activeEditionHydrationState === "ready";
   const activeAtlasPages = getActiveEditionPages(atlasInventory.pages, selectedAtlasId).sort(compareSanbornAtlasPagesForWorkflow);
   const selectedAtlasPage = activeAtlasPages.find((page) => page.pageId === selectedAtlasPageId) ?? activeAtlasPages[0] ?? null;
@@ -1071,6 +1073,31 @@ export function HistoricalMapStudio({
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
+  const birdsEyePlacedGeometries = useMemo<BirdsEyePlacedGeometry[]>(
+    () => mapPieceGeoreferences
+      .filter((placement) => placement.placementStatus === "placed" || placement.placementStatus === "reviewed")
+      .map((placement) => {
+        const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === placement.pieceId);
+        return {
+          id: placement.pieceId,
+          label: getMapPieceDisplayLabel(piece) || placement.pieceId,
+          geometry: placement.geographicGeometry
+            ? {
+                geometryType: placement.geographicGeometry.geometryType === "junction"
+                  ? "point"
+                  : placement.geographicGeometry.geometryType === "line"
+                    ? "polyline"
+                    : placement.geographicGeometry.geometryType,
+                coordinates: placement.geographicGeometry.coordinates,
+              }
+            : null,
+          corners: placement.corners,
+          placementStatus: placement.placementStatus,
+          reviewStatus: placement.reviewStatus,
+        };
+      }),
+    [atlasInventory.pieces, mapPieceGeoreferences],
+  );
   const streetAlignmentGuides = useMemo(
     () => streetAlignmentFeatureEnabled ? findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }) : [],
     [selectedAtlasPagePieces, selectedMapPiece],
@@ -1078,7 +1105,7 @@ export function HistoricalMapStudio({
   const atlasSaveActionsDisabled = saveStatus === "saving";
   const studioWriteUnavailable = initialData.mode === "read_only";
   const atlasDataUnavailable = atlasInventory.mode === "read_only";
-  const atlasReadOnly = studioWriteUnavailable || atlasDataUnavailable;
+  const atlasReadOnly = studioWriteUnavailable || atlasDataUnavailable || Boolean(activeAtlas?.archivedAt);
   const availableEditionYears = getSavedSanbornEditionYears(atlasInventory.atlases);
   const archivedSanbornEditions = atlasInventory.archivedAtlases ?? [];
   const editionCreationValidation = useMemo(
@@ -2190,6 +2217,10 @@ export function HistoricalMapStudio({
   }
 
   function changeAtlasWorkflowStep(step: SanbornAtlasWorkflowStep) {
+    if (atlasWorkflowStep === "birds_eye_perspective" && step !== "birds_eye_perspective" && birdsEyeDirty) {
+      if (!window.confirm("Leave Birds-Eye Perspective and discard unsaved calibration, scene markup, or presentation changes?")) return;
+      setBirdsEyeDirty(false);
+    }
     if (step === "gps_alignment") {
       enterGpsAlignment();
       return;
@@ -2202,6 +2233,12 @@ export function HistoricalMapStudio({
       setSaveStatus("idle");
       setSaveMessage("");
     }
+  }
+
+  function navigateWithBirdsEyeGuard(url: string, prompt: string) {
+    if (birdsEyeDirty && !window.confirm(prompt)) return;
+    if (birdsEyeDirty) setBirdsEyeDirty(false);
+    router.push(url);
   }
 
   function requestFocusTarget(target: StudioFocusTarget) {
@@ -5012,11 +5049,15 @@ export function HistoricalMapStudio({
 
   async function designateBirdsEyeReference(assetId: string | null) {
     if (!initialData.activeTownPackage || !activeAtlas || atlasReadOnly) return;
+    if (birdsEyeDirty && !window.confirm("Changing the designated Birds-Eye reference will leave unsaved Step 7 edits behind. Continue?")) return;
+    if (birdsEye.designatedAssetId && birdsEye.designatedAssetId !== assetId && !window.confirm("Existing scene regions and presentation geometry will remain tied to the old reference asset and will not be reinterpreted. Change the designation?")) return;
     const response = await fetch("/api/community/historical-map-studio/birds-eye-assets", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ townPackageId: initialData.activeTownPackage.id, atlasId: activeAtlas.atlasId, assetId }) });
     if (!response.ok) { setSaveStatus("error"); setSaveMessage("Birds-Eye reference designation could not be saved."); return; }
-    setBirdsEye((current) => ({ ...current, designatedAssetId: assetId, calibration: current.calibration && current.calibration.referenceAssetId !== assetId ? { ...current.calibration, status: "needs_review" } : current.calibration }));
+    setBirdsEye((current) => ({ ...current, designatedAssetId: assetId, sceneRegions: [], piecePresentations: [], calibration: current.calibration && current.calibration.referenceAssetId !== assetId ? { ...current.calibration, status: "needs_review" } : current.calibration }));
+    setBirdsEyeDirty(false);
     setSaveStatus("saved");
     setSaveMessage(assetId ? "Birds-Eye Reference designated." : "Birds-Eye Reference designation removed.");
+    router.refresh();
   }
 
   function renderTownOverviewWorkspace() {
@@ -5467,7 +5508,23 @@ export function HistoricalMapStudio({
     if (atlasWorkflowStep === "town_index") return renderTownIndexWorkspace();
     if (atlasWorkflowStep === "numbered_sheets") return renderSheetInventoryWorkspace();
     if (atlasWorkflowStep === "piece_inventory") return renderMapPiecesWorkspace();
-    if (atlasWorkflowStep === "birds_eye_perspective") return <BirdsEyePerspectiveWorkspace state={birdsEye} townPackageId={initialData.activeTownPackage?.id ?? ""} atlasId={selectedAtlasId} centerLatitude={initialData.activeTownPackage?.centerLatitude ?? 0} centerLongitude={initialData.activeTownPackage?.centerLongitude ?? 0} readOnly={atlasReadOnly} placedGeometries={mapPieceGeoreferences.filter((placement) => placement.placementStatus === "placed" || placement.placementStatus === "reviewed").map((placement) => ({ id: placement.pieceId, label: placement.pieceId, geometry: placement.geographicGeometry }))} onStateChange={setBirdsEye} />;
+    if (atlasWorkflowStep === "birds_eye_perspective") return (
+      <BirdsEyePerspectiveWorkspace
+        atlasId={selectedAtlasId}
+        centerLatitude={mapCenter.latitude}
+        centerLongitude={mapCenter.longitude}
+        defaultZoom={initialData.activeTownPackage?.defaultZoom ?? 16}
+        loading={activeEditionHydrationState === "loading"}
+        onDirtyChange={setBirdsEyeDirty}
+        onStateChange={setBirdsEye}
+        placedGeometries={birdsEyePlacedGeometries}
+        readOnly={atlasReadOnly}
+        sheetBoundaries={geoPresent.sheets}
+        sourceOptions={initialData.sourceOptions}
+        state={birdsEye}
+        townPackageId={initialData.activeTownPackage?.id ?? ""}
+      />
+    );
     return renderMapPlacementWorkspace();
   }
 
@@ -5577,10 +5634,10 @@ export function HistoricalMapStudio({
                     <button
                       className="sanborn-button"
                       onClick={() => {
-                        setSelectedAtlasId(atlas.atlasId);
-                        setSelectedAtlasPageId("");
-                        setSelectedMapPieceId("");
-                        router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${atlas.editionYear}&mapYear=${atlas.editionYear}&atlasId=${atlas.atlasId}&atlas=${atlas.atlasId}&workflow=numbered_sheets`);
+                        navigateWithBirdsEyeGuard(
+                          `/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${atlas.editionYear}&mapYear=${atlas.editionYear}&atlasId=${atlas.atlasId}&atlas=${atlas.atlasId}&workflow=numbered_sheets`,
+                          "Change edition and discard unsaved Birds-Eye edits?",
+                        );
                       }}
                       type="button"
                     >
@@ -5601,9 +5658,21 @@ export function HistoricalMapStudio({
               <div className="sanborn-edition-list" aria-label="Archived Sanborn editions">
                 <strong>Archived editions</strong>
                 {archivedSanbornEditions.map((atlas) => (
-                  <article className="sanborn-edition-list__item is-archived" key={atlas.atlasId}>
+                  <article className={`sanborn-edition-list__item is-archived${atlas.atlasId === activeAtlas?.atlasId ? " is-selected" : ""}`} key={atlas.atlasId}>
                     <span>{atlas.editionYear}{atlas.volumeLabel ? ` ${atlas.volumeLabel}` : ""}</span>
                     <span>Archived {formatDate(atlas.archivedAt)}</span>
+                    <button
+                      className="sanborn-button"
+                      onClick={() => {
+                        navigateWithBirdsEyeGuard(
+                          `/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${atlas.editionYear}&mapYear=${atlas.editionYear}&atlasId=${atlas.atlasId}&atlas=${atlas.atlasId}&workflow=birds_eye_perspective`,
+                          "Open the archived edition and discard unsaved Birds-Eye edits?",
+                        );
+                      }}
+                      type="button"
+                    >
+                      View read-only
+                    </button>
                     <button className="sanborn-button" disabled={studioWriteUnavailable || atlasSaveActionsDisabled} onClick={() => void restoreArchivedEdition(atlas.atlasId)} type="button">Restore edition</button>
                   </article>
                 ))}
@@ -5641,13 +5710,13 @@ export function HistoricalMapStudio({
           </section>
           {activeAtlas ? (
             <>
-          <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&townPackageId=${event.target.value}`)}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name}</option>)}</select></label>
+          <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${event.target.value}&townPackageId=${event.target.value}`, "Change town and discard unsaved Birds-Eye edits?")}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name}</option>)}</select></label>
           <label>Edition/year<select value={initialData.activeMapYear ?? ""} onChange={(event) => {
             if (event.target.value === "__add_year__") {
               setEditionManagerOpen(true);
               return;
             }
-            router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}&mapYear=${event.target.value}`);
+            navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}&mapYear=${event.target.value}`, "Change edition and discard unsaved Birds-Eye edits?");
           }}>{availableEditionYears.map((year) => <option key={year} value={year}>{year}</option>)}<option value="__add_year__">+ Add year</option></select></label>
           <label>Year<input disabled={!activeAtlas || atlasReadOnly} inputMode="numeric" value={activeAtlas?.editionYear ?? ""} onChange={(event) => {
             const year = normalizeSanbornEditionYear(event.target.value);
@@ -6231,8 +6300,8 @@ export function HistoricalMapStudio({
             }
             selectAndCenter(sheetAssetId);
           }}
-          onTownChange={(townPackageId) => router.push(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}`)}
-          onYearChange={(mapYear) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`)}
+          onTownChange={(townPackageId) => navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}`, "Change town and discard unsaved Birds-Eye edits?")}
+          onYearChange={(mapYear) => navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`, "Change edition and discard unsaved Birds-Eye edits?")}
         />
         <div className="minimal-sanborn-gps__commandbar" aria-label="Studio commands and status">
           <div className="minimal-sanborn-gps__command-group minimal-sanborn-gps__command-group--identity">
@@ -6405,8 +6474,8 @@ export function HistoricalMapStudio({
             }
             selectAndCenter(sheetAssetId);
           }}
-          onTownChange={(townPackageId) => router.push(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}&year=${initialData.activeMapYear ?? ""}&mapYear=${initialData.activeMapYear ?? ""}`)}
-          onYearChange={(mapYear) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`)}
+          onTownChange={(townPackageId) => navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${townPackageId}&townPackageId=${townPackageId}&year=${initialData.activeMapYear ?? ""}&mapYear=${initialData.activeMapYear ?? ""}`, "Change town and discard unsaved Birds-Eye edits?")}
+          onYearChange={(mapYear) => navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&townPackageId=${initialData.activeTownPackage?.id ?? ""}&year=${mapYear}&mapYear=${mapYear}`, "Change edition and discard unsaved Birds-Eye edits?")}
         />
         <div className="minimal-sanborn-gps__toolbar-row minimal-sanborn-gps__toolbar-row--primary" aria-label="Primary navigation">
           <strong className="minimal-sanborn-gps__title">Historical Map Studio</strong>
@@ -6961,8 +7030,12 @@ export function HistoricalMapStudio({
 
       <div className={`map-studio-layout${leftPanelCollapsed ? " is-left-collapsed" : ""}${rightPanelCollapsed ? " is-right-collapsed" : ""}`}>
         <aside className="map-studio-sidebar" hidden={leftPanelCollapsed}>
-          <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`)}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name} {town.year}</option>)}</select></label>
-          <label>Map year<select value={initialData.activeMapYear ?? ""} onChange={(event) => router.push(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`)}>{initialData.availableMapYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+          <label>Town package<select value={initialData.activeTownPackage?.id ?? ""} onChange={(event) => {
+            navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${event.target.value}&year=${initialData.activeMapYear ?? ""}`, "Change town and discard unsaved Birds-Eye edits?");
+          }}>{initialData.townPackages.map((town) => <option key={town.id} value={town.id}>{town.name} {town.year}</option>)}</select></label>
+          <label>Map year<select value={initialData.activeMapYear ?? ""} onChange={(event) => {
+            navigateWithBirdsEyeGuard(`/community/historical-map-studio?town=${initialData.activeTownPackage?.id ?? ""}&year=${event.target.value}`, "Change edition and discard unsaved Birds-Eye edits?");
+          }}>{initialData.availableMapYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
           <label>Search sheets<input onChange={(event) => setSearch(event.target.value)} placeholder="Sheet, filename, status..." value={search} /></label>
           <div className="map-studio-sidebar__summary">
             <span>Uploaded: {sheets.length}</span>

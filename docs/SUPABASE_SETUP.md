@@ -43,13 +43,22 @@ Run these SQL files in order from the Supabase SQL Editor:
 8. `supabase/migrations/0008_fix_map_studio_center_and_draft_status.sql`
 9. `supabase/migrations/0009_town_package_location_metadata.sql`
 10. `supabase/migrations/0010_sanborn_atlas_page_piece_inventory.sql`
-11. `supabase/migrations/0011_sanborn_map_piece_geographic_placement.sql`
+11. `supabase/migrations/0011_sanborn_map_piece_georeferences.sql`
 12. `supabase/migrations/0012_fix_sanborn_map_piece_save_scope.sql`
 13. `supabase/migrations/0013_town_reconstruction_source_provenance.sql`
 14. `supabase/migrations/0014_town_index_regions.sql`
 15. `supabase/migrations/0015_page_classification_workflow.sql`
 16. `supabase/migrations/0016_functional_source_regions.sql`
 17. `supabase/migrations/0017_atlas_edition_management.sql`
+18. `supabase/migrations/0018_restore_sanborn_atlas.sql`
+19. `supabase/migrations/0019_source_region_provenance_override.sql`
+20. `supabase/migrations/0020_town_index_review_tools.sql`
+21. `supabase/migrations/0021_map_piece_feature_geometry.sql`
+22. `supabase/migrations/0022_map_piece_feature_placements.sql`
+23. `supabase/migrations/0023_map_piece_feature_save_rpc.sql`
+24. `supabase/migrations/0024_street_alignment_features.sql`
+25. `supabase/migrations/0025_birds_eye_perspective_calibration.sql`
+26. `supabase/migrations/0026_birds_eye_scene_regions.sql`
 
 The migrations create:
 
@@ -71,6 +80,8 @@ The migrations create:
 - Page Classification workflow fields on Sanborn atlas pages, including canonical page types, printed references, display titles, classification notes, explicit primary Town Index designation, safe backfill from legacy page types, and a service-role-only atlas-page save RPC.
 - Functional Sanborn source regions with normalized source-image polygons, region-purpose types, source-page/sheet links, optional Town Index inclusion, optional Map Pieces availability for geographic regions, scoped save/delete RPCs, RLS, and service-role-only access.
 - Sanborn edition-management archive fields and service-role-only RPCs for archiving editions/pages and moving pages between saved editions without cross-town mutations.
+- Edition-scoped Birds-Eye reference assets, calibration records, and control-point pairs.
+- Birds-Eye scene regions and Map Piece presentation geometries with normalized image coordinates, exact reference isolation, review events, source-geometry fingerprints, RLS, and service-role-only save/archive RPCs.
 
 No uploaded or generated record is verified by default. New image intake records default to `unknown` evidence classification and `unknown` review status.
 
@@ -166,6 +177,8 @@ Migration `0015_page_classification_workflow.sql` is required for page-type-driv
 
 Migration `0017_atlas_edition_management.sql` is required for PR #75 edition/page management. Until `0017` is applied, saved editions still load, but edition notes, archive states, page archive, and page move actions cannot persist.
 
+Migration `0025_birds_eye_perspective_calibration.sql` is required for edition-scoped Birds-Eye references and calibration. Migration `0026_birds_eye_scene_regions.sql` is required for PR #107 scene regions, presentation geometry, staged-solver metadata, preserved control-point UUIDs, and atomic projected-piece saves. Apply `0026` after `0025`; do not rewrite `0025`. Until `0026` is applied, Step 7 keeps established calibration data available and visibly reports that scene and presentation persistence is unavailable.
+
 ## Georeferencing Accuracy
 
 The georeferencing model stores three related levels of alignment:
@@ -218,6 +231,12 @@ Redeploy after saving variables. The public Community pages continue to fall bac
 24. In Source Record, mark functional regions for town coverage, sheet coverage, printed index, and geographic map content; save regions and confirm Town Index reuses the sheet-coverage regions without redrawing.
 25. Confirm Map Pieces and Map Placement are enabled only for Sanborn Sheet or Inset / Special Sheet pages.
 26. Open Town & Edition, confirm the edition selector lists only saved editions, create a new year with `+ Add year`, and confirm the active context switches to the new empty edition.
+27. Open Birds-Eye Perspective and confirm the historical illustration, live Leaflet map, and separate warped preview are all visible before adding a point.
+28. Add four widely separated landmark pairs and confirm translation, similarity, coarse, and rough stages update progressively.
+29. Draw and save a normalized scene region, link it to a Map Piece, and confirm its crop/evidence package.
+30. Adjust and save a projected Map Piece, then return to Map Placement and confirm all authoritative geographic coordinates are unchanged.
+31. Re-enter Step 7 without a hard refresh and confirm calibration, points, regions, and presentations hydrate.
+32. Open an archived edition with **View read-only** and confirm its Step 7 records are visible but cannot be edited.
 27. Confirm upload is disabled when no edition is active and successful uploads report the active town and edition.
 28. Move a misplaced page to another edition, confirm source metadata and storage identity are preserved, and confirm cross-town destination moves are rejected.
 29. Replace an uploaded image and confirm failed replacements keep the old image; when dimensions change, review source-region polygons and map pieces.

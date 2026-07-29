@@ -78,7 +78,7 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 
 ## Deployment Checklist
 
-- Supabase migrations `0001` through `0017` have been applied.
+- Supabase migrations `0001` through `0026` have been applied in filename order.
 - `supabase/seed.sql` has been run if seed review data is desired.
 - Private Storage bucket `sanborn-sheets` exists.
 - Vercel has the public Supabase URL and publishable key.
@@ -90,7 +90,7 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - Georeference Sheets opens as the default Historical Map Studio workflow.
 - Historical Map Studio shows the Town Reconstruction context header with town, edition, sheet, block/piece, progress, Source Info, and Map/Buildings/People/Sources tabs.
 - Source Info shows durable source identity and can create a Library of Congress source record when migration `0013` is present.
-- The Historical Map Studio station rail contains only Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, and Map Placement.
+- The Historical Map Studio station rail contains Town & Edition, Source Record, Town Index, Sheet Inventory, Map Pieces, Map Placement, and Birds-Eye Perspective.
 - The Town Index mission map can save, reload, relink, and delete durable regions when migration `0014` is present.
 - Source Record classifies the selected uploaded page, saves printed references and display titles, and lets reviewers mark functional source regions directly on the page.
 - An Index or mixed page can be explicitly set as the primary Town Index; Town Index shows a repair flow when no primary Town Index is designated.
@@ -107,6 +107,8 @@ Add the environment variables listed above in Vercel Project Settings and redepl
 - Selected Sanborn sheets show signed image load diagnostics and can be dragged by the image body in `Edit Sheet` mode.
 - Map Pieces keeps the source-image editing toolbar sticky while zooming and panning; source polygons remain normalized image coordinates, not screen coordinates.
 - Map Placement displays all visible saved placed map pieces for the active atlas, while saving remains scoped to the selected piece.
+- Birds-Eye Perspective shows the designated historical illustration, an immediately visible unwarped Leaflet source map, a separate staged warped preview, normalized scene markup, downstream Map Piece presentations, and export-ready evidence JSON.
+- Archived editions can open Step 7 read-only without restoring or mutating their evidence.
 
 ## Public Review Routes
 

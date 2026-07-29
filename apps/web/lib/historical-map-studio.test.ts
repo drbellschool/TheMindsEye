@@ -739,7 +739,7 @@ test("Add Year creation stays enabled after the active edition is archived", () 
 
   assert.match(studioComponent, /const studioWriteUnavailable = initialData\.mode === "read_only";/);
   assert.match(studioComponent, /const atlasDataUnavailable = atlasInventory\.mode === "read_only";/);
-  assert.match(studioComponent, /const atlasReadOnly = studioWriteUnavailable \|\| atlasDataUnavailable;/);
+  assert.match(studioComponent, /const atlasReadOnly = studioWriteUnavailable \|\| atlasDataUnavailable \|\| Boolean\(activeAtlas\?\.archivedAt\);/);
   assert.match(studioComponent, /validateSanbornEditionCreation\(\{[\s\S]*year: editionDraft\.year[\s\S]*atlases: atlasInventory\.atlases/s);
   assert.match(studioComponent, /disabled=\{studioWriteUnavailable \|\| atlasSaveActionsDisabled \|\| !editionCreationValidation\.valid\}/);
   assert.match(studioComponent, /!initialData\.activeTownPackage \|\| studioWriteUnavailable \|\| \(!createNewAtlas && atlasDataUnavailable\)/);
