@@ -61,6 +61,7 @@ import { createEmptySanbornAtlasInventoryState, getSavedSanbornEditionYears, get
 import { loadSanbornAtlasInventory } from "./sanborn-atlas-data.ts";
 import { createAdminClient, hasSupabaseAdminEnv } from "./supabase/admin.ts";
 import { birdsEyeCalibrationQuality, defaultBirdsEyeGlobalParameters, type BirdsEyeCalibration, type BirdsEyeControlPoint, type BirdsEyePerspectiveState, type BirdsEyeReferenceAsset } from "./birds-eye-calibration.ts";
+import { mapBirdsEyePiecePresentationRow, mapBirdsEyeSceneRegionRow, type BirdsEyeBuildingOption } from "./birds-eye-scene.ts";
 
 type TownPackageRow = {
   id: string;
@@ -346,11 +347,36 @@ type BirdsEyeAssetRow = {
   intake_notes: string | null; created_at: string | null; updated_at: string | null;
 };
 type BirdsEyeCalibrationRow = { id: string; town_package_id: string; atlas_id: string; reference_asset_id: string | null; title: string; calibration_status: string; unavailable_reason: string | null; global_parameters: unknown; warp_type: string; solver_version: string; warp_model: unknown; quality_summary: unknown; notes: string | null; updated_at: string | null };
-type BirdsEyeControlPointRow = { id: string; calibration_id: string; sequence_number: number; label: string | null; note: string | null; anchor_type: string; linked_map_piece_id: string | null; longitude: number | null; latitude: number | null; image_x: number | null; image_y: number | null; enabled: boolean; deleted_at: string | null };
+type BirdsEyeControlPointRow = {
+  id: string; calibration_id: string; sequence_number: number; label: string | null; note: string | null; anchor_type: string;
+  linked_map_piece_id: string | null; longitude: number | null; latitude: number | null; image_x: number | null; image_y: number | null;
+  source_map_zoom?: number | null; source_map_bearing?: number | null; source_map_label?: string | null;
+  historical_image_note?: string | null; geographic_note?: string | null; enabled: boolean; deleted_at: string | null;
+};
 
 function objectValue(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function mapBirdsEyeAsset(row: BirdsEyeAssetRow, signedUrl: string | null): BirdsEyeReferenceAsset { return { id: row.id, assetId: row.asset_id, townPackageId: row.town_package_id, sourceRecordId: row.source_record_id, originalFilename: row.original_filename, storageBucket: row.storage_bucket, storagePath: row.storage_path, signedUrl, width: row.width, height: row.height, mimeType: row.mime_type, byteSize: row.byte_size, checksum: row.sha256_checksum, evidenceClassification: row.evidence_classification, reviewStatus: row.review_status, rightsNote: row.rights_note, intakeNotes: row.intake_notes, createdAt: row.created_at, updatedAt: row.updated_at }; }
-function mapBirdsEyePoint(row: BirdsEyeControlPointRow): BirdsEyeControlPoint { return { id: row.id, sequence: row.sequence_number, label: row.label ?? `Point ${row.sequence_number}`, note: row.note ?? "", anchorType: row.anchor_type as BirdsEyeControlPoint["anchorType"], linkedMapPieceId: row.linked_map_piece_id, longitude: row.longitude, latitude: row.latitude, imageX: row.image_x, imageY: row.image_y, enabled: row.enabled, deletedAt: row.deleted_at }; }
+function mapBirdsEyePoint(row: BirdsEyeControlPointRow): BirdsEyeControlPoint {
+  return {
+    id: row.id,
+    sequence: row.sequence_number,
+    label: row.label ?? `Point ${row.sequence_number}`,
+    note: row.note ?? "",
+    anchorType: row.anchor_type as BirdsEyeControlPoint["anchorType"],
+    linkedMapPieceId: row.linked_map_piece_id,
+    longitude: row.longitude,
+    latitude: row.latitude,
+    imageX: row.image_x,
+    imageY: row.image_y,
+    sourceMapZoom: row.source_map_zoom ?? null,
+    sourceMapBearing: row.source_map_bearing ?? null,
+    sourceMapLabel: row.source_map_label ?? "",
+    historicalImageNote: row.historical_image_note ?? "",
+    geographicNote: row.geographic_note ?? "",
+    enabled: row.enabled,
+    deletedAt: row.deleted_at,
+  };
+}
 
 function createEmptyState(input: {
   mode: StudioMode;
@@ -381,7 +407,18 @@ function createEmptyState(input: {
     geographicMap: normalizeGeographicMapSettings(null),
     georeferences: [],
     atlasInventory: createEmptySanbornAtlasInventoryState({ warningMessage: input.warningMessage }),
-    birdsEye: { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "unavailable", ready: true },
+    birdsEye: {
+      assets: [],
+      designatedAssetId: null,
+      calibration: null,
+      controlPoints: [],
+      sceneRegions: [],
+      piecePresentations: [],
+      buildingOptions: [],
+      sceneDataSource: "unavailable",
+      dataSource: "unavailable",
+      ready: true,
+    },
     selectedBasemap: "osm",
     overlayOpacity: 0.65,
     overlayVisible: true,
@@ -852,7 +889,7 @@ function mapTownIndexRegions(
   atlasInventory: Awaited<ReturnType<typeof loadSanbornAtlasInventory>>,
   assets: StudioSheetAsset[],
 ): { regions: SanbornTownIndexRegionRecord[]; invalidCount: number } {
-  const atlasByRowId = new Map(atlasInventory.atlases.map((atlas) => [atlas.rowId, atlas]));
+  const atlasByRowId = new Map([...atlasInventory.atlases, ...(atlasInventory.archivedAtlases ?? [])].map((atlas) => [atlas.rowId, atlas]));
   const pageByRowId = new Map(atlasInventory.pages.map((page) => [page.rowId, page]));
   const assetByRowId = new Map(assets.map((asset) => [asset.rowId, asset]));
   let invalidCount = 0;
@@ -1160,6 +1197,8 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
     ...atlasInventory,
     unassignedAssetIds: getUnassignedSanbornUploads(assets, atlasInventory.pages).map((asset) => asset.assetId),
   };
+  const requestedArchivedAtlas = (atlasInventory.archivedAtlases ?? []).find((atlas) => atlas.atlasId === atlasInventory.activeAtlasId) ?? null;
+  const loadedAtlasRecords = requestedArchivedAtlas ? [...atlasInventory.atlases, requestedArchivedAtlas] : atlasInventory.atlases;
   let townIndexRegionRows: TownIndexRegionRow[] = [];
   let workspaceWarning: string | undefined;
   let townIndexWarning: string | undefined;
@@ -1170,14 +1209,14 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
   let georeferenceRows: GeoreferenceRow[] = [];
   let controlPointRows: ControlPointRow[] = [];
 
-  if (atlasInventory.atlases.length > 0) {
+  if (loadedAtlasRecords.length > 0) {
     let townIndexRegionsResult = (await supabase
       .from("sanborn_source_regions")
       .select(
         "id, source_region_id, town_package_id, atlas_id, atlas_page_id, source_asset_id, source_record_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, printed_reference, region_type, normalized_polygon, include_in_town_index, available_to_map_pieces, display_color, display_opacity, reference_resolution, reference_resolution_note, workflow_status, review_status, evidence_classification, notes, updated_at",
       )
       .eq("town_package_id", activeTownPackage.id)
-      .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))
+      .in("atlas_id", loadedAtlasRecords.map((atlas) => atlas.rowId))
       .order("printed_reference", { ascending: true })
       .order("region_label", { ascending: true })) as { data: TownIndexRegionRow[] | null; error: { message: string } | null };
 
@@ -1189,7 +1228,7 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
           "id, region_id, town_package_id, atlas_id, index_atlas_page_id, linked_atlas_page_id, linked_sheet_asset_id, region_label, sheet_reference, region_type, source_polygon, workflow_status, progress_status, review_status, evidence_classification, notes, updated_at",
         )
         .eq("town_package_id", activeTownPackage.id)
-        .in("atlas_id", atlasInventory.atlases.map((atlas) => atlas.rowId))
+        .in("atlas_id", loadedAtlasRecords.map((atlas) => atlas.rowId))
         .order("sheet_reference", { ascending: true })
         .order("region_label", { ascending: true })) as { data: TownIndexRegionRow[] | null; error: { message: string } | null };
 
@@ -1282,7 +1321,7 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
   }
 
   const savedEditionYears = getSavedSanbornEditionYears(atlasInventory.atlases);
-  const activeAtlasForYear = atlasInventory.atlases.find((atlas) => atlas.atlasId === atlasInventory.activeAtlasId) ?? null;
+  const activeAtlasForYear = loadedAtlasRecords.find((atlas) => atlas.atlasId === atlasInventory.activeAtlasId) ?? null;
   const resolvedActiveMapYear = activeAtlasForYear?.editionYear ?? null;
   const workspace = activeAtlasForYear ? mapWorkspace(workspaceRow, activeTownPackage, resolvedActiveMapYear ?? activeMapYear) : null;
   const savedPlacements = mapPlacements(placementRows, assets);
@@ -1317,12 +1356,24 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
     resolvedMapView.recoveredFromInvalidWorkspaceCenter && resolvedMapView.center
       ? `Recovered map center from invalid saved coordinates using ${resolvedMapView.source.replaceAll("_", " ")}.`
       : undefined;
-  let birdsEye: BirdsEyePerspectiveState = { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "supabase", ready: true };
+  let birdsEye: BirdsEyePerspectiveState = {
+    assets: [],
+    designatedAssetId: null,
+    calibration: null,
+    controlPoints: [],
+    sceneRegions: [],
+    piecePresentations: [],
+    buildingOptions: [],
+    sceneDataSource: "migration_required",
+    dataSource: "supabase",
+    ready: true,
+  };
   if (activeAtlasForYear) {
-    const [birdsEyeAssetsResult, designationResult, calibrationResult] = await Promise.all([
+    const [birdsEyeAssetsResult, designationResult, calibrationResult, buildingsResult] = await Promise.all([
       supabase.from("historical_map_birds_eye_reference_assets").select("id, asset_id, town_package_id, source_record_id, original_filename, storage_bucket, storage_path, mime_type, byte_size, width, height, sha256_checksum, evidence_classification, review_status, rights_note, intake_notes, created_at, updated_at").eq("town_package_id", activeTownPackage.id).order("created_at", { ascending: true }),
       supabase.from("sanborn_atlases").select("birds_eye_reference_asset_id").eq("id", activeAtlasForYear.rowId).eq("town_package_id", activeTownPackage.id).maybeSingle(),
       supabase.from("historical_map_birds_eye_calibrations").select("id, town_package_id, atlas_id, reference_asset_id, title, calibration_status, unavailable_reason, global_parameters, warp_type, solver_version, warp_model, quality_summary, notes, updated_at").eq("atlas_id", activeAtlasForYear.rowId).eq("town_package_id", activeTownPackage.id).maybeSingle(),
+      supabase.from("buildings").select("building_id, label").eq("town_package_id", activeTownPackage.id).order("label", { ascending: true }),
     ]);
     if (!birdsEyeAssetsResult.error && !designationResult.error && !calibrationResult.error) {
       const assetRows = (birdsEyeAssetsResult.data ?? []) as BirdsEyeAssetRow[];
@@ -1335,9 +1386,33 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
       const designatedAsset = assetRows.find((row) => row.id === designatedAssetRowId) ?? null;
       let controlPoints: BirdsEyeControlPoint[] = [];
       if (calibrationRow) {
-        const pointsResult = await supabase.from("historical_map_birds_eye_control_points").select("id, calibration_id, sequence_number, label, note, anchor_type, linked_map_piece_id, longitude, latitude, image_x, image_y, enabled, deleted_at").eq("calibration_id", calibrationRow.id).is("deleted_at", null).order("sequence_number", { ascending: true });
-        if (!pointsResult.error) controlPoints = (pointsResult.data ?? []).map((row) => mapBirdsEyePoint(row as BirdsEyeControlPointRow));
+        const extendedPointsResult = await supabase.from("historical_map_birds_eye_control_points").select("id, calibration_id, sequence_number, label, note, anchor_type, linked_map_piece_id, longitude, latitude, image_x, image_y, source_map_zoom, source_map_bearing, source_map_label, historical_image_note, geographic_note, enabled, deleted_at").eq("calibration_id", calibrationRow.id).is("deleted_at", null).order("sequence_number", { ascending: true });
+        const legacyPointsResult = extendedPointsResult.error
+          ? await supabase.from("historical_map_birds_eye_control_points").select("id, calibration_id, sequence_number, label, note, anchor_type, linked_map_piece_id, longitude, latitude, image_x, image_y, enabled, deleted_at").eq("calibration_id", calibrationRow.id).is("deleted_at", null).order("sequence_number", { ascending: true })
+          : null;
+        const pointRows = extendedPointsResult.error ? legacyPointsResult?.data : extendedPointsResult.data;
+        const pointError = extendedPointsResult.error ? legacyPointsResult?.error : null;
+        if (!pointError) controlPoints = (pointRows ?? []).map((row) => mapBirdsEyePoint(row as BirdsEyeControlPointRow));
       }
+      let sceneRegions = birdsEye.sceneRegions;
+      let piecePresentations = birdsEye.piecePresentations;
+      let sceneDataSource: BirdsEyePerspectiveState["sceneDataSource"] = "migration_required";
+      if (designatedAsset) {
+        const [sceneResult, presentationResult] = await Promise.all([
+          supabase.from("historical_map_birds_eye_scene_regions").select("*").eq("town_package_id", activeTownPackage.id).eq("atlas_id", activeAtlasForYear.atlasId).eq("reference_asset_id", designatedAsset.asset_id).is("archived_at", null).order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
+          supabase.from("historical_map_birds_eye_piece_presentations").select("*").eq("town_package_id", activeTownPackage.id).eq("atlas_id", activeAtlasForYear.atlasId).eq("reference_asset_id", designatedAsset.asset_id).is("archived_at", null).order("created_at", { ascending: true }),
+        ]);
+        if (!sceneResult.error && !presentationResult.error) {
+          sceneRegions = (sceneResult.data ?? []).map(mapBirdsEyeSceneRegionRow).filter((region): region is NonNullable<typeof region> => Boolean(region));
+          piecePresentations = (presentationResult.data ?? []).map(mapBirdsEyePiecePresentationRow).filter((presentation): presentation is NonNullable<typeof presentation> => Boolean(presentation));
+          sceneDataSource = "supabase";
+        }
+      } else {
+        sceneDataSource = "supabase";
+      }
+      const buildingOptions: BirdsEyeBuildingOption[] = buildingsResult.error
+        ? []
+        : (buildingsResult.data ?? []).map((row) => ({ buildingId: String(row.building_id), label: String(row.label ?? row.building_id) }));
       birdsEye = {
         assets: assetsWithUrls,
         designatedAssetId: designatedAsset?.asset_id ?? null,
@@ -1347,6 +1422,10 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
           globalParameters: { ...defaultBirdsEyeGlobalParameters, ...objectValue(calibrationRow.global_parameters) } as BirdsEyeCalibration["globalParameters"], warpType: "delaunay_piecewise_affine", solverVersion: calibrationRow.solver_version, warpModel: objectValue(calibrationRow.warp_model), quality: { ...birdsEyeCalibrationQuality(controlPoints), ...objectValue(calibrationRow.quality_summary) } as BirdsEyeCalibration["quality"], notes: calibrationRow.notes ?? "", updatedAt: calibrationRow.updated_at,
         } : null,
         controlPoints,
+        sceneRegions,
+        piecePresentations,
+        buildingOptions,
+        sceneDataSource,
         dataSource: "supabase",
         ready: true,
       };
@@ -1354,7 +1433,18 @@ export async function loadHistoricalMapStudioDataUncached(options: LoadHistorica
       // The additive Step 7 schema may be deploying independently. Keep the
       // established six stations usable while showing the missing capability
       // as unavailable instead of turning the whole studio read-only.
-      birdsEye = { assets: [], designatedAssetId: null, calibration: null, controlPoints: [], dataSource: "unavailable", ready: true };
+      birdsEye = {
+        assets: [],
+        designatedAssetId: null,
+        calibration: null,
+        controlPoints: [],
+        sceneRegions: [],
+        piecePresentations: [],
+        buildingOptions: [],
+        sceneDataSource: "unavailable",
+        dataSource: "unavailable",
+        ready: true,
+      };
     }
   }
 

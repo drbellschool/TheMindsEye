@@ -252,20 +252,22 @@ export async function loadSanbornAtlasInventory(input: {
     .order("edition_year", { ascending: false })
     .order("volume_label", { ascending: true });
   const archivedAtlases = archivedAtlasResult.error ? [] : ((archivedAtlasResult.data ?? []) as SanbornAtlasRow[]).map(mapAtlas);
-  const atlasByRowId = new Map(atlases.map((atlas) => [atlas.rowId, atlas]));
-  const activeAtlas = (atlasId ? atlases.find((atlas) => atlas.atlasId === atlasId) : null) ?? atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
+  const requestedArchivedAtlas = atlasId ? archivedAtlases.find((atlas) => atlas.atlasId === atlasId) ?? null : null;
+  const loadedAtlases = requestedArchivedAtlas ? [...atlases, requestedArchivedAtlas] : atlases;
+  const atlasByRowId = new Map(loadedAtlases.map((atlas) => [atlas.rowId, atlas]));
+  const activeAtlas = (atlasId ? loadedAtlases.find((atlas) => atlas.atlasId === atlasId) : null) ?? atlases.find((atlas) => atlas.editionYear === mapYear) ?? atlases[0] ?? null;
   let allPages: SanbornAtlasPageRecord[] = [];
   let pages: SanbornAtlasPageRecord[] = [];
   let pieces: SanbornMapPieceRecord[] = [];
 
-  if (atlases.length > 0) {
+  if (loadedAtlases.length > 0) {
     const pageSelectWithClassification =
       "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, printed_reference, volume_label, display_label, is_primary_town_index, classification_notes, archived_at, archive_reason, review_status, evidence_classification, review_categories, updated_at";
     const pageSelectBase = "id, page_id, atlas_id, sanborn_sheet_asset_id, page_sequence, page_type, sheet_number, volume_label, display_label, review_status, evidence_classification, updated_at";
     let pageResult: { data: unknown[] | null; error: { message: string } | null } = await supabase
       .from("sanborn_atlas_pages")
       .select(pageSelectWithClassification)
-      .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+      .in("atlas_id", loadedAtlases.map((atlas) => atlas.rowId))
       .is("archived_at", null)
       .order("page_sequence", { ascending: true });
 
@@ -279,7 +281,7 @@ export async function loadSanbornAtlasInventory(input: {
       pageResult = await supabase
         .from("sanborn_atlas_pages")
         .select(pageSelectBase)
-        .in("atlas_id", atlases.map((atlas) => atlas.rowId))
+        .in("atlas_id", loadedAtlases.map((atlas) => atlas.rowId))
         .is("archived_at", null)
         .order("page_sequence", { ascending: true });
     }

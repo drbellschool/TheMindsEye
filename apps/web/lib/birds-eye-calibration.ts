@@ -1,3 +1,9 @@
+import type {
+  BirdsEyeBuildingOption,
+  BirdsEyePiecePresentation,
+  BirdsEyeSceneRegion,
+} from "./birds-eye-scene.ts";
+
 export const birdsEyeAnchorTypes = ["intersection", "railroad_crossing", "block_corner", "building_landmark", "church", "depot", "school", "courthouse", "water_feature", "road_bend", "other"] as const;
 export type BirdsEyeAnchorType = (typeof birdsEyeAnchorTypes)[number];
 export type BirdsEyeCalibrationStatus = "draft" | "solved" | "saved" | "needs_review" | "unavailable";
@@ -35,6 +41,11 @@ export type BirdsEyeControlPoint = {
   latitude: number | null;
   imageX: number | null;
   imageY: number | null;
+  sourceMapZoom?: number | null;
+  sourceMapBearing?: number | null;
+  sourceMapLabel?: string;
+  historicalImageNote?: string;
+  geographicNote?: string;
   enabled: boolean;
   deletedAt: string | null;
 };
@@ -66,6 +77,8 @@ export type BirdsEyeCalibrationQuality = {
   worstPointSequence: number | null;
   solvedAt: string | null;
   savedAt: string | null;
+  stage?: BirdsEyeSolveStage;
+  warnings?: string[];
 };
 
 export type BirdsEyeCalibration = {
@@ -90,6 +103,10 @@ export type BirdsEyePerspectiveState = {
   designatedAssetId: string | null;
   calibration: BirdsEyeCalibration | null;
   controlPoints: BirdsEyeControlPoint[];
+  sceneRegions: BirdsEyeSceneRegion[];
+  piecePresentations: BirdsEyePiecePresentation[];
+  buildingOptions: BirdsEyeBuildingOption[];
+  sceneDataSource: "supabase" | "migration_required" | "unavailable";
   dataSource: "supabase" | "unavailable";
   ready: boolean;
 };
@@ -129,6 +146,40 @@ export function normalizeBirdsEyeGlobalParameters(input: Partial<BirdsEyeGlobalP
 }
 
 export type BirdsEyePoint = { x: number; y: number };
+export type BirdsEyeAffineMatrix = { a: number; b: number; c: number; d: number; e: number; f: number };
+export type BirdsEyeSolveStage = "flat" | "translation" | "similarity" | "coarse" | "rough" | "local";
+export type BirdsEyeFlatProjection = {
+  centerLatitude: number;
+  centerLongitude: number;
+  pixelsPerMeter: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+};
+export type BirdsEyePointResidual = {
+  sequence: number;
+  predicted: BirdsEyePoint;
+  target: BirdsEyePoint;
+  pixels: number;
+  outlier: boolean;
+};
+export type BirdsEyeStagedSolve = {
+  stage: BirdsEyeSolveStage;
+  statusLabel: string;
+  completePointCount: number;
+  valid: boolean;
+  globalMatrix: BirdsEyeAffineMatrix;
+  flatProjection: BirdsEyeFlatProjection;
+  localWarp: BirdsEyeWarpModel;
+  residuals: BirdsEyePointResidual[];
+  averageResidualPixels: number | null;
+  maximumResidualPixels: number | null;
+  worstPointSequence: number | null;
+  duplicatePointSequences: number[];
+  nearCollinear: boolean;
+  warnings: string[];
+};
 export type BirdsEyeTransform = {
   // Future rendering contract: forward maps authoritative geographic
   // coordinates into Step 7 reference pixels; inverse maps a clicked pixel
@@ -207,6 +258,172 @@ export function birdsEyeCalibrationQuality(points: readonly BirdsEyeControlPoint
   return { totalPoints: points.length, completeEnabledPoints, disabledPoints, incompletePoints: points.length - completeEnabledPoints - disabledPoints, valid: completeEnabledPoints >= 4, averageResidualPixels: null, maximumResidualPixels: null, worstPointSequence: null, solvedAt, savedAt };
 }
 
+export function createBirdsEyeFlatProjection(input: {
+  coordinates: ReadonlyArray<{ longitude: number; latitude: number }>;
+  centerLatitude: number;
+  centerLongitude: number;
+  width: number;
+  height: number;
+  padding?: number;
+}): BirdsEyeFlatProjection {
+  const width = Math.max(1, input.width);
+  const height = Math.max(1, input.height);
+  const padding = Math.max(0, Math.min(Math.min(width, height) * 0.4, input.padding ?? Math.min(width, height) * 0.08));
+  const centerLatitude = Number.isFinite(input.centerLatitude) ? input.centerLatitude : 0;
+  const centerLongitude = Number.isFinite(input.centerLongitude) ? input.centerLongitude : 0;
+  const longitudeScale = 111320 * Math.max(0.05, Math.cos(centerLatitude * Math.PI / 180));
+  const points = input.coordinates
+    .filter((coordinate) => Number.isFinite(coordinate.longitude) && Number.isFinite(coordinate.latitude))
+    .map((coordinate) => ({
+      x: (coordinate.longitude - centerLongitude) * longitudeScale,
+      y: -(coordinate.latitude - centerLatitude) * 111320,
+    }));
+  if (points.length === 0) {
+    return { centerLatitude, centerLongitude, pixelsPerMeter: 0.75, offsetX: width / 2, offsetY: height / 2, width, height };
+  }
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const spanX = Math.max(25, maxX - minX);
+  const spanY = Math.max(25, maxY - minY);
+  const pixelsPerMeter = Math.max(0.00001, Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY));
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  return {
+    centerLatitude,
+    centerLongitude,
+    pixelsPerMeter,
+    offsetX: width / 2 - centerX * pixelsPerMeter,
+    offsetY: height / 2 - centerY * pixelsPerMeter,
+    width,
+    height,
+  };
+}
+
+export function projectBirdsEyeGeographicFlat(
+  longitude: number,
+  latitude: number,
+  projection: BirdsEyeFlatProjection,
+): BirdsEyePoint {
+  const longitudeScale = 111320 * Math.max(0.05, Math.cos(projection.centerLatitude * Math.PI / 180));
+  return {
+    x: projection.offsetX + (longitude - projection.centerLongitude) * longitudeScale * projection.pixelsPerMeter,
+    y: projection.offsetY - (latitude - projection.centerLatitude) * 111320 * projection.pixelsPerMeter,
+  };
+}
+
+export function applyBirdsEyeAffine(point: BirdsEyePoint, matrix: BirdsEyeAffineMatrix): BirdsEyePoint {
+  return {
+    x: matrix.a * point.x + matrix.c * point.y + matrix.e,
+    y: matrix.b * point.x + matrix.d * point.y + matrix.f,
+  };
+}
+
+function solveLinearSystem(matrix: number[][], vector: number[]): number[] | null {
+  const size = vector.length;
+  const augmented = matrix.map((row, index) => [...row, vector[index]]);
+  for (let column = 0; column < size; column += 1) {
+    let pivot = column;
+    for (let row = column + 1; row < size; row += 1) {
+      if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
+    }
+    if (Math.abs(augmented[pivot][column]) < 1e-10) return null;
+    [augmented[column], augmented[pivot]] = [augmented[pivot], augmented[column]];
+    const divisor = augmented[column][column];
+    for (let value = column; value <= size; value += 1) augmented[column][value] /= divisor;
+    for (let row = 0; row < size; row += 1) {
+      if (row === column) continue;
+      const factor = augmented[row][column];
+      for (let value = column; value <= size; value += 1) augmented[row][value] -= factor * augmented[column][value];
+    }
+  }
+  return augmented.map((row) => row[size]);
+}
+
+function solveAffineLeastSquares(source: BirdsEyePoint[], target: BirdsEyePoint[]): BirdsEyeAffineMatrix | null {
+  const rows: number[][] = [];
+  const values: number[] = [];
+  source.forEach((point, index) => {
+    rows.push([point.x, 0, point.y, 0, 1, 0], [0, point.x, 0, point.y, 0, 1]);
+    values.push(target[index].x, target[index].y);
+  });
+  const normal = Array.from({ length: 6 }, () => Array(6).fill(0));
+  const result = Array(6).fill(0);
+  rows.forEach((row, rowIndex) => {
+    for (let left = 0; left < 6; left += 1) {
+      result[left] += row[left] * values[rowIndex];
+      for (let right = 0; right < 6; right += 1) normal[left][right] += row[left] * row[right];
+    }
+  });
+  const solved = solveLinearSystem(normal, result);
+  return solved ? { a: solved[0], b: solved[1], c: solved[2], d: solved[3], e: solved[4], f: solved[5] } : null;
+}
+
+function similarityMatrix(source: BirdsEyePoint[], target: BirdsEyePoint[]): BirdsEyeAffineMatrix {
+  if (source.length === 0) return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  if (source.length === 1) return { a: 1, b: 0, c: 0, d: 1, e: target[0].x - source[0].x, f: target[0].y - source[0].y };
+  const sourceDelta = { x: source[1].x - source[0].x, y: source[1].y - source[0].y };
+  const targetDelta = { x: target[1].x - target[0].x, y: target[1].y - target[0].y };
+  const sourceLength = Math.max(1e-8, Math.hypot(sourceDelta.x, sourceDelta.y));
+  const targetLength = Math.hypot(targetDelta.x, targetDelta.y);
+  const scale = targetLength / sourceLength;
+  const rotation = Math.atan2(targetDelta.y, targetDelta.x) - Math.atan2(sourceDelta.y, sourceDelta.x);
+  const a = Math.cos(rotation) * scale;
+  const b = Math.sin(rotation) * scale;
+  const c = -Math.sin(rotation) * scale;
+  const d = Math.cos(rotation) * scale;
+  return {
+    a,
+    b,
+    c,
+    d,
+    e: target[0].x - a * source[0].x - c * source[0].y,
+    f: target[0].y - b * source[0].x - d * source[0].y,
+  };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function detectDuplicateSequences(source: BirdsEyePoint[], target: BirdsEyePoint[], sequences: number[]): number[] {
+  const duplicates = new Set<number>();
+  for (let left = 0; left < source.length; left += 1) {
+    for (let right = left + 1; right < source.length; right += 1) {
+      if (Math.hypot(source[left].x - source[right].x, source[left].y - source[right].y) < 4 ||
+        Math.hypot(target[left].x - target[right].x, target[left].y - target[right].y) < 4) {
+        duplicates.add(sequences[left]);
+        duplicates.add(sequences[right]);
+      }
+    }
+  }
+  return [...duplicates].sort((left, right) => left - right);
+}
+
+function detectNearCollinear(points: BirdsEyePoint[]): boolean {
+  if (points.length < 3) return false;
+  const spanX = Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x));
+  const spanY = Math.max(...points.map((point) => point.y)) - Math.min(...points.map((point) => point.y));
+  const boundsArea = Math.max(1, spanX * spanY);
+  let maximumTriangleArea = 0;
+  for (let first = 0; first < points.length - 2; first += 1) {
+    for (let second = first + 1; second < points.length - 1; second += 1) {
+      for (let third = second + 1; third < points.length; third += 1) {
+        const area = Math.abs(
+          (points[second].x - points[first].x) * (points[third].y - points[first].y) -
+          (points[second].y - points[first].y) * (points[third].x - points[first].x),
+        ) / 2;
+        maximumTriangleArea = Math.max(maximumTriangleArea, area);
+      }
+    }
+  }
+  return maximumTriangleArea / boundsArea < 0.01;
+}
+
 function barycentric(point: BirdsEyePoint, triangle: [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint]): [number, number, number] | null {
   const [a, b, c] = triangle;
   const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
@@ -252,6 +469,117 @@ function delaunayTriangles(points: BirdsEyePoint[]): Array<[number, number, numb
   return triangles.filter((triangle) => triangle.every((index) => index < points.length));
 }
 
+function createLocalWarpFromProjectedPoints(
+  source: BirdsEyePoint[],
+  target: BirdsEyePoint[],
+  sequences: number[],
+  residuals: BirdsEyePointResidual[],
+): BirdsEyeWarpModel {
+  const residualValues = residuals.map((residual) => residual.pixels);
+  const maximumResidualPixels = residualValues.length ? Math.max(...residualValues) : null;
+  const worst = maximumResidualPixels === null ? null : residuals.find((residual) => residual.pixels === maximumResidualPixels) ?? null;
+  const triangles = source.length >= 6
+    ? delaunayTriangles(source).map((triangle) => ({
+        source: triangle.map((index) => source[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint],
+        target: triangle.map((index) => target[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint],
+        sequences: triangle.map((index) => sequences[index]) as [number, number, number],
+      }))
+    : [];
+  return {
+    type: "delaunay_piecewise_affine",
+    triangles,
+    solvedPointCount: source.length,
+    averageResidualPixels: residualValues.length ? residualValues.reduce((sum, value) => sum + value, 0) / residualValues.length : null,
+    maximumResidualPixels,
+    worstPointSequence: worst?.sequence ?? null,
+  };
+}
+
+export function solveBirdsEyeStagedCalibration(input: {
+  points: readonly BirdsEyeControlPoint[];
+  flatProjection: BirdsEyeFlatProjection;
+}): BirdsEyeStagedSolve {
+  const complete = input.points
+    .filter((point) => point.enabled && point.longitude !== null && point.latitude !== null && point.imageX !== null && point.imageY !== null)
+    .sort((left, right) => left.sequence - right.sequence);
+  const source = complete.map((point) => projectBirdsEyeGeographicFlat(point.longitude!, point.latitude!, input.flatProjection));
+  const target = complete.map((point) => ({ x: point.imageX!, y: point.imageY! }));
+  const sequences = complete.map((point) => point.sequence);
+  const duplicatePointSequences = detectDuplicateSequences(source, target, sequences);
+  const nearCollinear = detectNearCollinear(source) || detectNearCollinear(target);
+  let globalMatrix = similarityMatrix(source, target);
+  if (complete.length >= 3 && !nearCollinear) globalMatrix = solveAffineLeastSquares(source, target) ?? globalMatrix;
+  const predicted = source.map((point) => applyBirdsEyeAffine(point, globalMatrix));
+  const rawResiduals = predicted.map((point, index) => Math.hypot(point.x - target[index].x, point.y - target[index].y));
+  const residualMedian = median(rawResiduals);
+  const outlierThreshold = Math.max(12, residualMedian * 3);
+  const residuals: BirdsEyePointResidual[] = predicted.map((point, index) => ({
+    sequence: sequences[index],
+    predicted: point,
+    target: target[index],
+    pixels: rawResiduals[index],
+    outlier: complete.length >= 4 && rawResiduals[index] > outlierThreshold,
+  }));
+  const localWarp = createLocalWarpFromProjectedPoints(predicted, target, sequences, residuals);
+  const stage: BirdsEyeSolveStage = complete.length === 0
+    ? "flat"
+    : complete.length === 1
+      ? "translation"
+      : complete.length === 2
+        ? "similarity"
+        : complete.length === 3
+          ? "coarse"
+          : complete.length < 6
+            ? "rough"
+            : "local";
+  const statusLabel = stage === "flat"
+    ? "Flat geographic preview"
+    : stage === "translation"
+      ? "Translation anchor"
+      : stage === "similarity"
+        ? "Rotation and scale estimate"
+        : stage === "coarse"
+          ? "Coarse affine alignment"
+          : stage === "rough"
+            ? "Rough alignment"
+            : "Local warp active";
+  const warnings: string[] = [];
+  if (duplicatePointSequences.length) warnings.push(`Points ${duplicatePointSequences.join(", ")} are duplicates or too close together.`);
+  if (nearCollinear) warnings.push("Control points are nearly collinear. Add landmarks above, below, left, and right of the current set.");
+  const outliers = residuals.filter((residual) => residual.outlier).map((residual) => residual.sequence);
+  if (outliers.length) warnings.push(`Possible outlier${outliers.length === 1 ? "" : "s"}: point${outliers.length === 1 ? "" : "s"} ${outliers.join(", ")}.`);
+  if (complete.length > 0 && complete.length < 4) warnings.push(`${4 - complete.length} more complete pair${4 - complete.length === 1 ? "" : "s"} needed for a valid calibration.`);
+  if (complete.length >= 4 && complete.length < 6) warnings.push("Add at least six widely separated pairs to activate local refinement.");
+  if (complete.length >= 6 && localWarp.triangles.length === 0) warnings.push("Local refinement could not create a stable control-point network.");
+  return {
+    stage,
+    statusLabel,
+    completePointCount: complete.length,
+    valid: complete.length >= 4 && duplicatePointSequences.length === 0 && !nearCollinear,
+    globalMatrix,
+    flatProjection: input.flatProjection,
+    localWarp,
+    residuals,
+    averageResidualPixels: localWarp.averageResidualPixels,
+    maximumResidualPixels: localWarp.maximumResidualPixels,
+    worstPointSequence: localWarp.worstPointSequence,
+    duplicatePointSequences,
+    nearCollinear,
+    warnings,
+  };
+}
+
+export function projectBirdsEyeThroughSolve(
+  longitude: number,
+  latitude: number,
+  solve: BirdsEyeStagedSolve,
+  options: { globalOnly?: boolean } = {},
+): BirdsEyePoint {
+  const flat = projectBirdsEyeGeographicFlat(longitude, latitude, solve.flatProjection);
+  const global = applyBirdsEyeAffine(flat, solve.globalMatrix);
+  return !options.globalOnly && solve.stage === "local" ? warpBirdsEyeForward(global, solve.localWarp) : global;
+}
+
 export function solveBirdsEyeLocalWarp(points: readonly BirdsEyeControlPoint[], transform: BirdsEyeTransform): BirdsEyeWarpModel {
   const complete = points.filter((point) => point.enabled && point.longitude !== null && point.latitude !== null && point.imageX !== null && point.imageY !== null);
   const source = complete.map((point) => transform.forward(point.longitude!, point.latitude!));
@@ -259,7 +587,7 @@ export function solveBirdsEyeLocalWarp(points: readonly BirdsEyeControlPoint[], 
   const residuals = complete.map((point, index) => Math.hypot(target[index].x - source[index].x, target[index].y - source[index].y));
   const maximumResidualPixels = residuals.length ? Math.max(...residuals) : null;
   const worstIndex = residuals.length ? residuals.indexOf(maximumResidualPixels!) : -1;
-  const triangles = delaunayTriangles(source).map((triangle) => ({ source: triangle.map((index) => source[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint], target: triangle.map((index) => target[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint], sequences: triangle.map((index) => complete[index].sequence) as [number, number, number] }));
+  const triangles = complete.length >= 6 ? delaunayTriangles(source).map((triangle) => ({ source: triangle.map((index) => source[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint], target: triangle.map((index) => target[index]) as [BirdsEyePoint, BirdsEyePoint, BirdsEyePoint], sequences: triangle.map((index) => complete[index].sequence) as [number, number, number] })) : [];
   return { type: "delaunay_piecewise_affine", triangles, solvedPointCount: complete.length, averageResidualPixels: residuals.length ? residuals.reduce((sum, value) => sum + value, 0) / residuals.length : null, maximumResidualPixels, worstPointSequence: worstIndex >= 0 ? complete[worstIndex].sequence : null };
 }
 
