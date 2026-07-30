@@ -9,6 +9,7 @@ import { basemaps, getBasemap } from "@/lib/historical-map-basemap";
 import type { BirdsEyeControlPoint } from "@/lib/birds-eye-calibration";
 import { getBirdsEyePlacedGeometryCoordinates, type BirdsEyePlacedGeometry } from "@/lib/birds-eye-scene";
 import type { SheetGeographicTransform } from "@/lib/historical-map-sheet-georeference";
+import { centeredBirdsEyeMarkerAnchor } from "@/lib/birds-eye-interaction";
 
 export type BirdsEyeSourceMapFitMode = "town" | "pieces" | "selected_point";
 
@@ -36,11 +37,12 @@ type Props = {
 };
 
 function pointIcon(sequence: number, selected: boolean, complete: boolean) {
+  const size = 30;
   return L.divIcon({
     className: `birds-eye-map-point${selected ? " is-selected" : ""}${complete ? " is-complete" : " is-incomplete"}`,
     html: `<span aria-hidden="true">${sequence}</span>`,
-    iconAnchor: [14, 14],
-    iconSize: [28, 28],
+    iconAnchor: centeredBirdsEyeMarkerAnchor(size),
+    iconSize: [size, size],
   });
 }
 
@@ -83,7 +85,17 @@ function SourceMapController({
 }) {
   const map = useMap();
   useEffect(() => {
-    window.setTimeout(() => map.invalidateSize({ pan: false }), 0);
+    const invalidate = () => map.invalidateSize({ pan: false });
+    const frame = window.requestAnimationFrame(invalidate);
+    const container = map.getContainer();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(invalidate);
+    observer?.observe(container);
+    window.addEventListener("resize", invalidate);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", invalidate);
+    };
   }, [activeToken, map]);
   useEffect(() => {
     if (fitRequest.token === 0) return;

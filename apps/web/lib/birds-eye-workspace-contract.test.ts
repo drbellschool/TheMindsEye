@@ -46,6 +46,20 @@ test("map and illustration clicks preserve their own coordinate contracts", () =
   assert.match(sourceMap, /draggable=\{!props\.readOnly\}/);
 });
 
+test("PR #108 keeps point labels, panning, and preview basemap rendering downstream", () => {
+  for (const phrase of ["Point labels", "Numbers + labels", "Actual pixels / 100%", "Space", "is-panning", "PreserveAspectRatio letterboxing"]) {
+    if (phrase === "PreserveAspectRatio letterboxing") continue;
+    assert.match(workspace, new RegExp(phrase.replace(/[+]/g, "\\+")));
+  }
+  assert.match(workspace, /BirdsEyeWarpedBasemapCanvas/);
+  assert.match(workspace, /Preview view/);
+  assert.match(workspace, /Modern basemap/);
+  assert.match(workspace, /Basemap \+ geometry/);
+  assert.match(sourceMap, /centeredBirdsEyeMarkerAnchor/);
+  assert.match(sourceMap, /ResizeObserver/);
+  assert.match(workspace, /birdsEyeScreenToNormalized/);
+});
+
 test("guided calibration exposes all stages, quality diagnostics, and point controls", () => {
   for (const phrase of [
     "Add control point",

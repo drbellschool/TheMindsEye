@@ -12,6 +12,7 @@ import {
 import type { LatLngTuple } from "leaflet";
 
 import { BirdsEyeSourceMap, type BirdsEyeSourceMapFitMode } from "@/components/BirdsEyeSourceMap";
+import { BirdsEyeWarpedBasemapCanvas } from "@/components/BirdsEyeWarpedBasemapCanvas";
 import { SanbornSourceImageStatus, useSanbornSourceImageState } from "@/components/SanbornSourceImage";
 import {
   birdsEyeAnchorTypes,
@@ -53,6 +54,8 @@ import {
 import { reviewStatuses } from "@/lib/community-status";
 import type { SheetGeographicTransform } from "@/lib/historical-map-sheet-georeference";
 import type { StudioSourceOption } from "@/lib/historical-map-studio";
+import { birdsEyeScreenToNormalized } from "@/lib/birds-eye-interaction";
+import { basemaps } from "@/lib/historical-map-basemap";
 
 type EditorMode =
   | "select"
@@ -65,6 +68,8 @@ type EditorMode =
 type WorkspaceTab = "illustration" | "flat_map" | "warped_preview" | "scene_markup";
 type InspectorTab = "calibration" | "regions" | "presentation" | "evidence";
 type SaveState = "idle" | "saving" | "saved" | "error";
+type PointLabelMode = "numbers" | "numbers_labels" | "hidden";
+type PreviewView = "geometry" | "street_framework" | "modern_basemap" | "basemap_geometry" | "historical_overlay";
 type Snapshot = {
   points: BirdsEyeControlPoint[];
   regions: BirdsEyeSceneRegion[];
@@ -145,18 +150,6 @@ function sourceMapCenter(
     coordinates.reduce((sum, coordinate) => sum + coordinate.latitude, 0) / coordinates.length,
     coordinates.reduce((sum, coordinate) => sum + coordinate.longitude, 0) / coordinates.length,
   ];
-}
-
-function imagePointFromPointer(
-  svg: SVGSVGElement,
-  event: { clientX: number; clientY: number },
-  view: { x: number; y: number; width: number; height: number },
-): BirdsEyePoint {
-  const bounds = svg.getBoundingClientRect();
-  return {
-    x: view.x + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * view.width,
-    y: view.y + ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * view.height,
-  };
 }
 
 function newControlPoint(sequence: number): BirdsEyeControlPoint {
@@ -247,6 +240,8 @@ export function BirdsEyePerspectiveWorkspace({
   const [draftVertices, setDraftVertices] = useState<BirdsEyeNormalizedPoint[]>([]);
   const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
   const [panning, setPanning] = useState<{ clientX: number; clientY: number; x: number; y: number } | null>(null);
+  const panningRef = useRef(false);
+  const [spacePan, setSpacePan] = useState(false);
   const [dragVertex, setDragVertex] = useState<{ kind: "region" | "presentation"; id: string; index: number } | null>(null);
   const dragHistoryPushedRef = useRef(false);
   const [showSceneRegions, setShowSceneRegions] = useState(true);
@@ -261,6 +256,9 @@ export function BirdsEyePerspectiveWorkspace({
   const [mapFitRequest, setMapFitRequest] = useState<{ mode: BirdsEyeSourceMapFitMode; token: number }>({ mode: "town", token: 0 });
   const [comparisonMode, setComparisonMode] = useState<"side_by_side" | "overlay" | "difference">("side_by_side");
   const [comparisonOpacity, setComparisonOpacity] = useState(0.5);
+  const [pointLabelMode, setPointLabelMode] = useState<PointLabelMode>("numbers");
+  const [previewView, setPreviewView] = useState<PreviewView>("basemap_geometry");
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
   const [blinkComparison, setBlinkComparison] = useState(false);
   const [blinkVisible, setBlinkVisible] = useState(true);
   const [calibrationSaveState, setCalibrationSaveState] = useState<SaveState>("idle");
@@ -374,6 +372,34 @@ export function BirdsEyePerspectiveWorkspace({
     return () => window.clearInterval(interval);
   }, [blinkComparison]);
 
+  useEffect(() => {
+    const key = `minds-eye:birds-eye:point-labels:${townPackageId}:${atlasId}`;
+    const saved = window.localStorage.getItem(key);
+    if (saved === "numbers" || saved === "numbers_labels" || saved === "hidden") setPointLabelMode(saved);
+  }, [atlasId, townPackageId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`minds-eye:birds-eye:point-labels:${townPackageId}:${atlasId}`, pointLabelMode);
+  }, [atlasId, pointLabelMode, townPackageId]);
+
+  useEffect(() => {
+    const isTextEntry = (target: EventTarget | null) => target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.code !== "Space" || isTextEntry(event.target)) return;
+      event.preventDefault();
+      setSpacePan(true);
+    };
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.code === "Space") setSpacePan(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   function pushHistory() {
     setHistoryPast((past) => [...past.slice(-39), cloneSnapshot(activeSnapshot)]);
     setHistoryFuture([]);
@@ -470,22 +496,26 @@ export function BirdsEyePerspectiveWorkspace({
 
   function pointerToNormalized(event: { clientX: number; clientY: number }): BirdsEyeNormalizedPoint | null {
     if (!referenceRef.current) return null;
-    const point = imagePointFromPointer(referenceRef.current, event, viewBox);
-    return {
-      x: Math.max(0, Math.min(1, point.x / width)),
-      y: Math.max(0, Math.min(1, point.y / height)),
-    };
+    const bounds = referenceRef.current.getBoundingClientRect();
+    return birdsEyeScreenToNormalized(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      { cssWidth: bounds.width, cssHeight: bounds.height, imageWidth: width, imageHeight: height, view: viewBox },
+    );
   }
 
   function handleIllustrationPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (editorMode !== "pan") return;
+    const isEmptyImageSpace = event.target === event.currentTarget;
+    const shouldPan = spacePan || editorMode === "pan" || (editorMode === "select" && isEmptyImageSpace);
+    if (!shouldPan) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    panningRef.current = false;
     setPanning({ clientX: event.clientX, clientY: event.clientY, x: view.x, y: view.y });
   }
 
   function handleIllustrationPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
     if (panning && referenceRef.current) {
       const bounds = referenceRef.current.getBoundingClientRect();
+      if (Math.hypot(event.clientX - panning.clientX, event.clientY - panning.clientY) > 2) panningRef.current = true;
       const deltaX = (event.clientX - panning.clientX) / Math.max(1, bounds.width) * viewBox.width;
       const deltaY = (event.clientY - panning.clientY) / Math.max(1, bounds.height) * viewBox.height;
       setView((current) => ({
@@ -528,7 +558,10 @@ export function BirdsEyePerspectiveWorkspace({
   }
 
   function handleIllustrationClick(event: ReactMouseEvent<SVGSVGElement>) {
-    if (readOnly || panning || dragVertex) return;
+    if (readOnly || panning || panningRef.current || dragVertex) {
+      panningRef.current = false;
+      return;
+    }
     const normalized = pointerToNormalized(event);
     if (!normalized) return;
     if (editorMode === "draw_scene_region") {
@@ -944,6 +977,7 @@ export function BirdsEyePerspectiveWorkspace({
         <button className="sanborn-button" onClick={() => setZoom(view.zoom * 1.3)} type="button" aria-label="Zoom historical illustration in">Zoom +</button>
         <button className="sanborn-button" onClick={() => setZoom(view.zoom / 1.3)} type="button" aria-label="Zoom historical illustration out">Zoom −</button>
         <button className="sanborn-button" onClick={() => setView({ zoom: 1, x: 0, y: 0 })} type="button">Fit image</button>
+        <button className="sanborn-button" onClick={() => setZoom(1)} type="button">Actual pixels / 100%</button>
         <button className="sanborn-button" onClick={() => { setView({ zoom: 1, x: 0, y: 0 }); setPanning(null); }} type="button">Reset view</button>
       </div>
 
@@ -958,12 +992,13 @@ export function BirdsEyePerspectiveWorkspace({
             <label><input checked={showControlPoints} onChange={(event) => setShowControlPoints(event.target.checked)} type="checkbox" /> Points</label>
             <label><input checked={showSceneRegions} onChange={(event) => setShowSceneRegions(event.target.checked)} type="checkbox" /> Regions</label>
             <label><input checked={showPresentations} onChange={(event) => setShowPresentations(event.target.checked)} type="checkbox" /> Projected pieces</label>
+            <label>Point labels<select aria-label="Point labels" value={pointLabelMode} onChange={(event) => setPointLabelMode(event.target.value as PointLabelMode)}><option value="numbers">Numbers</option><option value="numbers_labels">Numbers + labels</option><option value="hidden">Hidden</option></select></label>
             <span>{Math.round(view.zoom * 100)}%</span>
           </div>
           <div className="birds-eye-pane__image-status"><SanbornSourceImageStatus filename={reference.originalFilename} onRetry={imageLifecycle.retryImage} state={imageLifecycle.state} /></div>
           <svg
             aria-label="Historical Birds-Eye illustration with calibration points and scene markup"
-            className={`birds-eye-pane__svg birds-eye-pane__svg--illustration is-mode-${editorMode}`}
+            className={`birds-eye-pane__svg birds-eye-pane__svg--illustration is-mode-${editorMode}${panning ? " is-panning" : ""}`}
             onClick={handleIllustrationClick}
             onKeyDown={handleIllustrationKeyDown}
             onPointerDown={handleIllustrationPointerDown}
@@ -978,7 +1013,7 @@ export function BirdsEyePerspectiveWorkspace({
             {showPresentations ? effectivePresentations.filter((presentation) => presentation.isVisible).map((presentation) => {
               const geometry = presentationGeometry(presentation);
               const selected = selectedPieceId === presentation.mapPieceId;
-              return <g className={`birds-eye-presentation is-${presentation.adjustmentStatus}${selected ? " is-selected" : ""}`} key={presentation.mapPieceId} onClick={(event) => { event.stopPropagation(); selectPresentation(presentation.mapPieceId); }}>
+              return <g className={`birds-eye-presentation is-${presentation.adjustmentStatus}${selected ? " is-selected" : ""}`} key={presentation.mapPieceId} onClick={(event) => { event.stopPropagation(); selectPresentation(presentation.mapPieceId); }} onPointerDown={(event) => event.stopPropagation()}>
                 {geometry.geometryType === "polygon"
                   ? <polygon fillOpacity={presentation.opacity} points={regionPath(geometry, width, height)} />
                   : geometry.geometryType === "polyline"
@@ -988,15 +1023,16 @@ export function BirdsEyePerspectiveWorkspace({
                 {selected && editorMode === "adjust_projected_piece" && !readOnly ? geometry.coordinates.map((coordinate, index) => <circle className="birds-eye-vertex" cx={coordinate.x * width} cy={coordinate.y * height} key={index} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDragVertex({ kind: "presentation", id: presentation.mapPieceId, index }); }} r={Math.max(5, width / 420)} />) : null}
               </g>;
             }) : null}
-            {showSceneRegions ? regions.filter((region) => region.isVisible).map((region) => <g className={`birds-eye-region${selectedRegionId === region.regionId ? " is-selected" : ""}`} key={region.regionId} onClick={(event) => { event.stopPropagation(); setSelectedRegionId(region.regionId); setInspectorTab("regions"); }}>
+            {showSceneRegions ? regions.filter((region) => region.isVisible).map((region) => <g className={`birds-eye-region${selectedRegionId === region.regionId ? " is-selected" : ""}`} key={region.regionId} onClick={(event) => { event.stopPropagation(); setSelectedRegionId(region.regionId); setInspectorTab("regions"); }} onPointerDown={(event) => event.stopPropagation()}>
               <polygon points={regionPath(region.imageGeometry, width, height)} />
               <text x={region.imageGeometry.coordinates[0].x * width + 8} y={region.imageGeometry.coordinates[0].y * height - 8}>{region.label}</text>
               {selectedRegionId === region.regionId && editorMode === "edit_scene_region" && !region.isLocked && !readOnly ? region.imageGeometry.coordinates.map((coordinate, index) => <circle className="birds-eye-vertex" cx={coordinate.x * width} cy={coordinate.y * height} key={index} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDragVertex({ kind: "region", id: region.regionId, index }); }} r={Math.max(5, width / 420)} />) : null}
             </g>) : null}
             {draftVertices.length ? <g className="birds-eye-region-draft"><polyline points={draftVertices.map((point) => `${point.x * width},${point.y * height}`).join(" ")} />{draftVertices.map((point, index) => <circle cx={point.x * width} cy={point.y * height} key={index} r={Math.max(4, width / 500)} />)}</g> : null}
-            {showControlPoints ? points.filter((point) => point.imageX !== null && point.imageY !== null).map((point) => <g className={`birds-eye-point${selectedSequence === point.sequence ? " is-selected" : ""}${point.enabled ? "" : " is-disabled"}`} key={point.id || point.sequence} onClick={(event) => { event.stopPropagation(); setSelectedSequence(point.sequence); setInspectorTab("calibration"); }}>
-              <circle cx={point.imageX!} cy={point.imageY!} r={Math.max(width / 220, 7)} />
-              <text x={point.imageX! + 10} y={point.imageY! - 10}>{point.sequence}</text>
+            {showControlPoints && pointLabelMode !== "hidden" ? points.filter((point) => point.imageX !== null && point.imageY !== null).map((point) => <g aria-label={`Point ${point.sequence} — ${point.label}`} className={`birds-eye-point${selectedSequence === point.sequence ? " is-selected" : ""}${point.imageX !== null && point.imageY !== null && point.longitude !== null && point.latitude !== null ? "" : " is-incomplete"}${point.enabled ? "" : " is-disabled"}`} key={point.id || point.sequence} onClick={(event) => { event.stopPropagation(); setSelectedSequence(point.sequence); setInspectorTab("calibration"); }} onFocus={() => { setSelectedSequence(point.sequence); setInspectorTab("calibration"); }} onPointerDown={(event) => event.stopPropagation()} role="button" tabIndex={0}>
+              <title>Point {point.sequence} — {point.label}</title>
+              <circle cx={point.imageX!} cy={point.imageY!} r={Math.max(7, 14 / view.zoom)} />
+              <text fontSize={Math.max(9, 14 / view.zoom)} textAnchor="middle" x={point.imageX!} y={point.imageY! + Math.max(4, 5 / view.zoom)}>{pointLabelMode === "numbers_labels" ? `${point.sequence} ${point.label.slice(0, 18)}` : point.sequence}</text>
             </g>) : null}
           </svg>
           {editorMode === "draw_scene_region" ? <div className="birds-eye-draw-actions" aria-live="polite"><span>{draftVertices.length} vertices · Enter/double-click finishes · Escape cancels · Backspace removes last</span><button className="sanborn-button sanborn-button--primary" disabled={draftVertices.length < 3} onClick={finishRegion} type="button">Finish</button><button className="sanborn-button" onClick={cancelRegionDraft} type="button">Cancel</button></div> : null}
@@ -1040,13 +1076,21 @@ export function BirdsEyePerspectiveWorkspace({
         <article className={`birds-eye-pane birds-eye-pane--preview${workspaceTab === "warped_preview" ? " is-mobile-active" : ""}`}>
           <header><strong>Warped Geographic Preview</strong><span>{solve.statusLabel}</span></header>
           <div className="birds-eye-preview-controls">
+            <label>Preview view<select aria-label="Preview view" value={previewView} onChange={(event) => setPreviewView(event.target.value as PreviewView)}><option value="geometry">Geometry</option><option value="street_framework">Street framework</option><option value="modern_basemap">Modern basemap</option><option value="basemap_geometry">Basemap + geometry</option><option value="historical_overlay">Historical overlay</option></select></label>
+            <label>Basemap<select aria-label="Warped preview basemap" value={basemapKey} onChange={(event) => setBasemapKey(event.target.value)}>{basemaps.map((basemap) => <option key={basemap.key} value={basemap.key}>{basemap.label}</option>)}</select></label>
+            <button className="sanborn-button" onClick={() => setMapFitRequest({ mode: "town", token: Date.now() })} type="button">Follow flat map bounds</button>
+            <button className="sanborn-button" onClick={() => setMapFitRequest({ mode: "selected_point", token: Date.now() })} type="button">Fit calibration points</button>
+            <button className="sanborn-button" onClick={() => setMapFitRequest({ mode: "pieces", token: Date.now() })} type="button">Fit placed Map Pieces</button>
+            <button className="sanborn-button" onClick={() => setPreviewRefreshToken((value) => value + 1)} type="button">Refresh preview</button>
             <label>Compare<select value={comparisonMode} onChange={(event) => setComparisonMode(event.target.value as typeof comparisonMode)}><option value="side_by_side">Side by side</option><option value="overlay">Overlay</option><option value="difference">Difference emphasis</option></select></label>
             <label>Opacity<input disabled={comparisonMode === "side_by_side"} max="1" min="0" onChange={(event) => setComparisonOpacity(Number(event.target.value))} step="0.05" type="range" value={comparisonOpacity} /></label>
             <button aria-pressed={blinkComparison} className={`sanborn-button${blinkComparison ? " sanborn-button--primary" : ""}`} disabled={comparisonMode === "side_by_side"} onClick={() => setBlinkComparison((value) => !value)} type="button">Blink comparison</button>
           </div>
-          <svg aria-label="Separate warped geographic preview renderer" className={`birds-eye-pane__svg birds-eye-preview is-${comparisonMode}`} role="img" viewBox={`0 0 ${width} ${height}`}>
-            <rect className="birds-eye-preview__background" height={height} width={width} />
-            {comparisonMode !== "side_by_side" && blinkVisible ? <image className="birds-eye-preview__comparison-image" height={height} href={reference.signedUrl ?? ""} opacity={comparisonOpacity} preserveAspectRatio="xMidYMid meet" width={width} /> : null}
+          <div className="birds-eye-preview-stage">
+            {previewView === "modern_basemap" || previewView === "basemap_geometry" || previewView === "historical_overlay" ? <BirdsEyeWarpedBasemapCanvas basemapKey={basemapKey} center={mapCenter} height={height} key={previewRefreshToken} opacity={1} solve={solve} width={width} zoom={mapZoom} /> : null}
+            <svg aria-label="Separate warped geographic preview renderer" className={`birds-eye-pane__svg birds-eye-preview is-${comparisonMode}`} role="img" viewBox={`0 0 ${width} ${height}`}>
+            {previewView !== "modern_basemap" && previewView !== "basemap_geometry" && previewView !== "historical_overlay" ? <rect className="birds-eye-preview__background" height={height} width={width} /> : null}
+            {(previewView === "historical_overlay" || (comparisonMode !== "side_by_side" && blinkVisible)) ? <image className="birds-eye-preview__comparison-image" height={height} href={reference.signedUrl ?? ""} opacity={comparisonOpacity} preserveAspectRatio="xMidYMid meet" width={width} /> : null}
             <g className="birds-eye-preview__grid">{gridLines.map((line) => <polyline key={line.id} points={line.points.map((point) => `${point.x},${point.y}`).join(" ")} />)}</g>
             {previewPieceBounds ? <rect className="birds-eye-preview__placed-bounds" fill="none" height={Math.max(1, previewPieceBounds.height)} width={Math.max(1, previewPieceBounds.width)} x={previewPieceBounds.x} y={previewPieceBounds.y} /> : null}
             <g className="birds-eye-preview__pieces">{previewPieces.map((presentation) => {
@@ -1061,9 +1105,10 @@ export function BirdsEyePerspectiveWorkspace({
               const projected = projectBirdsEyeThroughSolve(point.longitude!, point.latitude!, solve);
               return <g className={selectedSequence === point.sequence ? "is-selected" : ""} key={point.sequence}><circle cx={projected.x} cy={projected.y} r={Math.max(6, width / 300)} /><text x={projected.x + 8} y={projected.y - 8}>{point.sequence}</text></g>;
             })}</g>
-          </svg>
+            </svg>
+          </div>
           <footer className="birds-eye-preview-status">
-            <strong>{solve.completePointCount} complete pair{solve.completePointCount === 1 ? "" : "s"} · {solve.statusLabel}</strong>
+            <strong>{solve.completePointCount} complete pair{solve.completePointCount === 1 ? "" : "s"} · {previewView.replaceAll("_", " ")} · {solve.statusLabel}</strong>
             <span>{solve.stage === "flat" ? "The flat geographic preview is available before calibration." : solve.averageResidualPixels === null ? "Residual not available." : `${solve.averageResidualPixels.toFixed(1)} px average global residual.`}</span>
           </footer>
         </article>
