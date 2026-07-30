@@ -15,10 +15,13 @@ import {
   denormalizeBirdsEyeImagePoint,
   deriveBirdsEyeCropBounds,
   isBirdsEyePresentationStale,
+  birdsEyeCalibrationCoverageStatus,
+  birdsEyeCalibrationReferenceStatus,
   mapBirdsEyePiecePresentationRow,
   mapBirdsEyeSceneRegionRow,
   normalizeBirdsEyeImagePoint,
   projectBirdsEyePlacedGeometry,
+  projectBirdsEyePlacedGeometryUnclamped,
   replaceBirdsEyeGeometryVertex,
   resetBirdsEyePresentationAdjustment,
   rotateBirdsEyeGeometry,
@@ -165,6 +168,22 @@ test("Map Placement projection is downstream and never mutates geographic source
   assert.equal(projected.geometryType, "polygon");
   assert.equal(projected.coordinateSpace, "normalized_image");
   assert.deepEqual(source, before);
+});
+
+test("temporary calibration references expose safe eligibility and never clamp their derived projection", () => {
+  const source = placedPiece();
+  assert.equal(birdsEyeCalibrationReferenceStatus(source), "available");
+  assert.equal(birdsEyeCalibrationReferenceStatus(source, source.id), "active");
+  assert.equal(birdsEyeCalibrationCoverageStatus(0), "No nearby complete pairs");
+  assert.equal(birdsEyeCalibrationCoverageStatus(2), "Locally supported");
+  assert.equal(birdsEyeCalibrationCoverageStatus(4), "Strong local coverage");
+  const projected = projectBirdsEyePlacedGeometryUnclamped(source, (coordinate) => ({
+    x: coordinate.longitude + 95.5,
+    y: 34.5 - coordinate.latitude,
+  }));
+  assert.ok(projected);
+  assert.ok(projected.coordinates.some((point) => point.x > 1 || point.y > 1));
+  assert.deepEqual(source, placedPiece());
 });
 
 test("presentation adjustment is stored separately and reset returns to its projected baseline", () => {

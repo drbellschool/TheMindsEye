@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -35,9 +36,13 @@ import {
   createProjectedBirdsEyePresentation,
   denormalizeBirdsEyeImagePoint,
   deriveBirdsEyeCropBounds,
+  birdsEyeCalibrationCoverageStatus,
+  birdsEyeCalibrationReferenceStatus,
   getBirdsEyePlacedGeometryCoordinates,
+  isBirdsEyeCalibrationReferenceEligible,
   isBirdsEyePresentationStale,
   projectBirdsEyePlacedGeometry,
+  projectBirdsEyePlacedGeometryUnclamped,
   replaceBirdsEyeGeometryVertex,
   resetBirdsEyePresentationAdjustment,
   rotateBirdsEyeGeometry,
@@ -54,7 +59,7 @@ import {
 import { reviewStatuses } from "@/lib/community-status";
 import type { SheetGeographicTransform } from "@/lib/historical-map-sheet-georeference";
 import type { StudioSourceOption } from "@/lib/historical-map-studio";
-import { birdsEyeScreenToNormalized } from "@/lib/birds-eye-interaction";
+import { BIRDS_EYE_MARKER_DIAMETER_CSS_PX, BIRDS_EYE_MARKER_SELECTED_RING_CSS_PX, birdsEyeNormalizedToScreen, birdsEyeScreenToNormalized } from "@/lib/birds-eye-interaction";
 import { basemaps } from "@/lib/historical-map-basemap";
 
 type EditorMode =
@@ -259,6 +264,11 @@ export function BirdsEyePerspectiveWorkspace({
   const [pointLabelMode, setPointLabelMode] = useState<PointLabelMode>("numbers");
   const [previewView, setPreviewView] = useState<PreviewView>("basemap_geometry");
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
+  const [activeReferencePieceId, setActiveReferencePieceId] = useState<string | null>(null);
+  const [showActiveReference, setShowActiveReference] = useState(true);
+  const [referenceTrail, setReferenceTrail] = useState<string[]>([]);
+  const [flashReference, setFlashReference] = useState(false);
+  const [illustrationSize, setIllustrationSize] = useState({ width: 1, height: 1 });
   const [blinkComparison, setBlinkComparison] = useState(false);
   const [blinkVisible, setBlinkVisible] = useState(true);
   const [calibrationSaveState, setCalibrationSaveState] = useState<SaveState>("idle");
@@ -303,7 +313,7 @@ export function BirdsEyePerspectiveWorkspace({
     [centerLatitude, centerLongitude, geographicCoordinates, height, width],
   );
   const solve = useMemo(() => solveBirdsEyeStagedCalibration({ points, flatProjection }), [flatProjection, points]);
-  const effectivePresentations = useMemo(() => placedGeometries.flatMap((source) => {
+  const projectedPresentations = useMemo(() => placedGeometries.flatMap((source) => {
     const projected = projectBirdsEyePlacedGeometry(source, (coordinate) => {
       const point = projectBirdsEyeThroughSolve(coordinate.longitude, coordinate.latitude, solve);
       return { x: point.x / width, y: point.y / height };
@@ -319,8 +329,37 @@ export function BirdsEyePerspectiveWorkspace({
       existing,
     })];
   }), [atlasId, height, placedGeometries, presentations, solve, state.designatedAssetId, townPackageId, width]);
-  const selectedPresentation = effectivePresentations.find((presentation) => presentation.mapPieceId === selectedPieceId) ?? null;
+  const savedPresentations = useMemo(
+    () => projectedPresentations.filter((presentation) => presentations.some((saved) => saved.mapPieceId === presentation.mapPieceId && saved.referenceAssetId === presentation.referenceAssetId)),
+    [presentations, projectedPresentations],
+  );
+  const eligibleReferencePieces = useMemo(
+    () => placedGeometries.filter(isBirdsEyeCalibrationReferenceEligible),
+    [placedGeometries],
+  );
+  const activeReferenceSource = placedGeometries.find((piece) => piece.id === activeReferencePieceId) ?? null;
+  const activeReferenceGeometry = activeReferenceSource
+    ? projectBirdsEyePlacedGeometryUnclamped(activeReferenceSource, (coordinate) => {
+        const projected = projectBirdsEyeThroughSolve(coordinate.longitude, coordinate.latitude, solve);
+        return { x: projected.x / width, y: projected.y / height };
+      })
+    : null;
+  const activeReferenceProjection = projectedPresentations.find((presentation) => presentation.mapPieceId === activeReferencePieceId) ?? null;
+  const activeReferenceSavedPresentation = savedPresentations.find((presentation) => presentation.mapPieceId === activeReferencePieceId) ?? null;
+  const selectedPresentation = savedPresentations.find((presentation) => presentation.mapPieceId === selectedPieceId) ?? null;
   const selectedSourceGeometry = placedGeometries.find((piece) => piece.id === selectedPieceId) ?? null;
+  const activeReferenceOffCanvas = Boolean(activeReferenceGeometry?.coordinates.some((point) => point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1));
+  const activeReferenceNearbyPairs = activeReferenceSource ? (() => {
+    const sourceCoordinates = getBirdsEyePlacedGeometryCoordinates(activeReferenceSource);
+    if (sourceCoordinates.length === 0) return 0;
+    const center = sourceCoordinates.reduce((sum, coordinate) => ({ latitude: sum.latitude + coordinate.latitude / sourceCoordinates.length, longitude: sum.longitude + coordinate.longitude / sourceCoordinates.length }), { latitude: 0, longitude: 0 });
+    const span = Math.max(
+      Math.max(...sourceCoordinates.map((coordinate) => Math.abs(coordinate.latitude - center.latitude))),
+      Math.max(...sourceCoordinates.map((coordinate) => Math.abs(coordinate.longitude - center.longitude))),
+      0.0005,
+    );
+    return points.filter((point) => point.enabled && point.latitude !== null && point.longitude !== null && point.imageX !== null && point.imageY !== null && Math.hypot(point.latitude - center.latitude, point.longitude - center.longitude) <= span * 2.5).length;
+  })() : 0;
   const dirty = calibrationDirty || regionDirty || presentationDirty || draftVertices.length > 0;
   const activeSnapshot = useMemo(() => ({ points, regions, presentations }), [points, presentations, regions]);
 
@@ -347,6 +386,8 @@ export function BirdsEyePerspectiveWorkspace({
     setMapFitRequest((current) => ({ mode: "town", token: current.token + 1 }));
     setView({ zoom: 1, x: 0, y: 0 });
     setEditorMode("select");
+    setActiveReferencePieceId(null);
+    setReferenceTrail([]);
   }, [atlasId, defaultZoom, readOnly, state.designatedAssetId, townPackageId]);
 
   useEffect(() => {
@@ -371,6 +412,23 @@ export function BirdsEyePerspectiveWorkspace({
     const interval = window.setInterval(() => setBlinkVisible((visible) => !visible), 650);
     return () => window.clearInterval(interval);
   }, [blinkComparison]);
+
+  useEffect(() => {
+    const svg = referenceRef.current;
+    if (!svg) return;
+    const syncSize = () => {
+      const bounds = svg.getBoundingClientRect();
+      setIllustrationSize({ width: Math.max(1, bounds.width), height: Math.max(1, bounds.height) });
+    };
+    syncSize();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncSize);
+    observer?.observe(svg);
+    window.addEventListener("resize", syncSize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncSize);
+    };
+  }, [reference?.assetId]);
 
   useEffect(() => {
     const key = `minds-eye:birds-eye:point-labels:${townPackageId}:${atlasId}`;
@@ -543,7 +601,7 @@ export function BirdsEyePerspectiveWorkspace({
         : region));
       setRegionDirty(true);
     } else {
-      const presentation = effectivePresentations.find((candidate) => candidate.mapPieceId === dragVertex.id);
+      const presentation = savedPresentations.find((candidate) => candidate.mapPieceId === dragVertex.id);
       if (!presentation || presentation.isLocked) return;
       const adjusted = replaceBirdsEyeGeometryVertex(presentationGeometry(presentation), dragVertex.index, normalized);
       upsertPresentation({ ...presentation, adjustedImageGeometry: adjusted, adjustmentStatus: presentation.isVisible ? "adjusted" : "hidden" }, false);
@@ -656,6 +714,62 @@ export function BirdsEyePerspectiveWorkspace({
     }
   }
 
+  function selectCalibrationReference(pieceId: string) {
+    const piece = placedGeometries.find((candidate) => candidate.id === pieceId);
+    if (!piece || !isBirdsEyeCalibrationReferenceEligible(piece)) return;
+    setActiveReferencePieceId(pieceId);
+    setShowActiveReference(true);
+    setReferenceTrail((current) => current.includes(pieceId) ? current : [...current, pieceId]);
+    setMessage(`${piece.label} is now the temporary calibration reference. No presentation was created.`);
+  }
+
+  function clearCalibrationReference() {
+    setActiveReferencePieceId(null);
+    setFlashReference(false);
+    setMessage("Temporary calibration reference cleared. Saved presentations were not changed.");
+  }
+
+  function stepCalibrationReference(direction: -1 | 1) {
+    if (eligibleReferencePieces.length === 0) return;
+    const currentIndex = eligibleReferencePieces.findIndex((piece) => piece.id === activeReferencePieceId);
+    const nextIndex = currentIndex < 0
+      ? direction > 0 ? 0 : eligibleReferencePieces.length - 1
+      : (currentIndex + direction + eligibleReferencePieces.length) % eligibleReferencePieces.length;
+    selectCalibrationReference(eligibleReferencePieces[nextIndex].id);
+  }
+
+  function fitActiveCalibrationReference() {
+    if (!activeReferenceGeometry || activeReferenceGeometry.coordinates.length === 0) return;
+    const minX = Math.min(...activeReferenceGeometry.coordinates.map((point) => point.x));
+    const maxX = Math.max(...activeReferenceGeometry.coordinates.map((point) => point.x));
+    const minY = Math.min(...activeReferenceGeometry.coordinates.map((point) => point.y));
+    const maxY = Math.max(...activeReferenceGeometry.coordinates.map((point) => point.y));
+    const span = Math.max(maxX - minX, maxY - minY, 0.04);
+    const zoom = Math.max(1, Math.min(12, 0.72 / span));
+    const nextWidth = width / zoom;
+    const nextHeight = height / zoom;
+    setView({
+      zoom,
+      x: Math.max(0, Math.min(width - nextWidth, ((minX + maxX) * width - nextWidth) / 2)),
+      y: Math.max(0, Math.min(height - nextHeight, ((minY + maxY) * height - nextHeight) / 2)),
+    });
+    setWorkspaceTab("illustration");
+    setMessage(activeReferenceOffCanvas ? "Reference is partly outside the illustration; view fitted to its projected bounds." : "Active calibration reference fitted.");
+  }
+
+  function flashActiveCalibrationReference() {
+    setFlashReference(true);
+    window.setTimeout(() => setFlashReference(false), 1200);
+  }
+
+  async function keepActiveAsSavedPresentation() {
+    if (!activeReferenceProjection || readOnly) return;
+    setSelectedPieceId(activeReferenceProjection.mapPieceId);
+    setShowPresentations(true);
+    setInspectorTab("presentation");
+    await savePresentation(activeReferenceProjection);
+  }
+
   function handleMapClick(latitude: number, longitude: number, zoom: number) {
     if (readOnly || editorMode !== "add_calibration_point" || !selectedPoint) return;
     patchPoint(selectedPoint.sequence, {
@@ -730,7 +844,7 @@ export function BirdsEyePerspectiveWorkspace({
       notes: String(calibrationPayload.notes),
       updatedAt: new Date().toISOString(),
     };
-    const projectionCandidates = effectivePresentations.filter((presentation) => {
+    const projectionCandidates = savedPresentations.filter((presentation) => {
       const local = presentations.find((candidate) => candidate.referenceAssetId === presentation.referenceAssetId && candidate.mapPieceId === presentation.mapPieceId);
       if (local && !local.isPersisted) return false;
       return !local ||
@@ -887,7 +1001,7 @@ export function BirdsEyePerspectiveWorkspace({
       referenceFilename: reference.originalFilename,
       region: selectedRegion,
       presentation: selectedRegion?.linkedMapPieceId
-        ? effectivePresentations.find((presentation) => presentation.mapPieceId === selectedRegion.linkedMapPieceId) ?? null
+        ? savedPresentations.find((presentation) => presentation.mapPieceId === selectedRegion.linkedMapPieceId) ?? null
         : selectedPresentation,
     });
     await navigator.clipboard.writeText(JSON.stringify(evidence, null, 2));
@@ -899,7 +1013,7 @@ export function BirdsEyePerspectiveWorkspace({
     referenceFilename: reference.originalFilename,
     region: selectedRegion,
     presentation: selectedRegion?.linkedMapPieceId
-      ? effectivePresentations.find((presentation) => presentation.mapPieceId === selectedRegion.linkedMapPieceId) ?? null
+      ? savedPresentations.find((presentation) => presentation.mapPieceId === selectedRegion.linkedMapPieceId) ?? null
       : selectedPresentation,
   }) : null;
   const filteredRegions = regions.filter((region) => {
@@ -926,7 +1040,7 @@ export function BirdsEyePerspectiveWorkspace({
     return <section className="birds-eye-workspace birds-eye-workspace--empty"><h2>Birds-Eye Calibration &amp; Scene Markup</h2><p>Designate an edition-scoped Birds-Eye Reference in Town &amp; Edition before calibrating or tracing scene evidence.</p></section>;
   }
 
-  const previewPieces = effectivePresentations.filter((presentation) => presentation.isVisible);
+  const previewPieces = savedPresentations.filter((presentation) => presentation.isVisible && presentation.mapPieceId !== activeReferencePieceId);
   const previewPieceCoordinates = previewPieces.flatMap((presentation) => presentation.projectedImageGeometry.coordinates);
   const previewPieceBounds = previewPieceCoordinates.length > 0
     ? {
@@ -991,11 +1105,13 @@ export function BirdsEyePerspectiveWorkspace({
           <div className="birds-eye-pane__subcontrols">
             <label><input checked={showControlPoints} onChange={(event) => setShowControlPoints(event.target.checked)} type="checkbox" /> Points</label>
             <label><input checked={showSceneRegions} onChange={(event) => setShowSceneRegions(event.target.checked)} type="checkbox" /> Regions</label>
-            <label><input checked={showPresentations} onChange={(event) => setShowPresentations(event.target.checked)} type="checkbox" /> Projected pieces</label>
+            <label><input checked={showActiveReference} onChange={(event) => setShowActiveReference(event.target.checked)} type="checkbox" /> Show active calibration reference</label>
+            <label><input checked={showPresentations} onChange={(event) => setShowPresentations(event.target.checked)} type="checkbox" /> Show saved presentations</label>
             <label>Point labels<select aria-label="Point labels" value={pointLabelMode} onChange={(event) => setPointLabelMode(event.target.value as PointLabelMode)}><option value="numbers">Numbers</option><option value="numbers_labels">Numbers + labels</option><option value="hidden">Hidden</option></select></label>
             <span>{Math.round(view.zoom * 100)}%</span>
           </div>
           <div className="birds-eye-pane__image-status"><SanbornSourceImageStatus filename={reference.originalFilename} onRetry={imageLifecycle.retryImage} state={imageLifecycle.state} /></div>
+          <div className="birds-eye-illustration-stage">
           <svg
             aria-label="Historical Birds-Eye illustration with calibration points and scene markup"
             className={`birds-eye-pane__svg birds-eye-pane__svg--illustration is-mode-${editorMode}${panning ? " is-panning" : ""}`}
@@ -1007,10 +1123,11 @@ export function BirdsEyePerspectiveWorkspace({
             ref={referenceRef}
             role="img"
             tabIndex={0}
+            preserveAspectRatio="xMidYMid meet"
             viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
           >
             <image height={height} href={reference.signedUrl ?? ""} key={imageLifecycle.imageKey} onError={imageLifecycle.onError} onLoad={imageLifecycle.onLoad} preserveAspectRatio="xMidYMid meet" width={width} />
-            {showPresentations ? effectivePresentations.filter((presentation) => presentation.isVisible).map((presentation) => {
+            {showPresentations ? savedPresentations.filter((presentation) => presentation.isVisible).map((presentation) => {
               const geometry = presentationGeometry(presentation);
               const selected = selectedPieceId === presentation.mapPieceId;
               return <g className={`birds-eye-presentation is-${presentation.adjustmentStatus}${selected ? " is-selected" : ""}`} key={presentation.mapPieceId} onClick={(event) => { event.stopPropagation(); selectPresentation(presentation.mapPieceId); }} onPointerDown={(event) => event.stopPropagation()}>
@@ -1023,18 +1140,44 @@ export function BirdsEyePerspectiveWorkspace({
                 {selected && editorMode === "adjust_projected_piece" && !readOnly ? geometry.coordinates.map((coordinate, index) => <circle className="birds-eye-vertex" cx={coordinate.x * width} cy={coordinate.y * height} key={index} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDragVertex({ kind: "presentation", id: presentation.mapPieceId, index }); }} r={Math.max(5, width / 420)} />) : null}
               </g>;
             }) : null}
+            {showActiveReference && activeReferenceGeometry ? <g className={`birds-eye-calibration-reference${flashReference ? " is-flashing" : ""}`} onPointerDown={(event) => event.stopPropagation()}>
+              {activeReferenceGeometry.geometryType === "polygon"
+                ? <polygon fill="none" points={regionPath(activeReferenceGeometry, width, height)} />
+                : activeReferenceGeometry.geometryType === "polyline"
+                  ? <polyline fill="none" points={regionPath(activeReferenceGeometry, width, height)} />
+                  : <circle cx={activeReferenceGeometry.coordinates[0].x * width} cy={activeReferenceGeometry.coordinates[0].y * height} r={Math.max(8, width / 280)} />}
+              <text x={(activeReferenceGeometry.coordinates[0]?.x ?? 0) * width + 10} y={(activeReferenceGeometry.coordinates[0]?.y ?? 0) * height - 10}>Calibration reference · {activeReferenceSource?.label}</text>
+            </g> : null}
             {showSceneRegions ? regions.filter((region) => region.isVisible).map((region) => <g className={`birds-eye-region${selectedRegionId === region.regionId ? " is-selected" : ""}`} key={region.regionId} onClick={(event) => { event.stopPropagation(); setSelectedRegionId(region.regionId); setInspectorTab("regions"); }} onPointerDown={(event) => event.stopPropagation()}>
               <polygon points={regionPath(region.imageGeometry, width, height)} />
               <text x={region.imageGeometry.coordinates[0].x * width + 8} y={region.imageGeometry.coordinates[0].y * height - 8}>{region.label}</text>
               {selectedRegionId === region.regionId && editorMode === "edit_scene_region" && !region.isLocked && !readOnly ? region.imageGeometry.coordinates.map((coordinate, index) => <circle className="birds-eye-vertex" cx={coordinate.x * width} cy={coordinate.y * height} key={index} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDragVertex({ kind: "region", id: region.regionId, index }); }} r={Math.max(5, width / 420)} />) : null}
             </g>) : null}
             {draftVertices.length ? <g className="birds-eye-region-draft"><polyline points={draftVertices.map((point) => `${point.x * width},${point.y * height}`).join(" ")} />{draftVertices.map((point, index) => <circle cx={point.x * width} cy={point.y * height} key={index} r={Math.max(4, width / 500)} />)}</g> : null}
-            {showControlPoints && pointLabelMode !== "hidden" ? points.filter((point) => point.imageX !== null && point.imageY !== null).map((point) => <g aria-label={`Point ${point.sequence} — ${point.label}`} className={`birds-eye-point${selectedSequence === point.sequence ? " is-selected" : ""}${point.imageX !== null && point.imageY !== null && point.longitude !== null && point.latitude !== null ? "" : " is-incomplete"}${point.enabled ? "" : " is-disabled"}`} key={point.id || point.sequence} onClick={(event) => { event.stopPropagation(); setSelectedSequence(point.sequence); setInspectorTab("calibration"); }} onFocus={() => { setSelectedSequence(point.sequence); setInspectorTab("calibration"); }} onPointerDown={(event) => event.stopPropagation()} role="button" tabIndex={0}>
-              <title>Point {point.sequence} — {point.label}</title>
-              <circle cx={point.imageX!} cy={point.imageY!} r={Math.max(7, 14 / view.zoom)} />
-              <text fontSize={Math.max(9, 14 / view.zoom)} textAnchor="middle" x={point.imageX!} y={point.imageY! + Math.max(4, 5 / view.zoom)}>{pointLabelMode === "numbers_labels" ? `${point.sequence} ${point.label.slice(0, 18)}` : point.sequence}</text>
-            </g>) : null}
           </svg>
+          {showControlPoints && pointLabelMode !== "hidden" ? <div className="birds-eye-marker-overlay" aria-label="Historical calibration markers">{points.filter((point) => point.imageX !== null && point.imageY !== null).map((point) => {
+            const screen = birdsEyeNormalizedToScreen(
+              { x: point.imageX! / width, y: point.imageY! / height },
+              { cssWidth: illustrationSize.width, cssHeight: illustrationSize.height, imageWidth: width, imageHeight: height, view: viewBox },
+            );
+            const complete = point.imageX !== null && point.imageY !== null && point.longitude !== null && point.latitude !== null;
+            return <button
+              aria-label={`Point ${point.sequence} — ${point.label} — ${point.anchorType.replaceAll("_", " ")} — ${complete ? "complete" : "incomplete"}`}
+              className={`birds-eye-screen-marker${selectedSequence === point.sequence ? " is-selected" : ""}${complete ? "" : " is-incomplete"}${point.enabled ? "" : " is-disabled"}`}
+              key={point.id || point.sequence}
+              onClick={(event) => { event.stopPropagation(); setSelectedSequence(point.sequence); setInspectorTab("calibration"); }}
+              onPointerDown={(event) => event.stopPropagation()}
+              style={{
+                left: screen.x,
+                top: screen.y,
+                "--birds-eye-marker-diameter": `${BIRDS_EYE_MARKER_DIAMETER_CSS_PX}px`,
+                "--birds-eye-marker-ring": `${BIRDS_EYE_MARKER_SELECTED_RING_CSS_PX}px`,
+              } as CSSProperties}
+              title={`${point.label} · ${point.anchorType.replaceAll("_", " ")} · ${complete ? "complete" : "incomplete"}`}
+              type="button"
+            >{point.sequence}{pointLabelMode === "numbers_labels" ? <span className="birds-eye-screen-marker__label">{point.label.slice(0, 18)}</span> : null}</button>;
+          })}</div> : null}
+          </div>
           {editorMode === "draw_scene_region" ? <div className="birds-eye-draw-actions" aria-live="polite"><span>{draftVertices.length} vertices · Enter/double-click finishes · Escape cancels · Backspace removes last</span><button className="sanborn-button sanborn-button--primary" disabled={draftVertices.length < 3} onClick={finishRegion} type="button">Finish</button><button className="sanborn-button" onClick={cancelRegionDraft} type="button">Cancel</button></div> : null}
         </article>
 
@@ -1099,6 +1242,13 @@ export function BirdsEyePerspectiveWorkspace({
                 ? <polygon key={presentation.mapPieceId} points={regionPath(geometry, width, height)} />
                 : <polyline fill="none" key={presentation.mapPieceId} points={regionPath(geometry, width, height)} />;
             })}</g>
+            {showActiveReference && activeReferenceGeometry ? <g className={`birds-eye-preview__active-reference${flashReference ? " is-flashing" : ""}`}>
+              {activeReferenceGeometry.geometryType === "polygon"
+                ? <polygon fill="none" points={regionPath(activeReferenceGeometry, width, height)} />
+                : activeReferenceGeometry.geometryType === "polyline"
+                  ? <polyline fill="none" points={regionPath(activeReferenceGeometry, width, height)} />
+                  : <circle cx={activeReferenceGeometry.coordinates[0].x * width} cy={activeReferenceGeometry.coordinates[0].y * height} r={Math.max(7, width / 300)} />}
+            </g> : null}
             <g className="birds-eye-preview__network">{solve.localWarp.triangles.map((triangle) => <polygon fill="none" key={triangle.sequences.join("-")} points={triangle.target.map((point) => `${point.x},${point.y}`).join(" ")} />)}</g>
             <g className="birds-eye-preview__residuals">{solve.residuals.map((residual) => <line className={residual.outlier ? "is-outlier" : ""} key={residual.sequence} x1={residual.predicted.x} x2={residual.target.x} y1={residual.predicted.y} y2={residual.target.y} />)}</g>
             <g className="birds-eye-preview__points">{points.filter((point) => point.longitude !== null && point.latitude !== null).map((point) => {
@@ -1206,9 +1356,43 @@ export function BirdsEyePerspectiveWorkspace({
 
         {inspectorTab === "presentation" ? <div className="birds-eye-inspector__body birds-eye-presentation-inspector">
           <section>
-            <h3>Projected Map Pieces</h3>
-            <p>These image-space shapes are downstream from authoritative Map Placement. Adjustments never write latitude, longitude, corners, placement status, or source geometry.</p>
-            <div className="birds-eye-region-list">{effectivePresentations.map((presentation) => {
+            <h3>Calibration Reference Pieces</h3>
+            <p>Choose one geographically placed Map Piece as a temporary visual calibration reference. It is projected in memory and does not create a saved presentation.</p>
+            <div className="birds-eye-reference-list">{placedGeometries.filter((piece) => !piece.archivedAt).map((piece) => {
+              const status = birdsEyeCalibrationReferenceStatus(piece, activeReferencePieceId);
+              const eligible = isBirdsEyeCalibrationReferenceEligible(piece);
+              return <button aria-label={`Use ${piece.label} as calibration reference`} className={activeReferencePieceId === piece.id ? "is-selected" : ""} disabled={!eligible} key={piece.id} onClick={() => selectCalibrationReference(piece.id)} title="Use as calibration reference" type="button"><strong>{piece.label}</strong><span>{status.replaceAll("_", " ")} · {piece.sourceSheetLabel ?? "Source sheet unavailable"}</span></button>;
+            })}</div>
+            {placedGeometries.filter((piece) => !piece.archivedAt).length === 0 ? <p className="birds-eye-empty-state">No Map Pieces have valid Map Placement geometry yet.</p> : null}
+            {eligibleReferencePieces.length > 0 && !activeReferenceSource ? <p className="birds-eye-empty-state">Choose a geographically placed Map Piece to test the Birds-Eye calibration.</p> : null}
+            {activeReferenceSource ? <div className="birds-eye-active-reference-inspector">
+              <h4>Active Calibration Reference</h4>
+              <strong>{activeReferenceSource.label}</strong>
+              <span>{activeReferenceSource.sourceSheetLabel ?? "Source sheet unavailable"} · {activeReferenceSource.sourcePageLabel ?? "Page unavailable"}</span>
+              <span>Map Placement: {activeReferenceSource.placementStatus ?? "unknown"} · Geometry: {activeReferenceSource.geometry ? "valid source geometry" : "missing geographic geometry"}</span>
+              <span>Projection: {solve.statusLabel} · Source checksum: {checksumBirdsEyeGeographicGeometry(activeReferenceSource)}</span>
+              <span>{activeReferenceSavedPresentation ? "A saved Birds-Eye presentation exists." : "No saved Birds-Eye presentation exists."} · {activeReferenceOffCanvas ? "Projected outside illustration" : "Projected on canvas"}</span>
+              <span>Coverage: {birdsEyeCalibrationCoverageStatus(activeReferenceNearbyPairs)}</span>
+              <p>Add paired control points around {activeReferenceSource.label} to test this area.</p>
+              <div className="birds-eye-form-actions">
+                <button className="sanborn-button" onClick={() => stepCalibrationReference(-1)} type="button">Previous eligible piece</button>
+                <button className="sanborn-button" onClick={() => stepCalibrationReference(1)} type="button">Next eligible piece</button>
+                <button className="sanborn-button" onClick={fitActiveCalibrationReference} type="button">Fit projected reference</button>
+                <button className="sanborn-button" onClick={() => setView({ zoom: 1, x: 0, y: 0 })} type="button">Reset global view</button>
+                <button className="sanborn-button" onClick={flashActiveCalibrationReference} type="button">Flash active reference</button>
+                <button className="sanborn-button" onClick={() => setShowActiveReference((visible) => !visible)} type="button">{showActiveReference ? "Hide active reference" : "Show active reference"}</button>
+                <button className="sanborn-button" onClick={clearCalibrationReference} type="button">Clear active reference</button>
+                <button className="sanborn-button sanborn-button--primary" disabled={readOnly || Boolean(activeReferenceSavedPresentation)} onClick={keepActiveAsSavedPresentation} type="button">Keep as saved presentation</button>
+              </div>
+              {activeReferenceOffCanvas ? <p className="birds-eye-reference-warning">Projected outside illustration. Use Fit projected reference or Reset global view.</p> : null}
+            </div> : null}
+            {referenceTrail.length > 0 ? <div className="birds-eye-reference-trail"><strong>Tested this session</strong><span>{referenceTrail.map((pieceId) => placedGeometries.find((piece) => piece.id === pieceId)?.label ?? pieceId).join(" · ")}</span></div> : null}
+          </section>
+          <section>
+            <h3>Saved Birds-Eye Presentations</h3>
+            <p>These are permanent downstream image-space presentation records. They are separate from the temporary calibration reference.</p>
+            {savedPresentations.length === 0 ? <p className="birds-eye-empty-state">No permanent Birds-Eye presentations have been saved.</p> : null}
+            <div className="birds-eye-region-list">{savedPresentations.map((presentation) => {
               const stale = placedGeometries.find((piece) => piece.id === presentation.mapPieceId);
               const states = [
                 presentation.isVisible ? null : "Hidden",

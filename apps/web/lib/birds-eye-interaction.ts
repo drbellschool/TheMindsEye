@@ -16,6 +16,9 @@ export type BirdsEyeImageViewport = {
 export type BirdsEyeScreenPoint = { x: number; y: number };
 export type BirdsEyeNormalizedPoint = { x: number; y: number };
 
+export const BIRDS_EYE_MARKER_DIAMETER_CSS_PX = 22;
+export const BIRDS_EYE_MARKER_SELECTED_RING_CSS_PX = 28;
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }

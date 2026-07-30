@@ -60,6 +60,27 @@ test("PR #108 keeps point labels, panning, and preview basemap rendering downstr
   assert.match(workspace, /birdsEyeScreenToNormalized/);
 });
 
+test("PR #109 keeps readable markers and temporary calibration references separate from saved presentations", () => {
+  for (const phrase of [
+    "birds-eye-screen-marker",
+    "BIRDS_EYE_MARKER_DIAMETER_CSS_PX",
+    "BIRDS_EYE_MARKER_SELECTED_RING_CSS_PX",
+    "Calibration Reference Pieces",
+    "Active Calibration Reference",
+    "Saved Birds-Eye Presentations",
+    "Use as calibration reference",
+    "Keep as saved presentation",
+    "No presentation was created",
+    "Projected outside illustration",
+    "Coverage:",
+  ]) {
+    assert.match(workspace, new RegExp(phrase.replace(/[+]/g, "\\+")));
+  }
+  assert.match(workspace, /projectBirdsEyePlacedGeometryUnclamped/);
+  assert.match(workspace, /savedPresentations.filter/);
+  assert.match(workspace, /temporary visual calibration reference/);
+});
+
 test("guided calibration exposes all stages, quality diagnostics, and point controls", () => {
   for (const phrase of [
     "Add control point",

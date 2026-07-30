@@ -1074,14 +1074,15 @@ export function HistoricalMapStudio({
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
   const birdsEyePlacedGeometries = useMemo<BirdsEyePlacedGeometry[]>(
-    () => mapPieceGeoreferences
-      .filter((placement) => placement.placementStatus === "placed" || placement.placementStatus === "reviewed")
-      .map((placement) => {
-        const piece = atlasInventory.pieces.find((candidate) => candidate.pieceId === placement.pieceId);
+    () => atlasInventory.pieces
+      .filter((piece) => atlasInventory.pages.some((page) => page.pageId === piece.atlasPageId && page.atlasId === selectedAtlasId))
+      .map((piece) => {
+        const placement = mapPieceGeoreferences.find((candidate) => candidate.pieceId === piece.pieceId) ?? null;
+        const page = atlasInventory.pages.find((candidate) => candidate.pageId === piece.atlasPageId) ?? null;
         return {
-          id: placement.pieceId,
-          label: getMapPieceDisplayLabel(piece) || placement.pieceId,
-          geometry: placement.geographicGeometry
+          id: piece.pieceId,
+          label: getMapPieceDisplayLabel(piece) || piece.pieceId,
+          geometry: placement?.geographicGeometry
             ? {
                 geometryType: placement.geographicGeometry.geometryType === "junction"
                   ? "point"
@@ -1091,12 +1092,16 @@ export function HistoricalMapStudio({
                 coordinates: placement.geographicGeometry.coordinates,
               }
             : null,
-          corners: placement.corners,
-          placementStatus: placement.placementStatus,
-          reviewStatus: placement.reviewStatus,
+          corners: placement?.corners ?? null,
+          placementStatus: placement?.placementStatus ?? "unplaced",
+          reviewStatus: placement?.reviewStatus ?? piece.reviewStatus,
+          archivedAt: page?.archivedAt ?? null,
+          isVisible: placement?.isVisible ?? false,
+          sourceSheetLabel: page?.displayLabel ?? page?.printedReference ?? null,
+          sourcePageLabel: page ? `Page ${page.pageSequence}` : null,
         };
       }),
-    [atlasInventory.pieces, mapPieceGeoreferences],
+    [atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId],
   );
   const streetAlignmentGuides = useMemo(
     () => streetAlignmentFeatureEnabled ? findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }) : [],
