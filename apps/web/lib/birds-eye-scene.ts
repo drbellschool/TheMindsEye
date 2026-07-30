@@ -113,7 +113,51 @@ export type BirdsEyePlacedGeometry = {
   corners?: GeoCorners | null;
   placementStatus?: string;
   reviewStatus?: string;
+  archivedAt?: string | null;
+  isVisible?: boolean;
+  sourceSheetLabel?: string | null;
+  sourcePageLabel?: string | null;
 };
+
+export type BirdsEyeCalibrationReferenceStatus = "available" | "active" | "missing_map_placement" | "invalid_geographic_geometry" | "archived" | "hidden";
+
+export function birdsEyeCalibrationReferenceStatus(
+  piece: BirdsEyePlacedGeometry,
+  activePieceId: string | null = null,
+): BirdsEyeCalibrationReferenceStatus {
+  if (piece.archivedAt) return "archived";
+  if (activePieceId === piece.id) return "active";
+  if (piece.placementStatus !== "placed" && piece.placementStatus !== "reviewed") return "missing_map_placement";
+  const coordinates = getBirdsEyePlacedGeometryCoordinates(piece);
+  if (coordinates.length === 0 || coordinates.some((coordinate) => !Number.isFinite(coordinate.latitude) || !Number.isFinite(coordinate.longitude))) return "invalid_geographic_geometry";
+  if (piece.isVisible === false) return "hidden";
+  return "available";
+}
+
+export function isBirdsEyeCalibrationReferenceEligible(piece: BirdsEyePlacedGeometry): boolean {
+  const status = birdsEyeCalibrationReferenceStatus(piece);
+  return status === "available" || status === "active";
+}
+
+export function birdsEyeCalibrationCoverageStatus(nearbyCompletePairs: number): string {
+  if (nearbyCompletePairs === 0) return "No nearby complete pairs";
+  if (nearbyCompletePairs < 2) return `${nearbyCompletePairs} nearby complete pair${nearbyCompletePairs === 1 ? "" : "s"}`;
+  if (nearbyCompletePairs < 4) return "Locally supported";
+  return "Strong local coverage";
+}
+
+export function projectBirdsEyePlacedGeometryUnclamped(
+  input: BirdsEyePlacedGeometry,
+  project: (coordinate: GeoCoordinate) => BirdsEyeNormalizedPoint,
+): BirdsEyeImageGeometry | null {
+  const source = getBirdsEyePlacedGeometryCoordinates(input);
+  if (source.length === 0) return null;
+  return {
+    geometryType: input.geometry?.geometryType ?? "polygon",
+    coordinates: source.map((coordinate) => project({ ...coordinate })),
+    coordinateSpace: "normalized_image",
+  };
+}
 
 export type BirdsEyeEvidencePackage = {
   contractVersion: "birds-eye-reconstruction-evidence-v1";
