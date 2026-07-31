@@ -33,6 +33,8 @@ test("the authoritative source map is real Leaflet and remains separate from the
   assert.doesNotMatch(sourceMap, /solveBirdsEye|warpBirdsEye|globalMatrix|adjustedImageGeometry/);
   assert.match(workspace, /Separate warped geographic preview renderer/);
   assert.match(workspace, /<BirdsEyeSourceMap/);
+  assert.match(workspace, /dynamic\([\s\S]*BirdsEyeSourceMap[\s\S]*ssr: false/);
+  assert.match(studio, /dynamic\([\s\S]*HistoricalMapLeaflet[\s\S]*ssr: false/);
   assert.match(sourceMap, /\}, \[fitRequest, map\]\);/);
   assert.doesNotMatch(sourceMap, /\[center, fitRequest, map, pieces, points/);
   assert.doesNotMatch(studio, /placement\.isVisible && \(placement\.placementStatus/);
@@ -108,8 +110,33 @@ test("preview comparison and projected content never wait for six points", () =>
   assert.match(workspace, /comparisonOpacity/);
   assert.match(workspace, /Blink comparison/);
   assert.match(workspace, /flat geographic preview is available before calibration/i);
-  assert.match(workspace, /previewPieces\.map/);
+  assert.match(workspace, /projectedEligiblePieces/);
   assert.match(workspace, /birds-eye-preview__placed-bounds/);
+});
+
+test("PR #110 shares image layout and canonical Map Piece identity across every Birds-Eye surface", () => {
+  const canonicalPieces = readFileSync(resolve(process.cwd(), "lib/birds-eye-map-pieces.ts"), "utf8");
+  const interaction = readFileSync(resolve(process.cwd(), "lib/birds-eye-interaction.ts"), "utf8");
+  const styles = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+
+  assert.match(interaction, /calculateBirdsEyeRenderedImageLayout/);
+  assert.match(workspace, /illustrationLayout/);
+  assert.match(workspace, /birdsEyeSvgImageTransform\(illustrationLayout\)/);
+  assert.match(workspace, /illustrationStageRef/);
+  assert.match(workspace, /if \(!illustrationStageRef\.current \|\| !illustrationLayout\) return null/);
+  assert.doesNotMatch(workspace, /useState\(\{ width: 1, height: 1 \}\)/);
+  assert.match(styles, /transform: translate\(-50%, -50%\)/);
+
+  assert.match(canonicalPieces, /placementsByPieceId\.get\(piece\.pieceId\)/);
+  assert.match(canonicalPieces, /deriveCanonicalMapPiecePlacementStatus/);
+  assert.doesNotMatch(canonicalPieces, /placementsByPieceId\.get\(piece\.titleText|placementsByPieceId\.get\(piece\.blockNumberText/);
+  assert.match(studio, /buildBirdsEyeEligibleMapPieces/);
+  assert.match(sourceMap, /piece\.isEligible/);
+  assert.match(workspace, /projectedEligiblePieces\.map/);
+  assert.match(workspace, /Show all projected Map Pieces/);
+  assert.match(workspace, /useState\(false\).*showOtherProjectedPieces|showOtherProjectedPieces.*useState\(false\)/s);
+  assert.match(workspace, /Live calibration projection/);
+  assert.match(workspace, /Saved presentation/);
 });
 
 test("scene markup has explicit modes, normalized drawing, crop, linkage, filters, and accessible actions", () => {
@@ -151,7 +178,7 @@ test("Step 7 keeps separate save, loading, read-only, and unsaved-change states"
   assert.match(workspace, /Calibration: \{saveLabel\(calibrationSaveState\)\}/);
   assert.match(workspace, /Region: \{saveLabel\(regionSaveState\)\}/);
   assert.match(workspace, /Presentation: \{saveLabel\(presentationSaveState\)\}/);
-  assert.match(workspace, /Loading saved calibration, control points, scene regions, and presentation geometry/);
+  assert.match(workspace, /Loading Map Placement geometry, saved calibration, control points, scene regions, and presentation geometry/);
   assert.match(workspace, /This archived or unavailable edition is read-only/);
   assert.match(workspace, /beforeunload/);
   assert.match(studio, /Leave Birds-Eye Perspective and discard unsaved/);

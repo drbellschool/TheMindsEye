@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getBasemap } from "@/lib/historical-map-basemap";
 import { projectBirdsEyeThroughSolve, type BirdsEyeStagedSolve } from "@/lib/birds-eye-calibration";
+import type { BirdsEyeImageView } from "@/lib/birds-eye-interaction";
 
 type Props = {
   basemapKey: string;
@@ -11,6 +12,7 @@ type Props = {
   height: number;
   opacity: number;
   solve: BirdsEyeStagedSolve;
+  targetView?: BirdsEyeImageView;
   width: number;
   zoom: number;
 };
@@ -84,7 +86,7 @@ function isStableTriangle(source: [Point, Point, Point], target: [Point, Point, 
   return Math.abs(targetArea) > 0.01 && sourceArea * targetArea > 0;
 }
 
-export function BirdsEyeWarpedBasemapCanvas({ basemapKey, center, height, opacity, solve, width, zoom }: Props) {
+export function BirdsEyeWarpedBasemapCanvas({ basemapKey, center, height, opacity, solve, targetView, width, zoom }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const cacheRef = useRef(new Map<string, TileImage>());
   const [renderVersion, setRenderVersion] = useState(0);
@@ -115,6 +117,11 @@ export function BirdsEyeWarpedBasemapCanvas({ basemapKey, center, height, opacit
     let loaded = 0;
     let failed = 0;
     let invalidTriangles = 0;
+    const target = targetView ?? { x: 0, y: 0, width, height };
+    const toPreview = (point: Point): Point => ({
+      x: (point.x - target.x) * width / target.width,
+      y: (point.y - target.y) * height / target.height,
+    });
 
     for (let tileY = firstTileY; tileY <= firstTileY + 4; tileY += 1) {
       for (let tileX = firstTileX; tileX <= firstTileX + 4; tileX += 1) {
@@ -160,7 +167,7 @@ export function BirdsEyeWarpedBasemapCanvas({ basemapKey, center, height, opacit
             const sourceY2 = (row + 1) * tileSize / meshResolution;
             const geographic = (x: number, y: number): Point => {
               const [longitude, latitude] = tileToLongitudeLatitude(tileX + x / tileSize, tileY + y / tileSize, tileZoom);
-              return projectBirdsEyeThroughSolve(longitude, latitude, solve);
+              return toPreview(projectBirdsEyeThroughSolve(longitude, latitude, solve));
             };
             const topLeft = geographic(sourceX, sourceY);
             const topRight = geographic(sourceX2, sourceY);
@@ -183,7 +190,7 @@ export function BirdsEyeWarpedBasemapCanvas({ basemapKey, center, height, opacit
     }
     setFoldoverCount(invalidTriangles);
     context.globalAlpha = 1;
-  }, [basemap.key, basemap.maxNativeZoom, basemap.url, center, height, opacity, renderVersion, solve, width, zoom]);
+  }, [basemap.key, basemap.maxNativeZoom, basemap.url, center, height, opacity, renderVersion, solve, targetView, width, zoom]);
 
   return (
     <div className="birds-eye-warped-basemap" aria-label={`Warped ${basemap.label} basemap preview`}>
