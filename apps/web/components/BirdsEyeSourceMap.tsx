@@ -7,7 +7,8 @@ import type { LatLngBoundsExpression, LatLngTuple } from "leaflet";
 
 import { basemaps, getBasemap } from "@/lib/historical-map-basemap";
 import type { BirdsEyeControlPoint } from "@/lib/birds-eye-calibration";
-import { getBirdsEyePlacedGeometryCoordinates, type BirdsEyePlacedGeometry } from "@/lib/birds-eye-scene";
+import type { BirdsEyeCanonicalMapPiece } from "@/lib/birds-eye-map-pieces";
+import { getBirdsEyePlacedGeometryCoordinates } from "@/lib/birds-eye-scene";
 import type { SheetGeographicTransform } from "@/lib/historical-map-sheet-georeference";
 import { centeredBirdsEyeMarkerAnchor } from "@/lib/birds-eye-interaction";
 
@@ -25,7 +26,7 @@ type Props = {
   onMapViewChange: (center: LatLngTuple, zoom: number) => void;
   onPointMove: (sequence: number, latitude: number, longitude: number, zoom: number) => void;
   onSelectPoint: (sequence: number) => void;
-  placedGeometries: BirdsEyePlacedGeometry[];
+  mapPieces: BirdsEyeCanonicalMapPiece[];
   readOnly: boolean;
   selectedSequence: number | null;
   sheetBoundaries?: SheetGeographicTransform[];
@@ -78,7 +79,7 @@ function SourceMapController({
   activeToken: number;
   center: LatLngTuple;
   fitRequest: Props["fitRequest"];
-  pieces: BirdsEyePlacedGeometry[];
+  pieces: BirdsEyeCanonicalMapPiece[];
   points: BirdsEyeControlPoint[];
   selectedSequence: number | null;
   zoom: number;
@@ -128,6 +129,7 @@ function pieceColor(pieceId: string, selectedSequence: number | null, points: Bi
 export function BirdsEyeSourceMap(props: Props) {
   const basemap = getBasemap(props.basemapKey);
   const completePoints = useMemo(() => props.controlPoints.filter((point) => point.latitude !== null && point.longitude !== null), [props.controlPoints]);
+  const visiblePieces = useMemo(() => props.mapPieces.filter((piece) => piece.isEligible && piece.isVisible !== false), [props.mapPieces]);
 
   return (
     <section className="birds-eye-source-map" aria-label="Flat Geographic Map">
@@ -138,7 +140,7 @@ export function BirdsEyeSourceMap(props: Props) {
             {basemaps.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.label}</option>)}
           </select>
         </label>
-        <span>{props.showMapPieces ? `${props.placedGeometries.length} Map Pieces` : "Map Pieces hidden"}</span>
+        <span>{props.showMapPieces ? `${visiblePieces.length} eligible Map Pieces` : "Map Pieces hidden"}</span>
       </div>
       <MapContainer
         center={props.center}
@@ -161,7 +163,7 @@ export function BirdsEyeSourceMap(props: Props) {
           activeToken={props.activeToken}
           center={props.center}
           fitRequest={props.fitRequest}
-          pieces={props.placedGeometries}
+          pieces={visiblePieces}
           points={props.controlPoints}
           selectedSequence={props.selectedSequence}
           zoom={props.zoom}
@@ -181,7 +183,7 @@ export function BirdsEyeSourceMap(props: Props) {
             .map((coordinate) => [coordinate.latitude, coordinate.longitude] as LatLngTuple);
           return positions.length >= 3 ? <Polygon fill={false} key={sheet.assetId} pathOptions={{ color: "#a97335", dashArray: "5 5", weight: 1.5 }} positions={positions}><Tooltip>{sheet.assetId}</Tooltip></Polygon> : null;
         }) : null}
-        {props.showMapPieces ? props.placedGeometries.map((piece) => {
+        {props.showMapPieces ? visiblePieces.map((piece) => {
           const coordinates = getBirdsEyePlacedGeometryCoordinates(piece);
           const positions = coordinates.map((coordinate) => [coordinate.latitude, coordinate.longitude] as LatLngTuple);
           const color = pieceColor(piece.id, props.selectedSequence, props.controlPoints);

@@ -1,19 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { LatLngTuple } from "leaflet";
 
-import {
-  HistoricalMapLeaflet,
-  PlainLeafletMapTest,
-  basemaps,
-  type HistoricalSheetMapLayer,
-  type LeafletTileRuntimeDebug,
-  type SheetImageLoadState,
-} from "@/components/HistoricalMapLeaflet";
+import type { HistoricalSheetMapLayer, LeafletTileRuntimeDebug, SheetImageLoadState } from "@/components/HistoricalMapLeaflet";
 import {
   SanbornAtlasNavigator,
   sanbornAtlasWorkflowSteps,
@@ -31,7 +25,7 @@ import type { HistoricalImageUploadTask } from "@/lib/historical-image-upload-qu
 import { useHistoricalImageUploadManager } from "@/lib/use-historical-image-upload-manager";
 import { MapPlacementInspector } from "@/components/MapPlacementInspector";
 import { TownIndexMissionMap, type TownIndexMissionMapMode } from "@/components/TownIndexMissionMap";
-import { createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
+import { basemaps, createTileDiagnostics, defaultBasemapKey, shouldAutoFallbackBasemap, type TileDiagnostics } from "@/lib/historical-map-basemap";
 import type { GeocodeSuccess } from "@/lib/historical-map-geocode";
 import {
   canAutosaveStudioMode,
@@ -193,7 +187,7 @@ import { deriveSheetMapPieceAudit } from "@/lib/sheet-map-piece-audit";
 import { deriveMapPiecePlacementQueue, type MapPiecePlacementQueueItem } from "@/lib/map-piece-placement-queue";
 import { deriveCanonicalMapPiecePlacementStatus } from "@/lib/map-piece-placement-status";
 import type { BirdsEyePerspectiveState } from "@/lib/birds-eye-calibration";
-import type { BirdsEyePlacedGeometry } from "@/lib/birds-eye-scene";
+import { buildBirdsEyeEligibleMapPieces } from "@/lib/birds-eye-map-pieces";
 import {
   getPrimaryIndexState,
   getActiveEditionPages,
@@ -202,6 +196,15 @@ import {
   groupSourceOptionsForEdition,
   suggestSourceRecordDisplayLabel,
 } from "@/lib/source-record-workflow";
+
+const HistoricalMapLeaflet = dynamic(
+  () => import("@/components/HistoricalMapLeaflet").then((module) => module.HistoricalMapLeaflet),
+  { ssr: false },
+);
+const PlainLeafletMapTest = dynamic(
+  () => import("@/components/HistoricalMapLeaflet").then((module) => module.PlainLeafletMapTest),
+  { ssr: false },
+);
 
 type UploadStatus = {
   filename: string;
@@ -1073,35 +1076,15 @@ export function HistoricalMapStudio({
   const selectedMapPieceGeoreference = selectedMapPiece
     ? mapPieceGeoreferences.find((placement) => placement.pieceId === selectedMapPiece.pieceId) ?? null
     : null;
-  const birdsEyePlacedGeometries = useMemo<BirdsEyePlacedGeometry[]>(
-    () => atlasInventory.pieces
-      .filter((piece) => atlasInventory.pages.some((page) => page.pageId === piece.atlasPageId && page.atlasId === selectedAtlasId))
-      .map((piece) => {
-        const placement = mapPieceGeoreferences.find((candidate) => candidate.pieceId === piece.pieceId) ?? null;
-        const page = atlasInventory.pages.find((candidate) => candidate.pageId === piece.atlasPageId) ?? null;
-        return {
-          id: piece.pieceId,
-          label: getMapPieceDisplayLabel(piece) || piece.pieceId,
-          geometry: placement?.geographicGeometry
-            ? {
-                geometryType: placement.geographicGeometry.geometryType === "junction"
-                  ? "point"
-                  : placement.geographicGeometry.geometryType === "line"
-                    ? "polyline"
-                    : placement.geographicGeometry.geometryType,
-                coordinates: placement.geographicGeometry.coordinates,
-              }
-            : null,
-          corners: placement?.corners ?? null,
-          placementStatus: placement?.placementStatus ?? "unplaced",
-          reviewStatus: placement?.reviewStatus ?? piece.reviewStatus,
-          archivedAt: page?.archivedAt ?? null,
-          isVisible: placement?.isVisible ?? false,
-          sourceSheetLabel: page?.displayLabel ?? page?.printedReference ?? null,
-          sourcePageLabel: page ? `Page ${page.pageSequence}` : null,
-        };
-      }),
-    [atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId],
+  const birdsEyeMapPieces = useMemo(
+    () => buildBirdsEyeEligibleMapPieces({
+      activeAtlasId: selectedAtlasId,
+      loading: activeEditionHydrationState === "loading",
+      mapPieces: atlasInventory.pieces,
+      mapPlacements: mapPieceGeoreferences,
+      pages: atlasInventory.pages,
+    }),
+    [activeEditionHydrationState, atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId],
   );
   const streetAlignmentGuides = useMemo(
     () => streetAlignmentFeatureEnabled ? findNearbyStreetAlignmentGuides({ selectedPiece: selectedMapPiece, pagePieces: selectedAtlasPagePieces }) : [],
@@ -5522,7 +5505,8 @@ export function HistoricalMapStudio({
         loading={activeEditionHydrationState === "loading"}
         onDirtyChange={setBirdsEyeDirty}
         onStateChange={setBirdsEye}
-        placedGeometries={birdsEyePlacedGeometries}
+        mapPieces={birdsEyeMapPieces}
+        mapPiecesLoading={activeEditionHydrationState === "loading"}
         readOnly={atlasReadOnly}
         sheetBoundaries={geoPresent.sheets}
         sourceOptions={initialData.sourceOptions}
@@ -6222,10 +6206,11 @@ export function HistoricalMapStudio({
           <div className="sanborn-piece-placement-list" aria-label="Map pieces on selected page">
             {selectedAtlasPagePieces.length > 0 ? selectedAtlasPagePieces.map((piece) => {
               const placement = mapPieceGeoreferences.find((candidate) => candidate.pieceId === piece.pieceId) ?? null;
+              const birdsEyePiece = birdsEyeMapPieces.find((candidate) => candidate.mapPieceId === piece.pieceId) ?? null;
               return (
-                <button className={`sanborn-piece-placement-list__item ${piece.pieceId === selectedMapPiece?.pieceId ? "is-selected" : ""} ${getMapPiecePlacementClass(placement)}`} key={piece.pieceId} onClick={() => selectMapPieceForPlacement(piece.pieceId)} type="button">
+                <button className={`sanborn-piece-placement-list__item ${piece.pieceId === selectedMapPiece?.pieceId ? "is-selected" : ""} ${getMapPiecePlacementClass(placement)}`} data-birds-eye-eligibility={birdsEyePiece?.eligibilityStatus ?? "outside_active_edition"} key={piece.pieceId} onClick={() => selectMapPieceForPlacement(piece.pieceId)} type="button">
                   <strong>{getMapPieceDisplayLabel(piece)}</strong>
-                  <span>{getMapPiecePlacementLabel(placement)}</span>
+                  <span>{birdsEyePiece?.isEligible ? "Saved placement · Birds-Eye reference available" : getMapPiecePlacementLabel(placement)}</span>
                 </button>
               );
             }) : <p className="sanborn-atlas-empty">No saved pieces are available on this atlas page.</p>}
