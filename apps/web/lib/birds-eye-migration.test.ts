@@ -5,6 +5,18 @@ import test from "node:test";
 
 const migration = readFileSync(resolve(process.cwd(), "../../supabase/migrations/0025_birds_eye_perspective_calibration.sql"), "utf8");
 const sceneMigration = readFileSync(resolve(process.cwd(), "../../supabase/migrations/0026_birds_eye_scene_regions.sql"), "utf8");
+const derivedMigration = readFileSync(resolve(process.cwd(), "../../supabase/migrations/0027_birds_eye_derived_map_pieces.sql"), "utf8");
+
+test("PR #111 migration stores approximate Birds-Eye-derived pieces separately from Sanborn", () => {
+  assert.match(derivedMigration, /create table if not exists public\.historical_map_birds_eye_derived_map_pieces/i);
+  assert.match(derivedMigration, /source_classification text not null default 'birds_eye_derived'/i);
+  assert.match(derivedMigration, /placement_precision text not null default 'approximate'/i);
+  assert.match(derivedMigration, /source_region_id text not null/i);
+  assert.match(derivedMigration, /create or replace function public\.create_birds_eye_derived_map_piece/i);
+  assert.match(derivedMigration, /create or replace function public\.save_birds_eye_derived_map_piece_placement/i);
+  assert.doesNotMatch(derivedMigration, /drop table\s+public\./i);
+  assert.doesNotMatch(derivedMigration, /update\s+public\.(sanborn_map_pieces|historical_map_birds_eye_scene_regions)/i);
+});
 
 test("Birds-Eye migration is additive and edition scoped", () => {
   assert.match(migration, /create table if not exists public\.historical_map_birds_eye_reference_assets/i);
