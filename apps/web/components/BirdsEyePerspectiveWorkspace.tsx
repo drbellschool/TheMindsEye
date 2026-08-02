@@ -55,6 +55,7 @@ import {
   type BirdsEyeSceneRegionType,
 } from "@/lib/birds-eye-scene";
 import type { BirdsEyeCanonicalMapPiece } from "@/lib/birds-eye-map-pieces";
+import { buildBirdsEyeDerivedProvenance, calculateBirdsEyeDerivedVisualAgreement, defaultBirdsEyeDerivedPlacement, type BirdsEyeDerivedMapPiece } from "@/lib/birds-eye-derived-map-pieces";
 import { reviewStatuses } from "@/lib/community-status";
 import type { SheetGeographicTransform } from "@/lib/historical-map-sheet-georeference";
 import type { StudioSourceOption } from "@/lib/historical-map-studio";
@@ -273,6 +274,10 @@ export function BirdsEyePerspectiveWorkspace({
   const [points, setPoints] = useState<BirdsEyeControlPoint[]>(state.controlPoints);
   const [regions, setRegions] = useState<BirdsEyeSceneRegion[]>(state.sceneRegions);
   const [presentations, setPresentations] = useState<BirdsEyePiecePresentation[]>(state.piecePresentations);
+  const [derivedMapPieces, setDerivedMapPieces] = useState<BirdsEyeDerivedMapPiece[]>(state.derivedMapPieces);
+  const [derivedCreationOpen, setDerivedCreationOpen] = useState(false);
+  const [derivedCreationType, setDerivedCreationType] = useState("unknown");
+  const [derivedCreationPrecision, setDerivedCreationPrecision] = useState("approximate");
   const [parameters, setParameters] = useState(state.calibration?.globalParameters ?? { ...defaultBirdsEyeGlobalParameters, centerLatitude, centerLongitude });
   const [selectedSequence, setSelectedSequence] = useState<number | null>(state.controlPoints[0]?.sequence ?? null);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(state.sceneRegions[0]?.regionId ?? null);
@@ -393,6 +398,14 @@ export function BirdsEyePerspectiveWorkspace({
       existing,
     })];
   }), [atlasId, eligibleMapPieces, height, presentations, solve, state.designatedAssetId, townPackageId, width]);
+  const projectedDerivedPieces = useMemo(() => derivedMapPieces.filter((piece) => piece.creationStatus === "placed" && piece.geographicGeometry).flatMap((piece) => {
+    const source = { id: piece.derivedPieceId, label: piece.label, geometry: piece.geographicGeometry, placementStatus: "placed" } as const;
+    const geometry = projectBirdsEyePlacedGeometryUnclamped(source, (coordinate) => {
+      const point = projectBirdsEyeThroughSolve(coordinate.longitude, coordinate.latitude, solve);
+      return { x: point.x / width, y: point.y / height };
+    });
+    return geometry ? [{ piece, geometry }] : [];
+  }), [derivedMapPieces, height, solve, width]);
   const savedPresentations = useMemo(
     () => projectedPresentations.filter((presentation) => presentations.some((saved) => saved.mapPieceId === presentation.mapPieceId && saved.referenceAssetId === presentation.referenceAssetId)),
     [presentations, projectedPresentations],
@@ -438,6 +451,7 @@ export function BirdsEyePerspectiveWorkspace({
     setPoints(state.controlPoints);
     setRegions(state.sceneRegions);
     setPresentations(state.piecePresentations);
+    setDerivedMapPieces(state.derivedMapPieces);
     setParameters(state.calibration?.globalParameters ?? { ...defaultBirdsEyeGlobalParameters, centerLatitude, centerLongitude });
     setSelectedSequence((current) => state.controlPoints.some((point) => point.sequence === current) ? current : state.controlPoints[0]?.sequence ?? null);
     setSelectedRegionId((current) => state.sceneRegions.some((region) => region.regionId === current) ? current : state.sceneRegions[0]?.regionId ?? null);
@@ -1031,6 +1045,22 @@ export function BirdsEyePerspectiveWorkspace({
     setMessage(`${result.region.label} saved with its edition and reference provenance.`);
   }
 
+  async function createDerivedMapPiece(region = selectedRegion) {
+    if (readOnly || !reference || !region) return;
+    const defaults = defaultBirdsEyeDerivedPlacement(region.regionType);
+    const response = await fetch("/api/community/historical-map-studio/birds-eye-derived-map-pieces", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ townPackageId, atlasId, referenceAssetId: reference.assetId, regionId: region.regionId, label: region.label, placementType: derivedCreationType === "unknown" ? defaults.placementType : derivedCreationType, placementPrecision: derivedCreationPrecision || defaults.placementPrecision, evidenceClassification: "unknown", provenanceNote: buildBirdsEyeDerivedProvenance(region, reference.originalFilename) }),
+    });
+    const result = await response.json().catch(() => null) as { message?: string; piece?: BirdsEyeDerivedMapPiece } | null;
+    if (!response.ok || !result?.piece) { setMessage(result?.message ?? "Derived Map Piece could not be created."); return; }
+    const next = [...derivedMapPieces.filter((piece) => piece.derivedPieceId !== result.piece!.derivedPieceId), result.piece!];
+    setDerivedMapPieces(next);
+    onStateChange({ ...state, derivedMapPieces: next });
+    setDerivedCreationOpen(false);
+    setMessage(result.message ?? "Derived Map Piece created. Its shape is approximate and must be placed in Map Placement.");
+  }
+
   async function archiveRegion() {
     if (readOnly || !reference || !selectedRegion) return;
     if (!selectedRegion.isPersisted) {
@@ -1258,6 +1288,7 @@ export function BirdsEyePerspectiveWorkspace({
                 {selected && editorMode === "adjust_projected_piece" && !readOnly ? geometry.coordinates.map((coordinate, index) => <circle className="birds-eye-vertex" cx={coordinate.x * width} cy={coordinate.y * height} key={index} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setDragVertex({ kind: "presentation", id: presentation.mapPieceId, index }); }} r={Math.max(5, width / 420)} />) : null}
               </g>;
             }) : null}
+            {projectedDerivedPieces.map(({ piece, geometry }) => <g className="birds-eye-derived-projection" key={piece.derivedPieceId}><polygon fill="none" points={regionPath(geometry, width, height)} /><text x={(geometry.coordinates[0]?.x ?? 0) * width + 8} y={(geometry.coordinates[0]?.y ?? 0) * height - 8}>Approx. · {piece.label}</text></g>)}
             {showActiveReference && displayedActiveReferenceGeometry ? <g className={`birds-eye-calibration-reference is-${activeReferenceView}${flashReference ? " is-flashing" : ""}`} onPointerDown={(event) => event.stopPropagation()}>
               {displayedActiveReferenceGeometry.geometryType === "polygon"
                 ? <polygon fill="none" points={regionPath(displayedActiveReferenceGeometry, width, height)} />
@@ -1386,6 +1417,7 @@ export function BirdsEyePerspectiveWorkspace({
                   ? <polyline fill="none" key={presentation.mapPieceId} points={regionPath(geometry, width, height)} />
                   : <circle cx={geometry.coordinates[0].x * width} cy={geometry.coordinates[0].y * height} key={presentation.mapPieceId} r={Math.max(5, width / 360)} />;
             })}</g> : null}
+            {projectedDerivedPieces.length > 0 ? <g className="birds-eye-preview__derived-pieces">{projectedDerivedPieces.map(({ piece, geometry }) => <g key={piece.derivedPieceId}><polygon points={regionPath(geometry, width, height)} /><text x={(geometry.coordinates[0]?.x ?? 0) * width + 8} y={(geometry.coordinates[0]?.y ?? 0) * height - 8}>Approx. · {piece.label}</text></g>)}</g> : null}
             {showPreviewNetwork ? <><g className="birds-eye-preview__network">{solve.localWarp.triangles.map((triangle) => <polygon fill="none" key={triangle.sequences.join("-")} points={triangle.target.map((point) => `${point.x},${point.y}`).join(" ")} />)}</g>
             <g className="birds-eye-preview__residuals">{solve.residuals.map((residual) => <line className={residual.outlier ? "is-outlier" : ""} key={residual.sequence} x1={residual.predicted.x} x2={residual.target.x} y1={residual.predicted.y} y2={residual.target.y} />)}</g></> : null}
             {showPreviewPoints ? <g className="birds-eye-preview__points">{points.filter((point) => point.longitude !== null && point.latitude !== null).map((point) => {
@@ -1496,6 +1528,7 @@ export function BirdsEyePerspectiveWorkspace({
                 <label className="birds-eye-checkbox"><input checked={selectedRegion.isLocked} disabled={readOnly} onChange={(event) => patchRegion(selectedRegion.regionId, { isLocked: event.target.checked })} type="checkbox" /> Lock geometry and metadata</label>
               </div>
               {selectedRegion.cropBounds ? <div className="birds-eye-crop-preview"><strong>Derived crop preview</strong><svg aria-label={`Crop preview for ${selectedRegion.label}`} preserveAspectRatio="xMidYMid slice" viewBox={`${selectedRegion.cropBounds.x * width} ${selectedRegion.cropBounds.y * height} ${selectedRegion.cropBounds.width * width} ${selectedRegion.cropBounds.height * height}`}><image height={height} href={reference.signedUrl ?? ""} width={width} /><polygon points={regionPath(selectedRegion.imageGeometry, width, height)} /></svg></div> : null}
+              {(() => { const derived = derivedMapPieces.find((piece) => piece.sourceRegionId === selectedRegion.regionId); const projected = derived ? projectedDerivedPieces.find((item) => item.piece.derivedPieceId === derived.derivedPieceId)?.geometry ?? null : null; const agreement = projected ? calculateBirdsEyeDerivedVisualAgreement(selectedRegion.imageGeometry, projected) : null; return <div className="birds-eye-derived-region-status"><strong>Derived Map Piece</strong><span>{derived ? `${derived.label} · ${derived.creationStatus === "placed" ? "placed approximately" : "unplaced"}` : "No derived Map Piece"}</span><small>This perspective shape is evidence for approximate placement and is separate from any primary linked Map Piece.</small>{agreement ? <span>Round-trip comparison: {agreement.label} · {Math.round(agreement.overlap * 100)}% bounding-box overlap</span> : null}{derived ? <button className="sanborn-button" type="button" onClick={() => setMessage(`${derived.label} is available in Step 6 under Birds-Eye Derived Pieces.`)}>Open derived Map Piece</button> : <button className="sanborn-button" disabled={readOnly || !selectedRegion.isPersisted} onClick={() => { const defaults = defaultBirdsEyeDerivedPlacement(selectedRegion.regionType); setDerivedCreationType(defaults.placementType); setDerivedCreationPrecision(defaults.placementPrecision); setDerivedCreationOpen(true); }} type="button">Create Map Piece from region</button>}{derivedCreationOpen && !derived ? <div aria-label="Create Map Piece from scene region" className="birds-eye-derived-creation-dialog" role="dialog"><h4>Create Map Piece from region</h4><p>{selectedRegion.label} · {selectedRegion.regionType.replaceAll("_", " ")}</p><label>Placement type<select value={derivedCreationType} onChange={(event) => setDerivedCreationType(event.target.value)}><option value="building">Building</option><option value="building_group">Building group</option><option value="city_block">City block</option><option value="industrial_site">Industrial site</option><option value="railroad_area">Railroad area</option><option value="campus">Campus</option><option value="landscape_area">Landscape area</option><option value="waterway">Waterway</option><option value="broad_area">Broad area</option><option value="unknown">Unknown</option></select></label><label>Placement precision<select value={derivedCreationPrecision} onChange={(event) => setDerivedCreationPrecision(event.target.value)}><option value="approximate">Approximate</option><option value="broad_area">Broad area</option><option value="uncertain">Uncertain</option></select></label><p>This shape comes from a perspective illustration and may be artistically distorted. It will start unplaced and will not be treated as a numbered Sanborn sheet.</p><div className="birds-eye-form-actions"><button className="sanborn-button" onClick={() => setDerivedCreationOpen(false)} type="button">Cancel</button><button className="sanborn-button sanborn-button--primary" onClick={() => void createDerivedMapPiece()} type="button">Create and open in Step 6</button></div></div> : null}</div>; })()}
               <div className="birds-eye-form-actions"><button className="sanborn-button sanborn-button--primary" disabled={readOnly || regionSaveState === "saving"} onClick={() => void saveRegion()} type="button">Save region</button><button className="sanborn-button" disabled={readOnly} onClick={() => setEditorMode("edit_scene_region")} type="button">Edit vertices</button><button className="sanborn-button" disabled={readOnly} onClick={() => setEditorMode("link_map_piece")} type="button">Link Map Piece on image</button><button className="sanborn-button" disabled={readOnly} onClick={() => void archiveRegion()} type="button">{selectedRegion.isPersisted ? "Archive" : "Delete draft"}</button></div>
             </> : <p>Select a scene region or draw a new polygon on the historical illustration.</p>}
           </section>

@@ -3,6 +3,7 @@ import type {
   BirdsEyePiecePresentation,
   BirdsEyeSceneRegion,
 } from "./birds-eye-scene.ts";
+import type { BirdsEyeDerivedMapPiece } from "./birds-eye-derived-map-pieces.ts";
 
 export const birdsEyeAnchorTypes = ["intersection", "railroad_crossing", "block_corner", "building_landmark", "church", "depot", "school", "courthouse", "water_feature", "road_bend", "other"] as const;
 export type BirdsEyeAnchorType = (typeof birdsEyeAnchorTypes)[number];
@@ -104,6 +105,7 @@ export type BirdsEyePerspectiveState = {
   calibration: BirdsEyeCalibration | null;
   controlPoints: BirdsEyeControlPoint[];
   sceneRegions: BirdsEyeSceneRegion[];
+  derivedMapPieces: BirdsEyeDerivedMapPiece[];
   piecePresentations: BirdsEyePiecePresentation[];
   buildingOptions: BirdsEyeBuildingOption[];
   sceneDataSource: "supabase" | "migration_required" | "unavailable";

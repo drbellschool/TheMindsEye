@@ -939,6 +939,8 @@ export function HistoricalMapStudio({
   const [sheetInventoryFilter, setSheetInventoryFilter] = useState<"attention" | "setup" | "audit" | "placement" | "review" | "complete" | "all">("attention");
   const [expandedSheetAuditIds, setExpandedSheetAuditIds] = useState<Set<string>>(new Set());
   const [selectedMapPieceId, setSelectedMapPieceId] = useState("");
+  const [selectedDerivedPieceId, setSelectedDerivedPieceId] = useState<string | null>(null);
+  const [derivedPlacementDraft, setDerivedPlacementDraft] = useState({ latitude: 33.425, longitude: -94.047, scaleX: 1, scaleY: 1, rotation: 0 });
   const selectedMapPieceIdRef = useRef("");
   selectedMapPieceIdRef.current = selectedMapPieceId;
   const [selectedIndexRegionId, setSelectedIndexRegionId] = useState(initialSelection.indexRegionId ?? "");
@@ -1053,6 +1055,21 @@ export function HistoricalMapStudio({
         .sort((left, right) => left.pieceSequence - right.pieceSequence)
     : [];
   const selectedMapPiece = selectedAtlasPagePieces.find((piece) => piece.pieceId === selectedMapPieceId) ?? (atlasWorkflowStep === "gps_alignment" ? null : selectedAtlasPagePieces[0] ?? null);
+  const selectedDerivedPiece = birdsEye.derivedMapPieces.find((piece) => piece.derivedPieceId === selectedDerivedPieceId) ?? null;
+
+  async function saveDerivedPlacement() {
+    if (!selectedDerivedPiece || atlasReadOnly) return;
+    const center = { latitude: Number(derivedPlacementDraft.latitude), longitude: Number(derivedPlacementDraft.longitude) };
+    const halfLat = 0.00035 * Number(derivedPlacementDraft.scaleY);
+    const halfLng = 0.0005 * Number(derivedPlacementDraft.scaleX);
+    const geographicGeometry = { geometryType: "polygon" as const, coordinates: [{ latitude: center.latitude - halfLat, longitude: center.longitude - halfLng }, { latitude: center.latitude - halfLat, longitude: center.longitude + halfLng }, { latitude: center.latitude + halfLat, longitude: center.longitude + halfLng }, { latitude: center.latitude + halfLat, longitude: center.longitude - halfLng }] };
+    const response = await fetch("/api/community/historical-map-studio/birds-eye-derived-map-pieces", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ townPackageId: initialData.activeTownPackage?.id, atlasId: selectedAtlasId, referenceAssetId: selectedDerivedPiece.referenceAssetId, derivedPieceId: selectedDerivedPiece.derivedPieceId, placement: { geographicGeometry, centerLatitude: center.latitude, centerLongitude: center.longitude, rotation: derivedPlacementDraft.rotation, scaleX: derivedPlacementDraft.scaleX, scaleY: derivedPlacementDraft.scaleY } }) });
+    const result = await response.json().catch(() => null) as { piece?: typeof selectedDerivedPiece; message?: string } | null;
+    if (!response.ok || !result?.piece) { setSaveMessage(result?.message ?? "Derived placement could not be saved."); return; }
+    const next = birdsEye.derivedMapPieces.map((piece) => piece.derivedPieceId === result.piece!.derivedPieceId ? result.piece! : piece);
+    setBirdsEye((current) => ({ ...current, derivedMapPieces: next }));
+    setSaveMessage("Approximate Birds-Eye-derived placement saved. Sanborn metrics and source region geometry are unchanged.");
+  }
   const sheetInventoryQueue = useMemo(
     () => deriveSheetInventoryQueue({ activeAtlasId: selectedAtlasId, pages: atlasInventory.pages, assets: sheets, pieces: atlasInventory.pieces, placements: mapPieceGeoreferences, regions: townIndexRegions }),
     [atlasInventory.pages, atlasInventory.pieces, mapPieceGeoreferences, selectedAtlasId, sheets, townIndexRegions],
@@ -5406,6 +5423,12 @@ export function HistoricalMapStudio({
     return (
       <section className="sanborn-map-placement-workspace" ref={minimalMapRef}>
         <SanbornEditionSheetNavigator pages={activeAtlasPages} progress={reconstructionModel.sheetProgress} selectedPageId={selectedAtlasPage?.pageId ?? ""} indexPageId={reconstructionModel.index.indexPage?.pageId} onSelectIndex={() => reconstructionModel.index.indexPage && selectAtlasPage(reconstructionModel.index.indexPage.pageId, "town_index")} onSelectPage={(pageId) => selectAtlasPage(pageId, "gps_alignment")} />
+        <section className="birds-eye-derived-placement-queue" aria-label="Birds-Eye Derived Pieces">
+          <h3>Birds-Eye Derived Pieces</h3>
+          <p>Approximate Map Pieces derived from perspective illustrations. They are separate from numbered Sanborn pieces and do not count toward Sanborn completion.</p>
+          {birdsEye.derivedMapPieces.length === 0 ? <p className="minimal-sanborn-gps__notice">No Birds-Eye-derived pieces have been created yet.</p> : <div className="birds-eye-derived-placement-list">{birdsEye.derivedMapPieces.map((piece) => <button className={`birds-eye-derived-placement-card${selectedDerivedPieceId === piece.derivedPieceId ? " is-selected" : ""}`} key={piece.derivedPieceId} onClick={() => { setSelectedDerivedPieceId(piece.derivedPieceId); setDerivedPlacementDraft({ latitude: piece.centerLatitude ?? mapCenter.latitude, longitude: piece.centerLongitude ?? mapCenter.longitude, scaleX: piece.scaleX, scaleY: piece.scaleY, rotation: piece.rotation }); }} type="button"><strong>{piece.label}</strong><span>Birds-Eye derived · {piece.regionType.replaceAll("_", " ")} · {piece.creationStatus === "placed" ? "Placed approximately" : "Unplaced"}</span><small>{piece.sourceFilename} · precision: {piece.placementPrecision}</small></button>)}</div>}
+          {selectedDerivedPiece ? <div className="birds-eye-derived-placement-editor"><strong>{selectedDerivedPiece.label}</strong><span className="birds-eye-approximate-badge">Approximate · derived from Birds-Eye illustration</span><p>{selectedDerivedPiece.provenanceNote}</p><div className="birds-eye-form-grid"><label>Latitude<input type="number" step="0.000001" value={derivedPlacementDraft.latitude} onChange={(event) => setDerivedPlacementDraft((current) => ({ ...current, latitude: Number(event.target.value) }))} /></label><label>Longitude<input type="number" step="0.000001" value={derivedPlacementDraft.longitude} onChange={(event) => setDerivedPlacementDraft((current) => ({ ...current, longitude: Number(event.target.value) }))} /></label><label>Scale X<input type="number" min="0.1" step="0.1" value={derivedPlacementDraft.scaleX} onChange={(event) => setDerivedPlacementDraft((current) => ({ ...current, scaleX: Number(event.target.value) }))} /></label><label>Scale Y<input type="number" min="0.1" step="0.1" value={derivedPlacementDraft.scaleY} onChange={(event) => setDerivedPlacementDraft((current) => ({ ...current, scaleY: Number(event.target.value) }))} /></label><label>Rotation<input type="number" step="1" value={derivedPlacementDraft.rotation} onChange={(event) => setDerivedPlacementDraft((current) => ({ ...current, rotation: Number(event.target.value) }))} /></label></div><button className="sanborn-button sanborn-button--primary" disabled={atlasReadOnly} onClick={() => void saveDerivedPlacement()} type="button">Save approximate placement</button><p className="minimal-sanborn-gps__notice">The source crop and normalized silhouette remain unchanged. Place this shape against modern streets and nearby Map Pieces; it is not a Sanborn-accurate footprint.</p></div> : null}
+        </section>
         {!selectedMapPiece ? <p className="minimal-sanborn-gps__notice is-warning">Select a saved map piece before using Map placement.</p> : null}
         {selectedAtlasPage && !selectedPageSupportsMapPlacement ? <p className="minimal-sanborn-gps__notice is-warning">{selectedPageToolBlockMessage}</p> : null}
         {selectedMapPiece && !selectedMapPiece.isPersisted ? <p className="minimal-sanborn-gps__notice is-warning">Save map pieces before geographic placement.</p> : null}
